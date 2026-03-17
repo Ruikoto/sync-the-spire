@@ -5,18 +5,24 @@ namespace SyncTheSpire.Services;
 
 public class ConfigService
 {
-    private static readonly string AppDataDir =
+    public static readonly string AppDataDirPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SyncTheSpire");
 
-    private static readonly string ConfigFilePath = Path.Combine(AppDataDir, "config.json");
+    private static readonly string ConfigFilePath = Path.Combine(AppDataDirPath, "config.json");
 
     private AppConfig? _cached;
 
-    public string RepoPath => Path.Combine(AppDataDir, "Repo");
+    public string RepoPath => Path.Combine(AppDataDirPath, "Repo");
+
+    // separated git dir -- keeps .git out of the working tree (and the junction)
+    public string GitDirPath => Path.Combine(AppDataDirPath, "GitDir");
+
+    public bool IsRepoInitialized => Directory.Exists(GitDirPath) &&
+                                     Directory.Exists(Path.Combine(GitDirPath, "objects"));
 
     public ConfigService()
     {
-        Directory.CreateDirectory(AppDataDir);
+        Directory.CreateDirectory(AppDataDirPath);
     }
 
     public AppConfig LoadConfig()

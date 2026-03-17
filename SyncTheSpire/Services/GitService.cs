@@ -1,6 +1,6 @@
+using System.Diagnostics;
 using LibGit2Sharp;
 using LibGit2Sharp.Handlers;
-using SyncTheSpire.Models;
 
 namespace SyncTheSpire.Services;
 
@@ -8,8 +8,8 @@ public class GitService
 {
     private readonly ConfigService _config;
 
-    // stuff we never want committed
-    private const string DefaultGitIgnore =
+    // stuff we never want committed -- goes into info/exclude instead of .gitignore
+    private const string DefaultExcludeRules =
         """
         # OS junk
         Thumbs.db
@@ -31,7 +31,11 @@ public class GitService
     }
 
     private string RepoPath => _config.RepoPath;
+    private string GitDirPath => _config.GitDirPath;
 
+    private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
+
+    // HTTPS-only cred handler (SSH uses git.exe CLI instead)
     private CredentialsHandler MakeCredHandler()
     {
         var cfg = _config.LoadConfig();
@@ -42,34 +46,115 @@ public class GitService
         };
     }
 
+    /// <summary>
+    /// run git.exe with proper env vars. LibGit2Sharp 0.30 dropped SSH support,
+    /// so we shell out for all network operations when SSH auth is configured.
+    /// </summary>
+    private void RunGitCli(string args, string? workDir = null, int timeout = 120_000)
+    {
+        var cfg = _config.LoadConfig();
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = args,
+            WorkingDirectory = workDir ?? RepoPath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
+        {
+            // ssh wants forward slashes in key path
+            var keyPath = cfg.SshKeyPath.Replace("\\", "/");
+            psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
+        }
+
+        // point git to our separated git dir
+        if (Directory.Exists(GitDirPath))
+        {
+            psi.Environment["GIT_DIR"] = GitDirPath;
+            psi.Environment["GIT_WORK_TREE"] = RepoPath;
+        }
+
+        using var proc = Process.Start(psi)!;
+        var stderr = proc.StandardError.ReadToEnd();
+        proc.WaitForExit(timeout);
+
+        if (proc.ExitCode != 0)
+            throw new InvalidOperationException($"git {args.Split(' ')[0]} failed: {stderr.Trim()}");
+    }
+
+    /// <summary>
+    /// open repo via the separated git dir
+    /// </summary>
+    private Repository OpenRepo() => new(GitDirPath);
+
     // ── clone ────────────────────────────────────────────────────────────
 
     public void CloneRepo()
     {
         var cfg = _config.LoadConfig();
-        var opts = new CloneOptions();
-        opts.FetchOptions.CredentialsProvider = MakeCredHandler();
 
-        Repository.Clone(cfg.RepoUrl, RepoPath, opts);
+        if (IsSshMode)
+        {
+            // SSH: use git.exe since LibGit2Sharp 0.30 has no SSH cred classes
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = $"clone \"{cfg.RepoUrl}\" \"{RepoPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
 
-        // drop a sensible .gitignore into the repo
-        EnsureGitIgnore();
+            if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
+            {
+                var keyPath = cfg.SshKeyPath.Replace("\\", "/");
+                psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
+            }
+
+            using var proc = Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(300_000);
+
+            if (proc.ExitCode != 0)
+                throw new InvalidOperationException($"git clone failed: {stderr.Trim()}");
+        }
+        else
+        {
+            var opts = new CloneOptions();
+            opts.FetchOptions.CredentialsProvider = MakeCredHandler();
+            Repository.Clone(cfg.RepoUrl, RepoPath, opts);
+        }
+
+        // separate .git dir from working tree so junction stays clean
+        SeparateGitDir();
+
+        // use info/exclude instead of .gitignore (keeps working tree pristine)
+        EnsureExcludeRules();
+
+        // remove .gitignore from working tree if the remote repo had one
+        // (it stays tracked in git, just not physically in our working tree junction)
+        CleanGitArtifactsFromWorkTree();
     }
 
     // ── branch queries ───────────────────────────────────────────────────
 
     public string GetCurrentBranch()
     {
-        using var repo = new Repository(RepoPath);
+        using var repo = OpenRepo();
         return repo.Head.FriendlyName;
     }
 
     public List<string> GetRemoteBranches()
     {
-        using var repo = new Repository(RepoPath);
+        using var repo = OpenRepo();
 
         // fetch first so we have the latest refs
-        FetchAllInternal(repo);
+        FetchAll(repo);
 
         var remote = repo.Network.Remotes["origin"];
         if (remote is null) return [];
@@ -83,7 +168,7 @@ public class GitService
 
     public bool HasLocalChanges()
     {
-        using var repo = new Repository(RepoPath);
+        using var repo = OpenRepo();
         var status = repo.RetrieveStatus(new StatusOptions());
         return status.IsDirty;
     }
@@ -92,9 +177,9 @@ public class GitService
 
     public void ForceCheckoutBranch(string branchName)
     {
-        using var repo = new Repository(RepoPath);
+        using var repo = OpenRepo();
 
-        FetchAllInternal(repo);
+        FetchAll(repo);
 
         var remoteBranch = repo.Branches[$"origin/{branchName}"];
         if (remoteBranch is null)
@@ -126,7 +211,7 @@ public class GitService
 
     public void CreateBranch(string branchName)
     {
-        using var repo = new Repository(RepoPath);
+        using var repo = OpenRepo();
 
         // if branch already exists locally, just check it out
         var existing = repo.Branches[branchName];
@@ -145,15 +230,12 @@ public class GitService
             b => b.Remote = remote.Name,
             b => b.UpstreamBranch = newBranch.CanonicalName);
 
-        repo.Network.Push(newBranch, new PushOptions
-        {
-            CredentialsProvider = MakeCredHandler()
-        });
+        PushCurrentBranch(repo);
     }
 
     public void CommitAndPush()
     {
-        using var repo = new Repository(RepoPath);
+        using var repo = OpenRepo();
 
         // stage everything
         Commands.Stage(repo, "*");
@@ -163,8 +245,68 @@ public class GitService
             return; // nothing to commit
 
         var cfg = _config.LoadConfig();
-        var sig = new Signature(cfg.Username, $"{cfg.Username}@sync-the-spire", DateTimeOffset.Now);
+        var sig = MakeSignature(cfg);
         repo.Commit("Auto-save", sig, sig);
+
+        PushCurrentBranch(repo);
+    }
+
+    /// <summary>
+    /// silently commit any uncommitted work before switching away
+    /// </summary>
+    public void SilentCommitIfDirty()
+    {
+        using var repo = OpenRepo();
+        Commands.Stage(repo, "*");
+
+        var status = repo.RetrieveStatus(new StatusOptions());
+        if (!status.IsDirty) return;
+
+        var cfg = _config.LoadConfig();
+        var sig = MakeSignature(cfg);
+        repo.Commit("Auto-save (before switch)", sig, sig);
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────
+
+    private static Signature MakeSignature(Models.AppConfig cfg)
+    {
+        // for SSH mode, username might be empty -- fall back to "player"
+        var name = string.IsNullOrWhiteSpace(cfg.Username) ? "player" : cfg.Username;
+        return new Signature(name, $"{name}@sync-the-spire", DateTimeOffset.Now);
+    }
+
+    /// <summary>
+    /// fetch from origin, using git.exe CLI for SSH or LibGit2Sharp for HTTPS
+    /// </summary>
+    private void FetchAll(Repository repo)
+    {
+        if (IsSshMode)
+        {
+            RunGitCli("fetch --all --prune");
+            return;
+        }
+
+        var remote = repo.Network.Remotes["origin"];
+        if (remote is null) return;
+
+        var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
+        Commands.Fetch(repo, remote.Name, refSpecs, new FetchOptions
+        {
+            CredentialsProvider = MakeCredHandler()
+        }, null);
+    }
+
+    /// <summary>
+    /// push current branch to origin, using git.exe CLI for SSH or LibGit2Sharp for HTTPS
+    /// </summary>
+    private void PushCurrentBranch(Repository repo)
+    {
+        if (IsSshMode)
+        {
+            RunGitCli("push -u origin HEAD");
+            return;
+        }
 
         var currentBranch = repo.Head;
         repo.Network.Push(currentBranch, new PushOptions
@@ -174,33 +316,46 @@ public class GitService
     }
 
     /// <summary>
-    /// silently commit any uncommitted work before switching away
+    /// move .git directory out of the working tree and configure core.worktree
+    /// so that the junction-visible folder has zero git artifacts
     /// </summary>
-    public void SilentCommitIfDirty()
+    private void SeparateGitDir()
     {
-        using var repo = new Repository(RepoPath);
-        Commands.Stage(repo, "*");
+        var embeddedGitDir = Path.Combine(RepoPath, ".git");
+        if (!Directory.Exists(embeddedGitDir)) return;
+        if (Directory.Exists(GitDirPath))
+            Directory.Delete(GitDirPath, true);
 
-        var status = repo.RetrieveStatus(new StatusOptions());
-        if (!status.IsDirty) return;
+        Directory.Move(embeddedGitDir, GitDirPath);
 
-        var cfg = _config.LoadConfig();
-        var sig = new Signature(cfg.Username, $"{cfg.Username}@sync-the-spire", DateTimeOffset.Now);
-        repo.Commit("Auto-save (before switch)", sig, sig);
+        // tell git where the working tree lives
+        using var repo = new Repository(GitDirPath);
+        repo.Config.Set("core.worktree", RepoPath);
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────
-
-    private void FetchAllInternal(Repository repo)
+    /// <summary>
+    /// write exclude rules into git's info/exclude (same effect as .gitignore but invisible)
+    /// </summary>
+    private void EnsureExcludeRules()
     {
-        var remote = repo.Network.Remotes["origin"];
-        if (remote is null) return;
+        var infoDir = Path.Combine(GitDirPath, "info");
+        Directory.CreateDirectory(infoDir);
+        var excludePath = Path.Combine(infoDir, "exclude");
+        File.WriteAllText(excludePath, DefaultExcludeRules);
+    }
 
-        var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-        Commands.Fetch(repo, remote.Name, refSpecs, new FetchOptions
+    /// <summary>
+    /// remove .gitignore / .gitattributes etc from working tree if they came from the remote
+    /// </summary>
+    private void CleanGitArtifactsFromWorkTree()
+    {
+        string[] artifacts = [".gitignore", ".gitattributes"];
+        foreach (var name in artifacts)
         {
-            CredentialsProvider = MakeCredHandler()
-        }, null);
+            var path = Path.Combine(RepoPath, name);
+            if (File.Exists(path))
+                File.Delete(path);
+        }
     }
 
     private static void CleanUntracked(Repository repo)
@@ -221,28 +376,9 @@ public class GitService
     {
         foreach (var dir in Directory.GetDirectories(root))
         {
-            // don't touch .git
-            if (Path.GetFileName(dir) == ".git") continue;
-
             RemoveEmptyDirs(dir);
             if (Directory.GetFileSystemEntries(dir).Length == 0)
                 Directory.Delete(dir);
         }
-    }
-
-    private void EnsureGitIgnore()
-    {
-        var gitIgnorePath = Path.Combine(RepoPath, ".gitignore");
-        if (File.Exists(gitIgnorePath)) return;
-
-        File.WriteAllText(gitIgnorePath, DefaultGitIgnore);
-
-        // commit the .gitignore
-        using var repo = new Repository(RepoPath);
-        Commands.Stage(repo, ".gitignore");
-
-        var cfg = _config.LoadConfig();
-        var sig = new Signature(cfg.Username, $"{cfg.Username}@sync-the-spire", DateTimeOffset.Now);
-        repo.Commit("Add .gitignore", sig, sig);
     }
 }

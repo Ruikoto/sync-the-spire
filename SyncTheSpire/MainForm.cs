@@ -12,7 +12,7 @@ public class MainForm : Form
     public MainForm()
     {
         Text = "Sync the Spire";
-        Size = new System.Drawing.Size(800, 600);
+        Size = new System.Drawing.Size(800, 650);
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new System.Drawing.Size(640, 480);
 

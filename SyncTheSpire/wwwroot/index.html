@@ -57,18 +57,52 @@
                         class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                 </div>
                 <div>
-                    <label class="block text-sm mb-1">用户名</label>
-                    <input id="cfg-user" type="text" placeholder="your-username"
-                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                    <label class="block text-sm mb-2">鉴权方式</label>
+                    <div class="flex bg-spire-bg rounded-lg border border-spire-border p-0.5">
+                        <label class="auth-tab active flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150">
+                            <input type="radio" name="authType" value="https" checked class="hidden" />
+                            HTTPS
+                        </label>
+                        <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
+                            <input type="radio" name="authType" value="ssh" class="hidden" />
+                            SSH
+                        </label>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm mb-1">密码 / Token</label>
-                    <input id="cfg-token" type="password" placeholder="ghp_xxxxxxxxxxxx"
-                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                <!-- HTTPS auth fields -->
+                <div id="auth-https" class="flex flex-col gap-4">
+                    <div>
+                        <label class="block text-sm mb-1">用户名</label>
+                        <input id="cfg-user" type="text" placeholder="your-username"
+                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">密码 / Token</label>
+                        <input id="cfg-token" type="password" placeholder="ghp_xxxxxxxxxxxx"
+                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                    </div>
+                </div>
+                <!-- SSH auth fields -->
+                <div id="auth-ssh" class="hidden flex flex-col gap-4">
+                    <div>
+                        <label class="block text-sm mb-1">SSH 私钥路径</label>
+                        <input id="cfg-ssh-key" type="text" placeholder="C:\Users\you\.ssh\id_ed25519"
+                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">私钥密码 <span class="text-spire-muted">(可选)</span></label>
+                        <input id="cfg-ssh-pass" type="password" placeholder="留空则无密码"
+                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm mb-1">游戏 Mod 文件夹路径</label>
                     <input id="cfg-path" type="text" placeholder="D:\Steam\steamapps\common\SlayTheSpire2\Mods"
+                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                </div>
+                <div>
+                    <label class="block text-sm mb-1">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
+                    <input id="cfg-save" type="text" placeholder="D:\Steam\steamapps\common\SlayTheSpire2\saves"
                         class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                 </div>
                 <button type="submit"
@@ -104,6 +138,22 @@
             </div>
             <button id="btn-refresh" class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-1.5 transition-colors">
                 刷新
+            </button>
+        </div>
+
+        <!-- quick-open buttons -->
+        <div class="flex gap-2">
+            <button id="btn-open-mod"
+                class="flex-1 text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors">
+                打开 Mod 文件夹
+            </button>
+            <button id="btn-open-save"
+                class="flex-1 text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors">
+                打开存档文件夹
+            </button>
+            <button id="btn-open-config"
+                class="flex-1 text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors">
+                打开配置文件夹
             </button>
         </div>
 

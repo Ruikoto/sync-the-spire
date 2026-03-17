@@ -52,3 +52,13 @@
 button, select {
     user-select: none;
 }
+
+/* segmented auth toggle */
+.auth-tab {
+    color: #94a3b8;
+}
+.auth-tab.active {
+    background: #6366f1;
+    color: #fff;
+    font-weight: 500;
+}

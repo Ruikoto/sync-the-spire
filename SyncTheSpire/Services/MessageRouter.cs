@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using SyncTheSpire.Models;
@@ -101,6 +102,10 @@ public class MessageRouter
                     HandleRestoreJunction();
                     break;
 
+                case "OPEN_FOLDER":
+                    HandleOpenFolder(req.Payload);
+                    break;
+
                 default:
                     Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
                     break;
@@ -133,7 +138,7 @@ public class MessageRouter
     private void HandleGetStatus()
     {
         var cfg = _configService.LoadConfig();
-        var repoExists = Directory.Exists(Path.Combine(_configService.RepoPath, ".git"));
+        var repoExists = _configService.IsRepoInitialized;
 
         object data;
         if (!cfg.IsConfigured || !repoExists)
@@ -182,10 +187,12 @@ public class MessageRouter
         Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
 
         // clone if repo doesn't exist yet
-        if (!Directory.Exists(Path.Combine(_configService.RepoPath, ".git")))
+        if (!_configService.IsRepoInitialized)
         {
             if (Directory.Exists(_configService.RepoPath))
                 Directory.Delete(_configService.RepoPath, true);
+            if (Directory.Exists(_configService.GitDirPath))
+                Directory.Delete(_configService.GitDirPath, true);
 
             _gitService.CloneRepo();
         }
@@ -277,6 +284,35 @@ public class MessageRouter
         EnsureJunction(cfg.GameModPath);
 
         Send(IpcResponse.Success("RESTORE_JUNCTION", new { message = "Mod 文件夹已恢复连接。" }));
+    }
+
+    private void HandleOpenFolder(JsonElement? payload)
+    {
+        var folderType = payload?.GetProperty("folderType").GetString();
+        var cfg = _configService.LoadConfig();
+
+        var path = folderType switch
+        {
+            "mod" => cfg.GameModPath,
+            "save" => cfg.SaveFolderPath,
+            "config" => ConfigService.AppDataDirPath,
+            _ => null
+        };
+
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            Send(IpcResponse.Error("OPEN_FOLDER", "文件夹路径不存在或未配置"));
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"\"{path}\"",
+            UseShellExecute = false
+        });
+
+        Send(IpcResponse.Success("OPEN_FOLDER"));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────

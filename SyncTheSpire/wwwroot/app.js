@@ -191,12 +191,23 @@ on('RESTORE_JUNCTION', data => {
 // setup form
 $('#setup-form').addEventListener('submit', e => {
     e.preventDefault();
-    sendMessage('INIT_CONFIG', {
+    const authType = document.querySelector('input[name="authType"]:checked').value;
+    const payload = {
         repoUrl: $('#cfg-repo').value.trim(),
-        username: $('#cfg-user').value.trim(),
-        token: $('#cfg-token').value.trim(),
+        authType,
         gameModPath: $('#cfg-path').value.trim(),
-    });
+        saveFolderPath: $('#cfg-save').value.trim(),
+    };
+
+    if (authType === 'ssh') {
+        payload.sshKeyPath = $('#cfg-ssh-key').value.trim();
+        payload.sshPassphrase = $('#cfg-ssh-pass').value.trim();
+    } else {
+        payload.username = $('#cfg-user').value.trim();
+        payload.token = $('#cfg-token').value.trim();
+    }
+
+    sendMessage('INIT_CONFIG', payload);
 });
 
 // refresh
@@ -231,6 +242,26 @@ $('#btn-push').addEventListener('click', () => sendMessage('SAVE_AND_PUSH_MY_BRA
 
 // settings: go back to setup page (keep it simple for now)
 $('#btn-settings').addEventListener('click', () => showPage('setup'));
+
+// auth type toggle: show/hide relevant fields + swap active tab style
+document.querySelectorAll('input[name="authType"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        const isSSH = radio.value === 'ssh' && radio.checked;
+        $('#auth-https').classList.toggle('hidden', isSSH);
+        $('#auth-ssh').classList.toggle('hidden', !isSSH);
+        // swap active pill
+        document.querySelectorAll('.auth-tab').forEach(tab => {
+            const input = tab.querySelector('input');
+            tab.classList.toggle('active', input.checked);
+            tab.classList.toggle('text-spire-muted', !input.checked);
+        });
+    });
+});
+
+// quick-open folder buttons
+$('#btn-open-mod').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'mod' }));
+$('#btn-open-save').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'save' }));
+$('#btn-open-config').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'config' }));
 
 
 // ── bootstrap ────────────────────────────────────────────────────────────────
