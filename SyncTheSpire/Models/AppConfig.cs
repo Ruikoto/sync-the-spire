@@ -14,7 +14,7 @@ public class AppConfig
     public string Token { get; set; } = string.Empty;
 
     [JsonPropertyName("authType")]
-    public string AuthType { get; set; } = "https"; // "https" | "ssh"
+    public string AuthType { get; set; } = "anonymous"; // "anonymous" | "https" | "ssh"
 
     [JsonPropertyName("sshKeyPath")]
     public string SshKeyPath { get; set; } = string.Empty;
@@ -23,19 +23,37 @@ public class AppConfig
     public string SshPassphrase { get; set; } = string.Empty;
 
     /// <summary>
-    /// the actual game mod folder, e.g. "D:\SteamLibrary\steamapps\common\SlayTheSpire2\Mods"
+    /// game install root, e.g. "D:\SteamLibrary\steamapps\common\SlayTheSpire2"
+    /// the actual mod folder is {GameInstallPath}\Mods
     /// </summary>
+    [JsonPropertyName("gameInstallPath")]
+    public string GameInstallPath { get; set; } = string.Empty;
+
+    // keep reading old configs that used "gameModPath"
     [JsonPropertyName("gameModPath")]
-    public string GameModPath { get; set; } = string.Empty;
+    public string GameModPathLegacy { get; set; } = string.Empty;
 
     [JsonPropertyName("saveFolderPath")]
     public string SaveFolderPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// resolved mod folder: {GameInstallPath}\Mods
+    /// </summary>
+    [JsonIgnore]
+    public string GameModPath =>
+        !string.IsNullOrWhiteSpace(GameInstallPath)
+            ? Path.Combine(GameInstallPath, "Mods")
+            : GameModPathLegacy; // fallback for old configs
 
     [JsonIgnore]
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(RepoUrl) &&
         !string.IsNullOrWhiteSpace(GameModPath) &&
-        (AuthType == "ssh"
-            ? !string.IsNullOrWhiteSpace(SshKeyPath)
-            : !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(Token));
+        AuthType switch
+        {
+            "ssh" => !string.IsNullOrWhiteSpace(SshKeyPath),
+            "https" => !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(Token),
+            "anonymous" => true,
+            _ => false
+        };
 }

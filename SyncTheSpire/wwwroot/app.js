@@ -46,6 +46,8 @@ window.chrome.webview.addEventListener('message', e => {
 
 const $ = (sel) => document.querySelector(sel);
 
+let currentBranch = '';
+
 function showPage(name) {
     $('#page-setup').classList.add('hidden');
     $('#page-setup').classList.remove('flex');
@@ -88,12 +90,48 @@ function toast(message, type = 'info') {
     }, 4000);
 }
 
+// themed confirm dialog — returns a Promise<boolean>
+function showConfirm(message, title) {
+    return new Promise(resolve => {
+        $('#confirm-title').textContent = title || '确认';
+        $('#confirm-message').textContent = message;
+        const modal = $('#confirm-modal');
+        modal.classList.remove('hidden');
+
+        function cleanup() {
+            modal.classList.add('hidden');
+            $('#confirm-ok').removeEventListener('click', onOk);
+            $('#confirm-cancel').removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onBackdrop);
+            document.removeEventListener('keydown', onKeydown);
+        }
+
+        function onOk() { cleanup(); resolve(true); }
+        function onCancel() { cleanup(); resolve(false); }
+        function onBackdrop(e) { if (e.target === modal) { cleanup(); resolve(false); } }
+        function onKeydown(e) { if (e.key === 'Escape') { cleanup(); resolve(false); } }
+
+        $('#confirm-ok').addEventListener('click', onOk);
+        $('#confirm-cancel').addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKeydown);
+    });
+}
+
+function updatePushButton() {
+    const btn = $('#btn-push');
+    btn.textContent = currentBranch
+        ? `保存改动并上传到 ${currentBranch}`
+        : '保存改动并上传';
+}
+
 function updateStatusCard(data) {
     const dot = $('#status-dot');
     const label = $('#status-label');
     const branch = $('#status-branch');
 
-    branch.textContent = data.currentBranch || '—';
+    currentBranch = data.currentBranch || '';
+    branch.textContent = currentBranch || '—';
 
     if (data.isJunctionActive) {
         dot.className = 'w-2 h-2 rounded-full bg-spire-success';
@@ -102,6 +140,41 @@ function updateStatusCard(data) {
         dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
         label.textContent = '纯净模式 (Mod 未连接)';
     }
+
+    updatePushButton();
+}
+
+// ── auth type UI sync ────────────────────────────────────────────────────────
+
+function setAuthType(type) {
+    // check the right radio
+    document.querySelectorAll('input[name="authType"]').forEach(r => {
+        r.checked = r.value === type;
+    });
+    // show/hide field groups
+    $('#auth-https').classList.toggle('hidden', type !== 'https');
+    $('#auth-ssh').classList.toggle('hidden', type !== 'ssh');
+    // swap active pill style
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+        const input = tab.querySelector('input');
+        tab.classList.toggle('active', input.checked);
+        tab.classList.toggle('text-spire-muted', !input.checked);
+    });
+}
+
+// ── config form prefill ──────────────────────────────────────────────────────
+
+let isEditMode = false; // true when coming from Settings button, false for first-time setup
+
+function prefillConfigForm(cfg) {
+    if (!cfg) return;
+    if (cfg.repoUrl) $('#cfg-repo').value = cfg.repoUrl;
+    if (cfg.username) $('#cfg-user').value = cfg.username;
+    if (cfg.sshKeyPath) $('#cfg-ssh-key').value = cfg.sshKeyPath;
+    if (cfg.gameInstallPath) $('#cfg-path').value = cfg.gameInstallPath;
+    if (cfg.saveFolderPath) $('#cfg-save').value = cfg.saveFolderPath;
+    // password fields are intentionally left blank — backend merges them
+    setAuthType(cfg.authType || 'anonymous');
 }
 
 
@@ -111,6 +184,8 @@ on('GET_STATUS', data => {
     if (data.status === 'success') {
         const payload = data.payload;
         if (!payload.isConfigured) {
+            // first-time setup: request saved config for pre-fill
+            sendMessage('GET_CONFIG');
             showPage('setup');
         } else {
             showPage('main');
@@ -121,9 +196,21 @@ on('GET_STATUS', data => {
     }
 });
 
+on('GET_CONFIG', data => {
+    if (data.status === 'success') {
+        prefillConfigForm(data.payload);
+        // update subtitle based on whether there's existing config
+        if (data.payload?.repoUrl) {
+            isEditMode = true;
+            $('#setup-subtitle').textContent = '编辑配置 — 密码类字段留空则保持原值';
+        }
+    }
+});
+
 on('INIT_CONFIG', data => {
     if (data.status === 'success') {
         toast(data.payload?.message || 'Done!', 'success');
+        isEditMode = false;
         sendMessage('GET_STATUS');
     }
 });
@@ -175,8 +262,19 @@ on('RESTORE_JUNCTION', data => {
     }
 });
 
+// folder picker response
+on('PICK_FOLDER', data => {
+    if (data.status === 'success' && data.payload?.path && pendingPickTarget) {
+        pendingPickTarget.value = data.payload.path;
+    }
+    pendingPickTarget = null;
+});
+
 
 // ── UI event bindings ────────────────────────────────────────────────────────
+
+// track which input to fill when folder picker returns
+let pendingPickTarget = null;
 
 // setup form
 $('#setup-form').addEventListener('submit', e => {
@@ -185,28 +283,42 @@ $('#setup-form').addEventListener('submit', e => {
     const payload = {
         repoUrl: $('#cfg-repo').value.trim(),
         authType,
-        gameModPath: $('#cfg-path').value.trim(),
+        gameInstallPath: $('#cfg-path').value.trim(),
         saveFolderPath: $('#cfg-save').value.trim(),
     };
 
     if (authType === 'ssh') {
         payload.sshKeyPath = $('#cfg-ssh-key').value.trim();
         payload.sshPassphrase = $('#cfg-ssh-pass').value.trim();
-    } else {
+    } else if (authType === 'https') {
         payload.username = $('#cfg-user').value.trim();
         payload.token = $('#cfg-token').value.trim();
     }
+    // anonymous: no extra fields
 
     sendMessage('INIT_CONFIG', payload);
+});
+
+// folder picker buttons
+$('#btn-pick-game').addEventListener('click', () => {
+    pendingPickTarget = $('#cfg-path');
+    sendMessage('PICK_FOLDER');
+});
+$('#btn-pick-save').addEventListener('click', () => {
+    pendingPickTarget = $('#cfg-save');
+    sendMessage('PICK_FOLDER');
 });
 
 // refresh
 $('#btn-refresh').addEventListener('click', () => sendMessage('GET_STATUS'));
 
 // vanilla mode
-$('#btn-vanilla').addEventListener('click', () => {
-    if (confirm('确定要断开 Mod 连接吗？（不会删除 Mod 文件）'))
-        sendMessage('SWITCH_TO_VANILLA');
+$('#btn-vanilla').addEventListener('click', async () => {
+    const ok = await showConfirm(
+        '确定要断开 Mod 连接吗？（不会删除 Mod 文件）',
+        '切换到纯净模式'
+    );
+    if (ok) sendMessage('SWITCH_TO_VANILLA');
 });
 
 // restore junction
@@ -274,9 +386,13 @@ function renderBranchTable() {
 
     // bind row click
     tbody.querySelectorAll('.branch-row').forEach(row => {
-        row.addEventListener('click', () => {
+        row.addEventListener('click', async () => {
             const name = row.dataset.branch;
-            if (confirm(`确定要强制同步到 ${name}？本地改动将被覆盖。`)) {
+            const ok = await showConfirm(
+                `确定要强制同步到「${name}」？本地改动将被覆盖。`,
+                '同步分支'
+            );
+            if (ok) {
                 closeBranchModal();
                 sendMessage('SYNC_OTHER_BRANCH', { branchName: name });
             }
@@ -320,27 +436,28 @@ $('#btn-create').addEventListener('click', () => {
     sendMessage('CREATE_MY_BRANCH', { branchName: name });
 });
 
-// save & push (with confirmation)
-$('#btn-push').addEventListener('click', () => {
-    if (confirm('此操作会使用本地当前 Mod 文件夹的状态覆盖云端配置，是否继续？'))
-        sendMessage('SAVE_AND_PUSH_MY_BRANCH');
+// save & push (with themed confirmation dialog showing target branch)
+$('#btn-push').addEventListener('click', async () => {
+    const branch = currentBranch || '当前分支';
+    const ok = await showConfirm(
+        `此操作会将本地 Mod 文件夹的当前状态保存并上传到分支「${branch}」，覆盖云端配置，是否继续？`,
+        '保存并上传'
+    );
+    if (ok) sendMessage('SAVE_AND_PUSH_MY_BRANCH');
 });
 
-// settings: go back to setup page (keep it simple for now)
-$('#btn-settings').addEventListener('click', () => showPage('setup'));
+// settings: go to setup page with config pre-filled
+$('#btn-settings').addEventListener('click', () => {
+    isEditMode = true;
+    $('#setup-subtitle').textContent = '编辑配置 — 密码类字段留空则保持原值';
+    sendMessage('GET_CONFIG');
+    showPage('setup');
+});
 
 // auth type toggle: show/hide relevant fields + swap active tab style
 document.querySelectorAll('input[name="authType"]').forEach(radio => {
     radio.addEventListener('change', () => {
-        const isSSH = radio.value === 'ssh' && radio.checked;
-        $('#auth-https').classList.toggle('hidden', isSSH);
-        $('#auth-ssh').classList.toggle('hidden', !isSSH);
-        // swap active pill
-        document.querySelectorAll('.auth-tab').forEach(tab => {
-            const input = tab.querySelector('input');
-            tab.classList.toggle('active', input.checked);
-            tab.classList.toggle('text-spire-muted', !input.checked);
-        });
+        setAuthType(radio.value);
     });
 });
 

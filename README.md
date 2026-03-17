@@ -10,6 +10,7 @@
 - **Git 引擎**: LibGit2Sharp（无需用户安装 Git 客户端）
 - **前端**: HTML + JavaScript + TailwindCSS (CDN)
 - **通信**: WebView2 `PostWebMessageAsString` / `WebMessageReceived`，JSON 协议
+- **窗口**: 无边框自定义标题栏，通过 `WS_THICKFRAME` + `WM_NCCALCSIZE` 实现原生边缘拖拽缩放与 Aero Snap，`DwmSetWindowAttribute` 启用 Windows 11 圆角
 
 ## 核心架构
 
@@ -61,7 +62,7 @@ dotnet run --project SyncTheSpire
 ```
 SyncTheSpire/
 ├── Program.cs                # 入口
-├── MainForm.cs               # WinForms 宿主窗口 + WebView2 初始化
+├── MainForm.cs               # WinForms 宿主窗口 + 自定义窗口框架 + WebView2 初始化
 ├── Models/
 │   ├── AppConfig.cs          # 配置模型
 │   └── IpcMessages.cs        # IPC 请求/响应模型

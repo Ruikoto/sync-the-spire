@@ -34,10 +34,12 @@ public class GitService
     private string GitDirPath => _config.GitDirPath;
 
     private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
+    private bool IsAnonymousMode => _config.LoadConfig().AuthType == "anonymous";
 
-    // HTTPS-only cred handler (SSH uses git.exe CLI instead)
-    private CredentialsHandler MakeCredHandler()
+    // HTTPS cred handler — null for anonymous (public repos)
+    private CredentialsHandler? MakeCredHandler()
     {
+        if (IsAnonymousMode) return null;
         var cfg = _config.LoadConfig();
         return (_, _, _) => new UsernamePasswordCredentials
         {
@@ -126,7 +128,9 @@ public class GitService
         else
         {
             var opts = new CloneOptions();
-            opts.FetchOptions.CredentialsProvider = MakeCredHandler();
+            var creds = MakeCredHandler();
+            if (creds != null)
+                opts.FetchOptions.CredentialsProvider = creds;
             Repository.Clone(cfg.RepoUrl, RepoPath, opts);
         }
 
@@ -298,10 +302,11 @@ public class GitService
         if (remote is null) return;
 
         var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-        Commands.Fetch(repo, remote.Name, refSpecs, new FetchOptions
-        {
-            CredentialsProvider = MakeCredHandler()
-        }, null);
+        var fetchOpts = new FetchOptions();
+        var creds = MakeCredHandler();
+        if (creds != null)
+            fetchOpts.CredentialsProvider = creds;
+        Commands.Fetch(repo, remote.Name, refSpecs, fetchOpts, null);
     }
 
     /// <summary>
@@ -316,10 +321,11 @@ public class GitService
         }
 
         var currentBranch = repo.Head;
-        repo.Network.Push(currentBranch, new PushOptions
-        {
-            CredentialsProvider = MakeCredHandler()
-        });
+        var pushOpts = new PushOptions();
+        var creds = MakeCredHandler();
+        if (creds != null)
+            pushOpts.CredentialsProvider = creds;
+        repo.Network.Push(currentBranch, pushOpts);
     }
 
     /// <summary>

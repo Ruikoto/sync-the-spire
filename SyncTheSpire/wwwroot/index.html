@@ -31,7 +31,7 @@
     </script>
     <link rel="stylesheet" href="style.css" />
 </head>
-<body class="bg-spire-bg text-spire-text min-h-screen flex flex-col select-none">
+<body class="bg-spire-bg text-spire-text h-screen overflow-hidden flex flex-col select-none">
 
     <!-- custom title bar -->
     <div id="titlebar" class="flex items-center justify-between bg-spire-card border-b border-spire-border h-9 shrink-0">
@@ -59,6 +59,24 @@
         <div class="bg-spire-card rounded-xl p-6 flex flex-col items-center gap-3 border border-spire-border">
             <div class="spinner"></div>
             <p id="loading-text" class="text-spire-muted text-sm">Loading...</p>
+        </div>
+    </div>
+
+    <!-- confirm dialog (replaces native confirm()) -->
+    <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
+            <h3 id="confirm-title" class="text-sm font-medium mb-2"></h3>
+            <p id="confirm-message" class="text-xs text-spire-muted mb-5 leading-relaxed"></p>
+            <div class="flex justify-end gap-2">
+                <button id="confirm-cancel"
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    取消
+                </button>
+                <button id="confirm-ok"
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">
+                    确认
+                </button>
+            </div>
         </div>
     </div>
 
@@ -90,76 +108,100 @@
     </div>
 
     <!-- ============ SETUP PAGE ============ -->
-    <div id="page-setup" class="hidden flex-1 flex items-center justify-center p-6">
-        <div class="w-full max-w-md bg-spire-card rounded-xl border border-spire-border p-6">
-            <h1 class="text-xl font-bold mb-1">Sync the Spire</h1>
-            <p class="text-spire-muted text-sm mb-6">首次配置 — 填写以下信息开始同步</p>
+    <div id="page-setup" class="hidden flex-col flex-1 overflow-y-auto">
+        <div class="flex justify-center p-6">
+            <div class="w-full max-w-md bg-spire-card rounded-xl border border-spire-border p-6">
+                <h1 class="text-xl font-bold mb-1">Sync the Spire</h1>
+                <p id="setup-subtitle" class="text-spire-muted text-sm mb-6">首次配置 — 填写以下信息开始同步</p>
 
-            <form id="setup-form" class="flex flex-col gap-4" autocomplete="off">
-                <div>
-                    <label class="block text-sm mb-1">远程仓库 URL</label>
-                    <input id="cfg-repo" type="text" placeholder="https://github.com/user/mods.git"
-                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
-                </div>
-                <div>
-                    <label class="block text-sm mb-2">鉴权方式</label>
-                    <div class="flex bg-spire-bg rounded-lg border border-spire-border p-0.5">
-                        <label class="auth-tab active flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150">
-                            <input type="radio" name="authType" value="https" checked class="hidden" />
-                            HTTPS
-                        </label>
-                        <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
-                            <input type="radio" name="authType" value="ssh" class="hidden" />
-                            SSH
-                        </label>
-                    </div>
-                </div>
-                <!-- HTTPS auth fields -->
-                <div id="auth-https" class="flex flex-col gap-4">
+                <form id="setup-form" class="flex flex-col gap-4" autocomplete="off">
                     <div>
-                        <label class="block text-sm mb-1">用户名</label>
-                        <input id="cfg-user" type="text" placeholder="your-username"
+                        <label class="block text-sm mb-1">远程仓库 URL</label>
+                        <input id="cfg-repo" type="text" placeholder="https://github.com/user/mods.git"
                             class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                     </div>
                     <div>
-                        <label class="block text-sm mb-1">密码 / Token</label>
-                        <input id="cfg-token" type="password" placeholder="ghp_xxxxxxxxxxxx"
-                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                        <label class="block text-sm mb-2">鉴权方式</label>
+                        <div class="flex bg-spire-bg rounded-lg border border-spire-border p-0.5">
+                            <label class="auth-tab active flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150">
+                                <input type="radio" name="authType" value="anonymous" checked class="hidden" />
+                                匿名
+                            </label>
+                            <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
+                                <input type="radio" name="authType" value="https" class="hidden" />
+                                HTTPS
+                            </label>
+                            <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
+                                <input type="radio" name="authType" value="ssh" class="hidden" />
+                                SSH
+                            </label>
+                        </div>
                     </div>
-                </div>
-                <!-- SSH auth fields -->
-                <div id="auth-ssh" class="hidden flex flex-col gap-4">
+                    <!-- HTTPS auth fields -->
+                    <div id="auth-https" class="hidden flex flex-col gap-4">
+                        <div>
+                            <label class="block text-sm mb-1">用户名</label>
+                            <input id="cfg-user" type="text" placeholder="your-username"
+                                class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                        </div>
+                        <div>
+                            <label class="block text-sm mb-1">密码 / Token</label>
+                            <input id="cfg-token" type="password" placeholder="未修改则保持原值"
+                                class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                        </div>
+                    </div>
+                    <!-- SSH auth fields -->
+                    <div id="auth-ssh" class="hidden flex flex-col gap-4">
+                        <div>
+                            <label class="block text-sm mb-1">SSH 私钥路径</label>
+                            <input id="cfg-ssh-key" type="text" placeholder="C:\Users\you\.ssh\id_ed25519"
+                                class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                        </div>
+                        <div>
+                            <label class="block text-sm mb-1">私钥密码 <span class="text-spire-muted">(可选)</span></label>
+                            <input id="cfg-ssh-pass" type="password" placeholder="未修改则保持原值"
+                                class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                        </div>
+                    </div>
                     <div>
-                        <label class="block text-sm mb-1">SSH 私钥路径</label>
-                        <input id="cfg-ssh-key" type="text" placeholder="C:\Users\you\.ssh\id_ed25519"
-                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <label class="block text-sm">游戏安装路径</label>
+                            <span class="help-tip" data-tip="在 Steam 中右键游戏 → 管理 → 浏览本地文件，打开的路径即为游戏安装路径。">?</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input id="cfg-path" type="text" placeholder="直接粘贴路径或点击右侧按钮选择"
+                                class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                            <button type="button" id="btn-pick-game"
+                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0">
+                                浏览...
+                            </button>
+                        </div>
                     </div>
                     <div>
-                        <label class="block text-sm mb-1">私钥密码 <span class="text-spire-muted">(可选)</span></label>
-                        <input id="cfg-ssh-pass" type="password" placeholder="留空则无密码"
-                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <label class="block text-sm">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
+                            <span class="help-tip" data-tip="启动游戏后，按键盘数字 1 左侧的 ` 键打开控制台，输入 open saves 后按回车，打开的文件夹即是存档路径。">?</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input id="cfg-save" type="text" placeholder="直接粘贴路径或点击右侧按钮选择"
+                                class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                            <button type="button" id="btn-pick-save"
+                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0">
+                                浏览...
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div>
-                    <label class="block text-sm mb-1">游戏 Mod 文件夹路径</label>
-                    <input id="cfg-path" type="text" placeholder="D:\Steam\steamapps\common\SlayTheSpire2\Mods"
-                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
-                </div>
-                <div>
-                    <label class="block text-sm mb-1">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
-                    <input id="cfg-save" type="text" placeholder="D:\Steam\steamapps\common\SlayTheSpire2\saves"
-                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
-                </div>
-                <button type="submit"
-                    class="mt-2 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 transition-colors">
-                    保存并初始化
-                </button>
-            </form>
+                    <button type="submit"
+                        class="mt-2 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 transition-colors">
+                        保存并初始化
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- ============ MAIN PAGE ============ -->
-    <div id="page-main" class="hidden flex-1 flex flex-col p-4 gap-4">
+    <div id="page-main" class="hidden flex-col flex-1 overflow-y-auto p-4 gap-4">
 
         <!-- header bar -->
         <div class="flex items-center justify-between">
@@ -237,17 +279,22 @@
         <!-- mode 3: my branch -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
             <h2 class="text-sm font-medium mb-2">做房主</h2>
-            <p class="text-xs text-spire-muted mb-3">创建自己的分支来管理和分享 Mod 配置</p>
-            <div class="flex gap-2 mb-2">
-                <input id="inp-branch" type="text" placeholder="输入新分支名..."
-                    class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent" />
-                <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors">
-                    创建配置
-                </button>
-            </div>
+            <p class="text-xs text-spire-muted mb-3">管理和分享你的 Mod 配置</p>
             <button id="btn-push" class="w-full text-xs bg-spire-success/20 text-spire-success hover:bg-spire-success/30 rounded-lg py-2 transition-colors">
                 保存改动并上传
             </button>
+            <div class="flex items-center gap-2 my-3">
+                <div class="flex-1 h-px bg-spire-border"></div>
+                <span class="text-[10px] text-spire-muted shrink-0">或创建新分支</span>
+                <div class="flex-1 h-px bg-spire-border"></div>
+            </div>
+            <div class="flex gap-2">
+                <input id="inp-branch" type="text" placeholder="输入新分支名..."
+                    class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent" />
+                <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors">
+                    创建
+                </button>
+            </div>
         </div>
     </div>
 

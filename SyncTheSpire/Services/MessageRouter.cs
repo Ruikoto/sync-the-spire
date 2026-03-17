@@ -77,6 +77,10 @@ public class MessageRouter
                     HandleGetStatus();
                     break;
 
+                case "GET_CONFIG":
+                    HandleGetConfig();
+                    break;
+
                 case "INIT_CONFIG":
                     HandleInitConfig(req.Payload);
                     break;
@@ -107,6 +111,10 @@ public class MessageRouter
 
                 case "OPEN_FOLDER":
                     HandleOpenFolder(req.Payload);
+                    break;
+
+                case "PICK_FOLDER":
+                    HandlePickFolder();
                     break;
 
                 // window chrome controls — must run on UI thread
@@ -186,6 +194,25 @@ public class MessageRouter
         Send(IpcResponse.Success("GET_STATUS", data));
     }
 
+    /// <summary>
+    /// return saved config to frontend for pre-filling the settings form
+    /// strips sensitive fields (token, ssh passphrase)
+    /// </summary>
+    private void HandleGetConfig()
+    {
+        var cfg = _configService.LoadConfig();
+        Send(IpcResponse.Success("GET_CONFIG", new
+        {
+            repoUrl = cfg.RepoUrl,
+            authType = cfg.AuthType,
+            username = cfg.Username,
+            sshKeyPath = cfg.SshKeyPath,
+            gameInstallPath = cfg.GameInstallPath,
+            saveFolderPath = cfg.SaveFolderPath,
+            // don't return token or sshPassphrase
+        }));
+    }
+
     private void HandleInitConfig(JsonElement? payload)
     {
         if (payload is null)
@@ -196,12 +223,39 @@ public class MessageRouter
 
         var raw = payload.Value.GetRawText();
         var cfg = JsonSerializer.Deserialize<AppConfig>(raw);
-        if (cfg is null || !cfg.IsConfigured)
+        if (cfg is null)
         {
             Send(IpcResponse.Error("INIT_CONFIG", "请填写所有配置项"));
             return;
         }
 
+        // validate game install path: must contain SlayTheSpire2.exe
+        if (!string.IsNullOrWhiteSpace(cfg.GameInstallPath))
+        {
+            var exePath = Path.Combine(cfg.GameInstallPath, "SlayTheSpire2.exe");
+            if (!File.Exists(exePath))
+            {
+                Send(IpcResponse.Error("INIT_CONFIG",
+                    $"游戏安装路径无效：未找到 SlayTheSpire2.exe\n请确认路径是否正确：{cfg.GameInstallPath}"));
+                return;
+            }
+        }
+
+        // merge sensitive fields from existing config if user left them blank
+        var existing = _configService.LoadConfig();
+        if (string.IsNullOrWhiteSpace(cfg.Token) && !string.IsNullOrWhiteSpace(existing.Token))
+            cfg.Token = existing.Token;
+        if (string.IsNullOrWhiteSpace(cfg.SshPassphrase) && !string.IsNullOrWhiteSpace(existing.SshPassphrase))
+            cfg.SshPassphrase = existing.SshPassphrase;
+
+        if (!cfg.IsConfigured)
+        {
+            Send(IpcResponse.Error("INIT_CONFIG", "请填写所有配置项"));
+            return;
+        }
+
+        // invalidate cache so we re-read fresh after save
+        _configService.InvalidateCache();
         _configService.SaveConfig(cfg);
 
         Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
@@ -343,6 +397,37 @@ public class MessageRouter
         Send(IpcResponse.Success("OPEN_FOLDER"));
     }
 
+    /// <summary>
+    /// open native folder browser dialog, return selected path
+    /// </summary>
+    private void HandlePickFolder()
+    {
+        string? selectedPath = null;
+
+        // FolderBrowserDialog must run on STA thread
+        var tcs = new TaskCompletionSource<string?>();
+        _uiContext.Post(_ =>
+        {
+            using var dialog = new FolderBrowserDialog
+            {
+                Description = "选择文件夹",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false
+            };
+            if (dialog.ShowDialog(_form) == DialogResult.OK)
+                selectedPath = dialog.SelectedPath;
+
+            tcs.SetResult(selectedPath);
+        }, null);
+
+        var result = tcs.Task.GetAwaiter().GetResult();
+
+        if (!string.IsNullOrWhiteSpace(result))
+            Send(IpcResponse.Success("PICK_FOLDER", new { path = result }));
+        else
+            Send(IpcResponse.Success("PICK_FOLDER", new { path = (string?)null }));
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────
 
     private void EnsureJunction(string gameModPath)
@@ -350,11 +435,16 @@ public class MessageRouter
         if (_junctionService.IsJunction(gameModPath))
             return; // already good
 
-        // backup existing real folder if it's not a junction
+        // backup existing real folder to config directory instead of game root
         if (Directory.Exists(gameModPath))
         {
-            var backupPath = gameModPath.TrimEnd('\\', '/') + "_backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            Directory.Move(gameModPath, backupPath);
+            var backupDir = Path.Combine(ConfigService.AppDataDirPath, "Backups");
+            Directory.CreateDirectory(backupDir);
+            var backupPath = Path.Combine(backupDir, "Mods_backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+
+            // Directory.Move can't cross volume boundaries, so copy + delete
+            CopyDirectoryRecursive(gameModPath, backupPath);
+            Directory.Delete(gameModPath, true);
         }
 
         var ok = _junctionService.CreateJunction(gameModPath, _configService.RepoPath);
@@ -364,6 +454,15 @@ public class MessageRouter
             Send(IpcResponse.Progress("JUNCTION_FALLBACK", "Junction 创建失败，降级为复制模式..."));
             _junctionService.FallbackCopy(_configService.RepoPath, gameModPath);
         }
+    }
+
+    private static void CopyDirectoryRecursive(string source, string dest)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(source))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
+        foreach (var dir in Directory.GetDirectories(source))
+            CopyDirectoryRecursive(dir, Path.Combine(dest, Path.GetFileName(dir)));
     }
 
     private void Send(IpcResponse response)

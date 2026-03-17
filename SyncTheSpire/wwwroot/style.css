@@ -78,3 +78,49 @@ button, select {
 .branch-row:hover {
     background: rgba(99, 102, 241, 0.08);
 }
+
+/* help tooltip bubble */
+.help-tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid #2a2d3a;
+    font-size: 10px;
+    color: #94a3b8;
+    cursor: help;
+    position: relative;
+    flex-shrink: 0;
+    transition: border-color 0.15s, color 0.15s;
+}
+.help-tip:hover {
+    border-color: #6366f1;
+    color: #e2e8f0;
+}
+.help-tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1d27;
+    border: 1px solid #2a2d3a;
+    color: #e2e8f0;
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 8px 12px;
+    border-radius: 8px;
+    width: 260px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 60;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    white-space: normal;
+    font-weight: 400;
+}
+.help-tip:hover::after {
+    opacity: 1;
+}
