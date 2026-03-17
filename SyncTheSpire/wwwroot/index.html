@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sync the Spire</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        spire: {
+                            bg: '#0f1117',
+                            card: '#1a1d27',
+                            border: '#2a2d3a',
+                            accent: '#6366f1',
+                            accentHover: '#818cf8',
+                            danger: '#ef4444',
+                            dangerHover: '#f87171',
+                            success: '#22c55e',
+                            warn: '#f59e0b',
+                            text: '#e2e8f0',
+                            muted: '#94a3b8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg-spire-bg text-spire-text min-h-screen flex flex-col select-none">
+
+    <!-- toast container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- loading overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 z-40 bg-black/60 flex items-center justify-center">
+        <div class="bg-spire-card rounded-xl p-6 flex flex-col items-center gap-3 border border-spire-border">
+            <div class="spinner"></div>
+            <p id="loading-text" class="text-spire-muted text-sm">Loading...</p>
+        </div>
+    </div>
+
+    <!-- ============ SETUP PAGE ============ -->
+    <div id="page-setup" class="hidden flex-1 flex items-center justify-center p-6">
+        <div class="w-full max-w-md bg-spire-card rounded-xl border border-spire-border p-6">
+            <h1 class="text-xl font-bold mb-1">Sync the Spire</h1>
+            <p class="text-spire-muted text-sm mb-6">首次配置 — 填写以下信息开始同步</p>
+
+            <form id="setup-form" class="flex flex-col gap-4" autocomplete="off">
+                <div>
+                    <label class="block text-sm mb-1">远程仓库 URL</label>
+                    <input id="cfg-repo" type="text" placeholder="https://github.com/user/mods.git"
+                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                </div>
+                <div>
+                    <label class="block text-sm mb-1">用户名</label>
+                    <input id="cfg-user" type="text" placeholder="your-username"
+                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                </div>
+                <div>
+                    <label class="block text-sm mb-1">密码 / Token</label>
+                    <input id="cfg-token" type="password" placeholder="ghp_xxxxxxxxxxxx"
+                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                </div>
+                <div>
+                    <label class="block text-sm mb-1">游戏 Mod 文件夹路径</label>
+                    <input id="cfg-path" type="text" placeholder="D:\Steam\steamapps\common\SlayTheSpire2\Mods"
+                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                </div>
+                <button type="submit"
+                    class="mt-2 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 transition-colors">
+                    保存并初始化
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============ MAIN PAGE ============ -->
+    <div id="page-main" class="hidden flex-1 flex flex-col p-4 gap-4">
+
+        <!-- header bar -->
+        <div class="flex items-center justify-between">
+            <h1 class="text-lg font-bold">Sync the Spire</h1>
+            <button id="btn-settings" class="text-spire-muted hover:text-spire-text text-sm transition-colors">
+                Settings
+            </button>
+        </div>
+
+        <!-- status card -->
+        <div class="bg-spire-card rounded-xl border border-spire-border p-4 flex items-center gap-4">
+            <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-sm text-spire-muted">当前分支</span>
+                    <span id="status-branch" class="text-sm font-mono font-medium text-spire-accent">—</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                    <span id="status-label" class="text-xs text-spire-muted">未知</span>
+                </div>
+            </div>
+            <button id="btn-refresh" class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-1.5 transition-colors">
+                刷新
+            </button>
+        </div>
+
+        <!-- mode 1: vanilla -->
+        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">纯净模式</h2>
+                    <p class="text-xs text-spire-muted mt-0.5">断开 Mod 连接，回归原版游戏</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-vanilla" class="text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-3 py-1.5 transition-colors">
+                        清空 Mod
+                    </button>
+                    <button id="btn-restore" class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                        恢复 Mod
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- mode 2: follow others -->
+        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <h2 class="text-sm font-medium mb-2">联机跟随</h2>
+            <p class="text-xs text-spire-muted mb-3">选择朋友的分支，强制同步他们的 Mod 配置</p>
+            <div class="flex gap-2">
+                <select id="sel-branch"
+                    class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent">
+                    <option value="">加载中...</option>
+                </select>
+                <button id="btn-sync" class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors">
+                    同步并应用
+                </button>
+            </div>
+        </div>
+
+        <!-- mode 3: my branch -->
+        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <h2 class="text-sm font-medium mb-2">本地折腾 / 做房主</h2>
+            <p class="text-xs text-spire-muted mb-3">创建自己的分支来管理和分享 Mod 配置</p>
+            <div class="flex gap-2 mb-2">
+                <input id="inp-branch" type="text" placeholder="输入新分支名..."
+                    class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent" />
+                <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors">
+                    创建配置
+                </button>
+            </div>
+            <button id="btn-push" class="w-full text-xs bg-spire-success/20 text-spire-success hover:bg-spire-success/30 rounded-lg py-2 transition-colors">
+                保存改动并上传
+            </button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
