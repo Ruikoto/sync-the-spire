@@ -10,32 +10,20 @@ public class MainForm : Form
     private readonly WebView2 _webView;
     private MessageRouter? _router;
 
-    // edge resize grip thickness (px)
-    private const int ResizeGrip = 8;
-
     public MainForm()
     {
         Text = "Sync the Spire";
-        Size = new System.Drawing.Size(800, 580);
+        Size = new System.Drawing.Size(650, 610);
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new System.Drawing.Size(640, 480);
         FormBorderStyle = FormBorderStyle.None;
         BackColor = Color.FromArgb(0x0F, 0x11, 0x17);
 
-        _webView = new WebView2 { Dock = DockStyle.None };
+        _webView = new WebView2 { Dock = DockStyle.Fill };
         _webView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x0F, 0x11, 0x17);
         Controls.Add(_webView);
 
-        // keep WebView2 inset by ResizeGrip so the form edges receive mouse events
-        Resize += (_, _) => LayoutWebView();
         Load += async (_, _) => await InitWebView();
-    }
-
-    private void LayoutWebView()
-    {
-        // when maximized the OS handles resize, no grip needed
-        var g = WindowState == FormWindowState.Maximized ? 0 : ResizeGrip;
-        _webView.SetBounds(g, g, ClientSize.Width - g * 2, ClientSize.Height - g * 2, System.Windows.Forms.BoundsSpecified.All);
     }
 
     // ── borderless window setup ──────────────────────────────────────────
@@ -100,8 +88,6 @@ public class MainForm : Form
 
         // navigate via virtual host instead of file://
         _webView.CoreWebView2.Navigate("https://app.local/index.html");
-
-        LayoutWebView();
     }
 
     // ── native drag support ─────────────────────────────────────────────
@@ -124,9 +110,8 @@ public class MainForm : Form
         SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
     }
 
-    // ── WndProc: borderless frame + edge resize + maximize bounds ────────
+    // ── WndProc: borderless frame + maximize bounds ────────
 
-    private const int WM_NCHITTEST = 0x0084;
     private const int WM_GETMINMAXINFO = 0x0024;
     private const int WM_NCCALCSIZE = 0x0083;
 
@@ -142,28 +127,6 @@ public class MainForm : Form
                     return;
                 }
                 break;
-
-            case WM_NCHITTEST:
-                base.WndProc(ref m);
-                var pt = PointToClient(Cursor.Position);
-                bool t = pt.Y < ResizeGrip;
-                bool b = pt.Y > ClientSize.Height - ResizeGrip;
-                bool l = pt.X < ResizeGrip;
-                bool r = pt.X > ClientSize.Width - ResizeGrip;
-
-                m.Result = (t, b, l, r) switch
-                {
-                    (true, _, true, _) => 13,   // HTTOPLEFT
-                    (true, _, _, true) => 14,   // HTTOPRIGHT
-                    (_, true, true, _) => 16,   // HTBOTTOMLEFT
-                    (_, true, _, true) => 17,   // HTBOTTOMRIGHT
-                    (true, _, _, _) => 12,      // HTTOP
-                    (_, true, _, _) => 15,      // HTBOTTOM
-                    (_, _, true, _) => 10,      // HTLEFT
-                    (_, _, _, true) => 11,      // HTRIGHT
-                    _ => 1                       // HTCLIENT — pass through to WebView2
-                };
-                return;
 
             case WM_GETMINMAXINFO:
                 // prevent maximized window from covering taskbar

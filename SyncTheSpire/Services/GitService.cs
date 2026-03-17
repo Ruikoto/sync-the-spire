@@ -36,6 +36,15 @@ public class GitService
     private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
     private bool IsAnonymousMode => _config.LoadConfig().AuthType == "anonymous";
 
+    // sentinel branch name used before the user picks a real branch
+    public const string InitBranch = "_init";
+
+    // branches that should never be checked out or pushed to by users
+    private static readonly HashSet<string> ProtectedBranches = new(StringComparer.OrdinalIgnoreCase)
+        { "main", "master" };
+
+    public bool IsOnInitBranch => GetCurrentBranch() == InitBranch;
+
     // HTTPS cred handler — null for anonymous (public repos)
     private CredentialsHandler? MakeCredHandler()
     {
@@ -80,6 +89,11 @@ public class GitService
             psi.Environment["GIT_WORK_TREE"] = RepoPath;
         }
 
+        // bypass ownership check for AppData repo path (same as GlobalSettings.SetOwnerValidation)
+        psi.Environment["GIT_CONFIG_COUNT"] = "1";
+        psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
+        psi.Environment["GIT_CONFIG_VALUE_0"] = "*";
+
         using var proc = Process.Start(psi)!;
         var stderr = proc.StandardError.ReadToEnd();
         proc.WaitForExit(timeout);
@@ -118,6 +132,11 @@ public class GitService
                 psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
             }
 
+            // bypass ownership check for AppData repo path
+            psi.Environment["GIT_CONFIG_COUNT"] = "1";
+            psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
+            psi.Environment["GIT_CONFIG_VALUE_0"] = "*";
+
             using var proc = Process.Start(psi)!;
             var stderr = proc.StandardError.ReadToEnd();
             proc.WaitForExit(300_000);
@@ -143,6 +162,9 @@ public class GitService
         // remove .gitignore from working tree if the remote repo had one
         // (it stays tracked in git, just not physically in our working tree junction)
         CleanGitArtifactsFromWorkTree();
+
+        // start on an empty orphan branch so the user's mod folder isn't wiped on first connect
+        CheckoutEmptyInitBranch();
     }
 
     // ── branch queries ───────────────────────────────────────────────────
@@ -173,6 +195,7 @@ public class GitService
                 b.FriendlyName.Replace("origin/", ""),
                 b.Tip.Author.Name,
                 b.Tip.Author.When))
+            .Where(b => !IsProtectedBranch(b.Name) && b.Name != InitBranch)
             .OrderByDescending(b => b.LastModified)
             .ToList();
     }
@@ -188,6 +211,9 @@ public class GitService
 
     public void ForceCheckoutBranch(string branchName)
     {
+        if (IsProtectedBranch(branchName))
+            throw new InvalidOperationException($"不允许检出受保护的分支：{branchName}");
+
         using var repo = OpenRepo();
 
         FetchAll(repo);
@@ -222,6 +248,9 @@ public class GitService
 
     public void CreateBranch(string branchName)
     {
+        if (IsProtectedBranch(branchName))
+            throw new InvalidOperationException($"不允许创建受保护的分支名：{branchName}");
+
         using var repo = OpenRepo();
 
         // if branch already exists locally, just check it out
@@ -247,6 +276,9 @@ public class GitService
     public void CommitAndPush()
     {
         using var repo = OpenRepo();
+
+        if (IsProtectedBranch(repo.Head.FriendlyName))
+            throw new InvalidOperationException($"不允许推送到受保护的分支：{repo.Head.FriendlyName}");
 
         // stage everything
         Commands.Stage(repo, "*");
@@ -279,6 +311,38 @@ public class GitService
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
+
+    public static bool IsProtectedBranch(string branchName) =>
+        ProtectedBranches.Contains(branchName);
+
+    /// <summary>
+    /// create an orphan branch with no files so the mod folder starts empty after clone
+    /// </summary>
+    private void CheckoutEmptyInitBranch()
+    {
+        using var repo = OpenRepo();
+        var initBranch = repo.Branches[InitBranch];
+        if (initBranch is not null)
+        {
+            Commands.Checkout(repo, initBranch, new CheckoutOptions { CheckoutModifiers = CheckoutModifiers.Force });
+            return;
+        }
+
+        // create a proper orphan branch: empty tree -> commit -> checkout
+        var emptyTree = repo.ObjectDatabase.CreateTree(new TreeDefinition());
+        var sig = new Signature("sync-the-spire", "init@sync-the-spire", DateTimeOffset.Now);
+        var commit = repo.ObjectDatabase.CreateCommit(sig, sig, "init (empty)", emptyTree, [], false);
+        repo.Refs.Add($"refs/heads/{InitBranch}", commit.Id);
+
+        var branch = repo.Branches[InitBranch]!;
+        Commands.Checkout(repo, branch, new CheckoutOptions { CheckoutModifiers = CheckoutModifiers.Force });
+
+        // wipe all files from working tree so junction stays clean
+        foreach (var f in Directory.GetFiles(RepoPath))
+            File.Delete(f);
+        foreach (var d in Directory.GetDirectories(RepoPath))
+            Directory.Delete(d, true);
+    }
 
     private static Signature MakeSignature(Models.AppConfig cfg)
     {

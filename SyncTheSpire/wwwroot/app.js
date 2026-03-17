@@ -47,6 +47,7 @@ window.chrome.webview.addEventListener('message', e => {
 const $ = (sel) => document.querySelector(sel);
 
 let currentBranch = '';
+let needsBranchSelection = false;
 
 function showPage(name) {
     $('#page-setup').classList.add('hidden');
@@ -120,9 +121,17 @@ function showConfirm(message, title) {
 
 function updatePushButton() {
     const btn = $('#btn-push');
-    btn.textContent = currentBranch
-        ? `保存改动并上传到 ${currentBranch}`
-        : '保存改动并上传';
+    if (needsBranchSelection) {
+        btn.textContent = '请先选择或创建分支';
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else {
+        btn.textContent = currentBranch
+            ? `保存改动并上传到 ${currentBranch}`
+            : '保存改动并上传';
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
 }
 
 function updateStatusCard(data) {
@@ -131,14 +140,21 @@ function updateStatusCard(data) {
     const branch = $('#status-branch');
 
     currentBranch = data.currentBranch || '';
-    branch.textContent = currentBranch || '—';
+    needsBranchSelection = !!data.needsBranchSelection;
 
-    if (data.isJunctionActive) {
-        dot.className = 'w-2 h-2 rounded-full bg-spire-success';
-        label.textContent = 'Mod 已连接';
+    if (needsBranchSelection) {
+        branch.textContent = '未选择';
+        dot.className = 'w-2 h-2 rounded-full bg-spire-muted';
+        label.textContent = '请通过下方选择一个分支开始';
     } else {
-        dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
-        label.textContent = '纯净模式 (Mod 未连接)';
+        branch.textContent = currentBranch || '—';
+        if (data.isJunctionActive) {
+            dot.className = 'w-2 h-2 rounded-full bg-spire-success';
+            label.textContent = 'Mod 已连接';
+        } else {
+            dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
+            label.textContent = '纯净模式 (Mod 未连接)';
+        }
     }
 
     updatePushButton();
@@ -202,7 +218,7 @@ on('GET_CONFIG', data => {
         // update subtitle based on whether there's existing config
         if (data.payload?.repoUrl) {
             isEditMode = true;
-            $('#setup-subtitle').textContent = '编辑配置 — 密码类字段留空则保持原值';
+            $('#setup-subtitle').textContent = '编辑配置';
         }
     }
 });
@@ -449,7 +465,7 @@ $('#btn-push').addEventListener('click', async () => {
 // settings: go to setup page with config pre-filled
 $('#btn-settings').addEventListener('click', () => {
     isEditMode = true;
-    $('#setup-subtitle').textContent = '编辑配置 — 密码类字段留空则保持原值';
+    $('#setup-subtitle').textContent = '编辑配置';
     sendMessage('GET_CONFIG');
     showPage('setup');
 });

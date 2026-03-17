@@ -182,12 +182,15 @@ public class MessageRouter
         else
         {
             var isJunction = _junctionService.IsJunction(cfg.GameModPath);
+            var branch = _gitService.GetCurrentBranch();
+            var isInit = branch == GitService.InitBranch;
             data = new
             {
                 isConfigured = true,
-                currentBranch = _gitService.GetCurrentBranch(),
+                currentBranch = isInit ? (string?)null : branch,
                 isJunctionActive = isJunction,
-                hasLocalChanges = _gitService.HasLocalChanges()
+                hasLocalChanges = isInit ? false : _gitService.HasLocalChanges(),
+                needsBranchSelection = isInit
             };
         }
 
@@ -353,6 +356,12 @@ public class MessageRouter
 
     private void HandleSaveAndPush()
     {
+        if (_gitService.IsOnInitBranch)
+        {
+            Send(IpcResponse.Error("SAVE_AND_PUSH_MY_BRANCH", "请先选择或创建一个分支"));
+            return;
+        }
+
         Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
 
         _gitService.CommitAndPush();
