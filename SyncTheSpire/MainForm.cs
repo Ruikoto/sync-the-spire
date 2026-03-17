@@ -10,14 +10,24 @@ public class MainForm : Form
     private readonly WebView2 _webView;
     private MessageRouter? _router;
 
+    // base sizes designed at 96 DPI (100% scaling)
+    private const int DesignWidth = 650;
+    private const int DesignHeight = 610;
+    private const int MinWidth = 640;
+    private const int MinHeight = 480;
+
     public MainForm()
     {
         Text = "Sync the Spire";
-        Size = new System.Drawing.Size(650, 610);
-        StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new System.Drawing.Size(640, 480);
+        AutoScaleMode = AutoScaleMode.None;
         FormBorderStyle = FormBorderStyle.None;
         BackColor = Color.FromArgb(0x0F, 0x11, 0x17);
+
+        // scale window to match current DPI so WebView2 CSS viewport stays consistent
+        var scale = DeviceDpi / 96.0;
+        Size = new System.Drawing.Size((int)(DesignWidth * scale), (int)(DesignHeight * scale));
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new System.Drawing.Size((int)(MinWidth * scale), (int)(MinHeight * scale));
 
         _webView = new WebView2 { Dock = DockStyle.Fill };
         _webView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x0F, 0x11, 0x17);
@@ -88,6 +98,14 @@ public class MainForm : Form
 
         // navigate via virtual host instead of file://
         _webView.CoreWebView2.Navigate("https://app.local/index.html");
+    }
+
+    // keep MinimumSize in sync when dragging across monitors with different DPI
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        var scale = e.DeviceDpiNew / 96.0;
+        MinimumSize = new System.Drawing.Size((int)(MinWidth * scale), (int)(MinHeight * scale));
     }
 
     // ── native drag support ─────────────────────────────────────────────
