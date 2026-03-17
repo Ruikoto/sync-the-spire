@@ -1,0 +1,24 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## IDE
+.vs/
+.idea/
+*.swp
+*~
+
+## OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
+
+## Build artifacts
+publish/
+
+## Claude Code Temp
+tmpClaude*
