@@ -62,3 +62,19 @@ button, select {
     color: #fff;
     font-weight: 500;
 }
+
+/* title bar */
+#titlebar-drag {
+    -webkit-app-region: drag;
+}
+.titlebar-btn {
+    -webkit-app-region: no-drag;
+}
+
+/* branch table */
+.branch-sort-th.active-sort {
+    color: #e2e8f0;
+}
+.branch-row:hover {
+    background: rgba(99, 102, 241, 0.08);
+}

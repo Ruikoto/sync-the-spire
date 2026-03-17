@@ -149,7 +149,9 @@ public class GitService
         return repo.Head.FriendlyName;
     }
 
-    public List<string> GetRemoteBranches()
+    public record BranchInfo(string Name, string Author, DateTimeOffset LastModified);
+
+    public List<BranchInfo> GetRemoteBranches()
     {
         using var repo = OpenRepo();
 
@@ -159,10 +161,15 @@ public class GitService
         var remote = repo.Network.Remotes["origin"];
         if (remote is null) return [];
 
-        return repo.Refs
-            .Where(r => r.CanonicalName.StartsWith("refs/remotes/origin/") &&
-                        !r.CanonicalName.EndsWith("/HEAD"))
-            .Select(r => r.CanonicalName.Replace("refs/remotes/origin/", ""))
+        return repo.Branches
+            .Where(b => b.IsRemote &&
+                        b.FriendlyName.StartsWith("origin/") &&
+                        !b.FriendlyName.EndsWith("/HEAD"))
+            .Select(b => new BranchInfo(
+                b.FriendlyName.Replace("origin/", ""),
+                b.Tip.Author.Name,
+                b.Tip.Author.When))
+            .OrderByDescending(b => b.LastModified)
             .ToList();
     }
 

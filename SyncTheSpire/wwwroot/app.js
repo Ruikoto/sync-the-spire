@@ -115,7 +115,7 @@ on('GET_STATUS', data => {
         } else {
             showPage('main');
             updateStatusCard(payload);
-            // also grab branches for the dropdown
+            // pre-fetch branches so the modal opens instantly
             sendMessage('GET_BRANCHES');
         }
     }
@@ -130,22 +130,12 @@ on('INIT_CONFIG', data => {
 
 on('GET_BRANCHES', data => {
     if (data.status === 'success') {
-        const sel = $('#sel-branch');
-        const branches = data.payload?.branches || [];
-        const current = data.payload?.currentBranch || '';
-
-        sel.innerHTML = '';
-        if (branches.length === 0) {
-            sel.innerHTML = '<option value="">无可用分支</option>';
-            return;
+        branchData = data.payload?.branches || [];
+        branchCurrentName = data.payload?.currentBranch || '';
+        // re-render if modal is open
+        if (!$('#branch-modal').classList.contains('hidden')) {
+            renderBranchTable();
         }
-
-        branches.forEach(b => {
-            const opt = document.createElement('option');
-            opt.value = b;
-            opt.textContent = b + (b === current ? ' (当前)' : '');
-            sel.appendChild(opt);
-        });
     }
 });
 
@@ -222,12 +212,105 @@ $('#btn-vanilla').addEventListener('click', () => {
 // restore junction
 $('#btn-restore').addEventListener('click', () => sendMessage('RESTORE_JUNCTION'));
 
-// sync branch
-$('#btn-sync').addEventListener('click', () => {
-    const branch = $('#sel-branch').value;
-    if (!branch) { toast('请先选择一个分支', 'error'); return; }
-    if (confirm(`确定要强制同步到 ${branch}？本地改动将被覆盖。`))
-        sendMessage('SYNC_OTHER_BRANCH', { branchName: branch });
+// ── branch modal ────────────────────────────────────────────────────────────
+
+let branchData = [];
+let branchCurrentName = '';
+let branchSortKey = 'lastModified';
+let branchSortAsc = false; // newest first by default
+
+function openBranchModal() {
+    sendMessage('GET_BRANCHES');
+    renderBranchTable();
+    $('#branch-modal').classList.remove('hidden');
+}
+
+function closeBranchModal() {
+    $('#branch-modal').classList.add('hidden');
+}
+
+function formatRelativeTime(ms) {
+    const diff = Date.now() - ms;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return '刚刚';
+    if (mins < 60) return `${mins} 分钟前`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} 小时前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} 天前`;
+    return new Date(ms).toLocaleDateString('zh-CN');
+}
+
+function renderBranchTable() {
+    const tbody = $('#branch-table-body');
+    const empty = $('#branch-empty');
+
+    if (branchData.length === 0) {
+        tbody.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    // sort a copy
+    const sorted = [...branchData].sort((a, b) => {
+        let va = a[branchSortKey], vb = b[branchSortKey];
+        if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+        if (va < vb) return branchSortAsc ? -1 : 1;
+        if (va > vb) return branchSortAsc ? 1 : -1;
+        return 0;
+    });
+
+    tbody.innerHTML = sorted.map(b => {
+        const isCurrent = b.name === branchCurrentName;
+        const rowHighlight = isCurrent ? 'bg-spire-accent/10' : 'hover:bg-spire-bg/50';
+        const tag = isCurrent ? ' <span class="text-spire-accent text-[10px] ml-1">(当前)</span>' : '';
+        return `<tr class="branch-row border-b border-spire-border/50 cursor-pointer transition-colors ${rowHighlight}" data-branch="${b.name}">
+            <td class="px-4 py-2.5 font-mono text-xs">${b.name}${tag}</td>
+            <td class="px-4 py-2.5 text-xs text-spire-muted">${b.author}</td>
+            <td class="px-4 py-2.5 text-xs text-spire-muted">${formatRelativeTime(b.lastModified)}</td>
+        </tr>`;
+    }).join('');
+
+    // bind row click
+    tbody.querySelectorAll('.branch-row').forEach(row => {
+        row.addEventListener('click', () => {
+            const name = row.dataset.branch;
+            if (confirm(`确定要强制同步到 ${name}？本地改动将被覆盖。`)) {
+                closeBranchModal();
+                sendMessage('SYNC_OTHER_BRANCH', { branchName: name });
+            }
+        });
+    });
+}
+
+// sort headers
+document.querySelectorAll('.branch-sort-th').forEach(th => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.key;
+        if (branchSortKey === key) {
+            branchSortAsc = !branchSortAsc;
+        } else {
+            branchSortKey = key;
+            branchSortAsc = key === 'name'; // name defaults to A-Z, others default to desc
+        }
+        // update arrow indicators
+        document.querySelectorAll('.branch-sort-th').forEach(h => {
+            h.classList.remove('active-sort');
+            const arrow = h.querySelector('.sort-arrow');
+            if (arrow) arrow.remove();
+        });
+        th.classList.add('active-sort');
+        th.insertAdjacentHTML('beforeend', ` <span class="sort-arrow">${branchSortAsc ? '▲' : '▼'}</span>`);
+        renderBranchTable();
+    });
+});
+
+$('#btn-browse-branches').addEventListener('click', openBranchModal);
+$('#branch-modal-close').addEventListener('click', closeBranchModal);
+// close modal when clicking backdrop
+$('#branch-modal').addEventListener('click', e => {
+    if (e.target === $('#branch-modal')) closeBranchModal();
 });
 
 // create branch
@@ -237,8 +320,11 @@ $('#btn-create').addEventListener('click', () => {
     sendMessage('CREATE_MY_BRANCH', { branchName: name });
 });
 
-// save & push
-$('#btn-push').addEventListener('click', () => sendMessage('SAVE_AND_PUSH_MY_BRANCH'));
+// save & push (with confirmation)
+$('#btn-push').addEventListener('click', () => {
+    if (confirm('此操作会使用本地当前 Mod 文件夹的状态覆盖云端配置，是否继续？'))
+        sendMessage('SAVE_AND_PUSH_MY_BRANCH');
+});
 
 // settings: go back to setup page (keep it simple for now)
 $('#btn-settings').addEventListener('click', () => showPage('setup'));
@@ -262,6 +348,17 @@ document.querySelectorAll('input[name="authType"]').forEach(radio => {
 $('#btn-open-mod').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'mod' }));
 $('#btn-open-save').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'save' }));
 $('#btn-open-config').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'config' }));
+
+
+// ── title bar controls ──────────────────────────────────────────────────────
+
+$('#titlebar-drag').addEventListener('mousedown', () => sendMessage('WINDOW_DRAG'));
+$('#btn-minimize').addEventListener('click', () => sendMessage('WINDOW_MINIMIZE'));
+$('#btn-maximize').addEventListener('click', () => sendMessage('WINDOW_MAXIMIZE'));
+$('#btn-close').addEventListener('click', () => sendMessage('WINDOW_CLOSE'));
+
+// double-click drag area to toggle maximize
+$('#titlebar-drag').addEventListener('dblclick', () => sendMessage('WINDOW_MAXIMIZE'));
 
 
 // ── bootstrap ────────────────────────────────────────────────────────────────

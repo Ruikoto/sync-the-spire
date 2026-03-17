@@ -33,6 +33,24 @@
 </head>
 <body class="bg-spire-bg text-spire-text min-h-screen flex flex-col select-none">
 
+    <!-- custom title bar -->
+    <div id="titlebar" class="flex items-center justify-between bg-spire-card border-b border-spire-border h-9 shrink-0">
+        <div id="titlebar-drag" class="flex-1 h-full flex items-center pl-3 cursor-default">
+            <span class="text-xs font-medium text-spire-muted">Sync the Spire</span>
+        </div>
+        <div class="flex h-full">
+            <button id="btn-minimize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors">
+                <svg width="10" height="1" viewBox="0 0 10 1"><rect fill="currentColor" width="10" height="1"/></svg>
+            </button>
+            <button id="btn-maximize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
+            </button>
+            <button id="btn-close" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-spire-danger hover:text-white transition-colors">
+                <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
+            </button>
+        </div>
+    </div>
+
     <!-- toast container -->
     <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
 
@@ -41,6 +59,33 @@
         <div class="bg-spire-card rounded-xl p-6 flex flex-col items-center gap-3 border border-spire-border">
             <div class="spinner"></div>
             <p id="loading-text" class="text-spire-muted text-sm">Loading...</p>
+        </div>
+    </div>
+
+    <!-- branch selector modal -->
+    <div id="branch-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 max-h-[70vh] flex flex-col">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
+                <h2 class="text-sm font-medium">选择分支</h2>
+                <button id="branch-modal-close"
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+            </div>
+            <div class="overflow-auto flex-1">
+                <table class="w-full text-sm">
+                    <thead class="sticky top-0 bg-spire-card z-10">
+                        <tr class="border-b border-spire-border text-spire-muted text-xs">
+                            <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
+                                data-key="name">分支名称</th>
+                            <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
+                                data-key="author">修改人</th>
+                            <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors active-sort"
+                                data-key="lastModified">最近修改 <span class="sort-arrow">▼</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="branch-table-body"></tbody>
+                </table>
+                <p id="branch-empty" class="hidden text-center text-spire-muted text-xs py-8">暂无可用分支</p>
+            </div>
         </div>
     </div>
 
@@ -177,22 +222,21 @@
 
         <!-- mode 2: follow others -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
-            <h2 class="text-sm font-medium mb-2">联机跟随</h2>
-            <p class="text-xs text-spire-muted mb-3">选择朋友的分支，强制同步他们的 Mod 配置</p>
-            <div class="flex gap-2">
-                <select id="sel-branch"
-                    class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent">
-                    <option value="">加载中...</option>
-                </select>
-                <button id="btn-sync" class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors">
-                    同步并应用
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">联机跟随</h2>
+                    <p class="text-xs text-spire-muted mt-0.5">选择朋友的分支，强制同步他们的 Mod 配置</p>
+                </div>
+                <button id="btn-browse-branches"
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors">
+                    浏览分支
                 </button>
             </div>
         </div>
 
         <!-- mode 3: my branch -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
-            <h2 class="text-sm font-medium mb-2">本地折腾 / 做房主</h2>
+            <h2 class="text-sm font-medium mb-2">做房主</h2>
             <p class="text-xs text-spire-muted mb-3">创建自己的分支来管理和分享 Mod 配置</p>
             <div class="flex gap-2 mb-2">
                 <input id="inp-branch" type="text" placeholder="输入新分支名..."

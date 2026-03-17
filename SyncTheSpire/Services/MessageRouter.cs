@@ -11,18 +11,21 @@ public class MessageRouter
     private readonly ConfigService _configService;
     private readonly GitService _gitService;
     private readonly JunctionService _junctionService;
+    private readonly MainForm _form;
     private readonly SynchronizationContext _uiContext;
 
     public MessageRouter(
         CoreWebView2 webView,
         ConfigService configService,
         GitService gitService,
-        JunctionService junctionService)
+        JunctionService junctionService,
+        MainForm form)
     {
         _webView = webView;
         _configService = configService;
         _gitService = gitService;
         _junctionService = junctionService;
+        _form = form;
         // capture the UI SynchronizationContext so background threads can post back
         _uiContext = SynchronizationContext.Current
                      ?? throw new InvalidOperationException("MessageRouter must be created on the UI thread");
@@ -105,6 +108,23 @@ public class MessageRouter
                 case "OPEN_FOLDER":
                     HandleOpenFolder(req.Payload);
                     break;
+
+                // window chrome controls — must run on UI thread
+                case "WINDOW_DRAG":
+                    _uiContext.Post(_ => _form.BeginDrag(), null);
+                    return;
+                case "WINDOW_MINIMIZE":
+                    _uiContext.Post(_ => _form.WindowState = FormWindowState.Minimized, null);
+                    return;
+                case "WINDOW_MAXIMIZE":
+                    _uiContext.Post(_ =>
+                        _form.WindowState = _form.WindowState == FormWindowState.Maximized
+                            ? FormWindowState.Normal
+                            : FormWindowState.Maximized, null);
+                    return;
+                case "WINDOW_CLOSE":
+                    _uiContext.Post(_ => _form.Close(), null);
+                    return;
 
                 default:
                     Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
@@ -210,7 +230,15 @@ public class MessageRouter
         var branches = _gitService.GetRemoteBranches();
         var current = _gitService.GetCurrentBranch();
 
-        Send(IpcResponse.Success("GET_BRANCHES", new { branches, currentBranch = current }));
+        // flatten BranchInfo to plain objects so JSON stays predictable
+        var list = branches.Select(b => new
+        {
+            name = b.Name,
+            author = b.Author,
+            lastModified = b.LastModified.ToUnixTimeMilliseconds()
+        });
+
+        Send(IpcResponse.Success("GET_BRANCHES", new { branches = list, currentBranch = current }));
     }
 
     private void HandleSwitchToVanilla()
