@@ -18,18 +18,24 @@ public class JunctionService
 
         try
         {
-            // use cmd /c mklink /J -- works without elevation on NTFS
+            // use cmd /c mklink /J, passing args safely via ArgumentList to prevent injection
             var psi = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = $"/c mklink /J \"{junctionPath}\" \"{targetPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add("/c");
+            psi.ArgumentList.Add("mklink");
+            psi.ArgumentList.Add("/J");
+            psi.ArgumentList.Add(junctionPath);
+            psi.ArgumentList.Add(targetPath);
 
             using var proc = Process.Start(psi)!;
+            proc.StandardOutput.ReadToEnd();
+            proc.StandardError.ReadToEnd();
             proc.WaitForExit(10_000);
             return proc.ExitCode == 0;
         }

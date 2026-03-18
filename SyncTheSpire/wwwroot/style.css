@@ -135,3 +135,8 @@ input[type="radio"] {
 #confirm-message {
     white-space: pre-line;
 }
+
+/* confirm modal above toasts */
+#confirm-modal {
+    z-index: 55;
+}

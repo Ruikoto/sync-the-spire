@@ -4,31 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sync the Spire</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        spire: {
-                            bg: '#0f1117',
-                            card: '#1a1d27',
-                            border: '#2a2d3a',
-                            accent: '#6366f1',
-                            accentHover: '#818cf8',
-                            danger: '#ef4444',
-                            dangerHover: '#f87171',
-                            success: '#22c55e',
-                            warn: '#f59e0b',
-                            text: '#e2e8f0',
-                            muted: '#94a3b8',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="tailwind.css" />
     <link rel="stylesheet" href="style.css" />
 </head>
 <body class="bg-spire-bg text-spire-text h-screen overflow-hidden flex flex-col select-none">
@@ -39,13 +15,13 @@
             <span class="text-xs font-medium text-spire-muted">Sync the Spire</span>
         </div>
         <div class="flex h-full">
-            <button id="btn-minimize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors">
+            <button id="btn-minimize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最小化">
                 <svg width="10" height="1" viewBox="0 0 10 1"><rect fill="currentColor" width="10" height="1"/></svg>
             </button>
-            <button id="btn-maximize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors">
+            <button id="btn-maximize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最大化">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
             </button>
-            <button id="btn-close" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-spire-danger hover:text-white transition-colors">
+            <button id="btn-close" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-spire-danger hover:text-white transition-colors" aria-label="关闭">
                 <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
             </button>
         </div>
@@ -63,7 +39,7 @@
     </div>
 
     <!-- confirm dialog (replaces native confirm()) -->
-    <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
+    <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
             <h3 id="confirm-title" class="text-sm font-medium mb-2"></h3>
             <p id="confirm-message" class="text-xs text-spire-muted mb-5 leading-relaxed"></p>
@@ -81,12 +57,12 @@
     </div>
 
     <!-- branch selector modal -->
-    <div id="branch-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+    <div id="branch-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 max-h-[70vh] flex flex-col">
             <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
                 <h2 class="text-sm font-medium">选择分支</h2>
                 <button id="branch-modal-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
             </div>
             <div class="overflow-auto flex-1">
                 <table class="w-full text-sm">
@@ -116,7 +92,7 @@
 
                 <form id="setup-form" class="flex flex-col gap-4" autocomplete="off">
                     <div>
-                        <label class="block text-sm mb-1">远程仓库 URL</label>
+                        <label for="cfg-repo" class="block text-sm mb-1">远程仓库 URL</label>
                         <input id="cfg-repo" type="text" placeholder="https://github.com/user/mods.git"
                             class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                     </div>
@@ -140,12 +116,12 @@
                     <!-- HTTPS auth fields -->
                     <div id="auth-https" class="hidden flex flex-col gap-4">
                         <div>
-                            <label class="block text-sm mb-1">用户名</label>
+                            <label for="cfg-user" class="block text-sm mb-1">用户名</label>
                             <input id="cfg-user" type="text" placeholder="your-username"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                         <div>
-                            <label class="block text-sm mb-1">密码 / Token</label>
+                            <label for="cfg-token" class="block text-sm mb-1">密码 / Token</label>
                             <input id="cfg-token" type="password" placeholder="未修改则保持原值"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
@@ -153,19 +129,19 @@
                     <!-- SSH auth fields -->
                     <div id="auth-ssh" class="hidden flex flex-col gap-4">
                         <div>
-                            <label class="block text-sm mb-1">SSH 私钥路径</label>
+                            <label for="cfg-ssh-key" class="block text-sm mb-1">SSH 私钥路径</label>
                             <input id="cfg-ssh-key" type="text" placeholder="C:\Users\you\.ssh\id_ed25519"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                         <div>
-                            <label class="block text-sm mb-1">私钥密码 <span class="text-spire-muted">(可选)</span></label>
+                            <label for="cfg-ssh-pass" class="block text-sm mb-1">私钥密码 <span class="text-spire-muted">(可选)</span></label>
                             <input id="cfg-ssh-pass" type="password" placeholder="未修改则保持原值"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
-                            <label class="block text-sm">游戏安装路径</label>
+                            <label for="cfg-path" class="block text-sm">游戏安装路径</label>
                             <span class="help-tip" data-tip="在 Steam 中右键游戏 → 管理 → 浏览本地文件，打开的路径即为游戏安装路径。">?</span>
                         </div>
                         <div class="flex gap-2">
@@ -179,7 +155,7 @@
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
-                            <label class="block text-sm">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
+                            <label for="cfg-save" class="block text-sm">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
                             <span class="help-tip" data-tip="启动游戏后，按键盘数字 1 左侧的 ` 键打开控制台，输入 open saves 后按回车，打开的文件夹即是存档路径。">?</span>
                         </div>
                         <div class="flex gap-2">
@@ -361,12 +337,12 @@
     </div>
 
     <!-- save merge comparison modal -->
-    <div id="merge-compare-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+    <div id="merge-compare-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 flex flex-col">
             <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
                 <h2 class="text-sm font-medium">选择要保留的存档版本</h2>
                 <button id="merge-compare-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
             </div>
             <div class="px-4 py-3">
                 <p class="text-xs text-spire-muted mb-3 leading-relaxed">
@@ -399,12 +375,12 @@
     </div>
 
     <!-- backup restore modal -->
-    <div id="backup-list-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+    <div id="backup-list-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 max-h-[70vh] flex flex-col">
             <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
                 <h2 class="text-sm font-medium">存档备份管理</h2>
                 <button id="backup-list-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
             </div>
             <div class="px-4 py-2">
                 <p class="text-xs text-spire-muted leading-relaxed">
@@ -419,12 +395,12 @@
     </div>
 
     <!-- about modal -->
-    <div id="about-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+    <div id="about-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-xs mx-4 p-5">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-sm font-medium">关于</h2>
                 <button id="about-modal-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
             </div>
             <div class="flex flex-col gap-3 text-sm">
                 <div class="flex items-center justify-between">

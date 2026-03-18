@@ -17,6 +17,8 @@ public class MessageRouter
     private readonly SaveMergeService _mergeService;
     private readonly MainForm _form;
     private readonly SynchronizationContext _uiContext;
+    // only one IPC operation at a time to prevent concurrent access to git/config/filesystem
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
     public MessageRouter(
         CoreWebView2 webView,
@@ -77,6 +79,27 @@ public class MessageRouter
 
     private void Route(IpcRequest req)
     {
+        // window chrome controls don't need serialization — fire and forget on UI thread
+        switch (req.Action)
+        {
+            case "WINDOW_DRAG":
+                _uiContext.Post(_ => _form.BeginDrag(), null);
+                return;
+            case "WINDOW_MINIMIZE":
+                _uiContext.Post(_ => _form.WindowState = FormWindowState.Minimized, null);
+                return;
+            case "WINDOW_MAXIMIZE":
+                _uiContext.Post(_ =>
+                    _form.WindowState = _form.WindowState == FormWindowState.Maximized
+                        ? FormWindowState.Normal
+                        : FormWindowState.Maximized, null);
+                return;
+            case "WINDOW_CLOSE":
+                _uiContext.Post(_ => _form.Close(), null);
+                return;
+        }
+
+        _gate.Wait();
         try
         {
             switch (req.Action)
@@ -162,23 +185,6 @@ public class MessageRouter
                     HandleDeleteBackup(req.Payload);
                     break;
 
-                // window chrome controls — must run on UI thread
-                case "WINDOW_DRAG":
-                    _uiContext.Post(_ => _form.BeginDrag(), null);
-                    return;
-                case "WINDOW_MINIMIZE":
-                    _uiContext.Post(_ => _form.WindowState = FormWindowState.Minimized, null);
-                    return;
-                case "WINDOW_MAXIMIZE":
-                    _uiContext.Post(_ =>
-                        _form.WindowState = _form.WindowState == FormWindowState.Maximized
-                            ? FormWindowState.Normal
-                            : FormWindowState.Maximized, null);
-                    return;
-                case "WINDOW_CLOSE":
-                    _uiContext.Post(_ => _form.Close(), null);
-                    return;
-
                 default:
                     Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
                     break;
@@ -203,6 +209,10 @@ public class MessageRouter
         catch (Exception ex)
         {
             Send(IpcResponse.Error(req.Action, $"操作失败：{ex.Message}"));
+        }
+        finally
+        {
+            _gate.Release();
         }
     }
 

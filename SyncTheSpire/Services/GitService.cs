@@ -95,7 +95,9 @@ public class GitService
         psi.Environment["GIT_CONFIG_VALUE_0"] = "*";
 
         using var proc = Process.Start(psi)!;
+        // read stderr before WaitForExit to avoid deadlock when pipe buffer fills
         var stderr = proc.StandardError.ReadToEnd();
+        var stdout = proc.StandardOutput.ReadToEnd();
         proc.WaitForExit(timeout);
 
         if (proc.ExitCode != 0)
@@ -138,7 +140,9 @@ public class GitService
             psi.Environment["GIT_CONFIG_VALUE_0"] = "*";
 
             using var proc = Process.Start(psi)!;
+            // read both streams before WaitForExit to avoid deadlock
             var stderr = proc.StandardError.ReadToEnd();
+            var stdout = proc.StandardOutput.ReadToEnd();
             proc.WaitForExit(300_000);
 
             if (proc.ExitCode != 0)

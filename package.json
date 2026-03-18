@@ -1,0 +1,25 @@
+{
+  "name": "sync-the-spire",
+  "version": "1.0.0",
+  "description": "基于 Git 的极简 Mod 同步器，为《杀戮尖塔2》等缺乏官方创意工坊的游戏设计。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ruikoto/sync-the-spire.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Ruikoto/sync-the-spire/issues"
+  },
+  "homepage": "https://github.com/Ruikoto/sync-the-spire#readme",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.1",
+    "tailwindcss": "^4.2.1"
+  }
+}

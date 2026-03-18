@@ -1,3 +1,5 @@
+'use strict';
+
 // ── IPC bridge ───────────────────────────────────────────────────────────────
 
 function sendMessage(action, payload) {
@@ -46,9 +48,20 @@ window.chrome.webview.addEventListener('message', e => {
 
 const $ = (sel) => document.querySelector(sel);
 
+// html escape to prevent XSS when injecting data into innerHTML
+function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+// escape for use inside HTML attribute values
+function escAttr(str) {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 let currentBranch = '';
 let needsBranchSelection = false;
-let saveMergeState = null;
 let mergeCompareData = null;
 let appVersion = '';
 let appArch = 'x64';
@@ -60,6 +73,7 @@ function showPage(name) {
     $('#page-main').classList.remove('flex');
 
     const el = $(`#page-${name}`);
+    if (!el) return;
     el.classList.remove('hidden');
     el.classList.add('flex');
 }
@@ -87,7 +101,11 @@ function toast(message, type = 'info') {
     el.textContent = message;
     container.appendChild(el);
 
+    let dismissed = false;
     const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
+        clearTimeout(timer);
         el.style.opacity = '0';
         el.style.transition = 'opacity 0.3s';
         setTimeout(() => el.remove(), 300);
@@ -97,7 +115,6 @@ function toast(message, type = 'info') {
 
     // auto-dismiss
     const timer = setTimeout(dismiss, 4000);
-    el.addEventListener('click', () => clearTimeout(timer));
 }
 
 // themed confirm dialog — returns a Promise<boolean>
@@ -127,6 +144,19 @@ function showConfirm(message, title) {
         document.addEventListener('keydown', onKeydown);
     });
 }
+
+// close any closeable modal on Escape
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const modals = ['#branch-modal', '#merge-compare-modal', '#backup-list-modal', '#about-modal'];
+    for (const sel of modals) {
+        const m = $(sel);
+        if (m && !m.classList.contains('hidden')) {
+            m.classList.add('hidden');
+            return;
+        }
+    }
+});
 
 function updatePushButton() {
     const btn = $('#btn-push');
@@ -199,7 +229,6 @@ function updateSaveMergeCard(data) {
     const btnUnlink = $('#btn-unlink-saves');
 
     if (!data || !data.isConfigured) {
-        saveMergeState = null;
         dot.className = 'w-2 h-2 rounded-full bg-gray-500';
         label.textContent = '存档路径未配置';
         btnMerge.disabled = true;
@@ -208,8 +237,6 @@ function updateSaveMergeCard(data) {
         btnUnlink.classList.add('hidden');
         return;
     }
-
-    saveMergeState = data.mergeState;
 
     if (data.mergeState === 'linked') {
         dot.className = 'w-2 h-2 rounded-full bg-spire-success';
@@ -263,6 +290,10 @@ function setAuthType(type) {
 let isEditMode = false; // true when coming from Settings button, false for first-time setup
 
 function prefillConfigForm(cfg) {
+    // always clear password fields first
+    $('#cfg-token').value = '';
+    $('#cfg-ssh-pass').value = '';
+
     if (!cfg) return;
     if (cfg.repoUrl) $('#cfg-repo').value = cfg.repoUrl;
     if (cfg.username) $('#cfg-user').value = cfg.username;
@@ -293,6 +324,7 @@ on('GET_STATUS', data => {
         if (!payload.isConfigured) {
             // first-time setup: request saved config for pre-fill
             $('#btn-setup-back').classList.add('hidden');
+            $('#setup-subtitle').textContent = '首次配置 — 填写以下信息开始同步';
             sendMessage('GET_CONFIG');
             showPage('setup');
         } else {
@@ -555,9 +587,9 @@ function renderBranchTable() {
         const isCurrent = b.name === branchCurrentName;
         const rowHighlight = isCurrent ? 'bg-spire-accent/10' : 'hover:bg-spire-bg/50';
         const tag = isCurrent ? ' <span class="text-spire-accent text-[10px] ml-1">(当前)</span>' : '';
-        return `<tr class="branch-row border-b border-spire-border/50 cursor-pointer transition-colors ${rowHighlight}" data-branch="${b.name}">
-            <td class="px-4 py-2.5 font-mono text-xs">${b.name}${tag}</td>
-            <td class="px-4 py-2.5 text-xs text-spire-muted">${b.author}</td>
+        return `<tr class="branch-row border-b border-spire-border/50 cursor-pointer transition-colors ${rowHighlight}" data-branch="${escAttr(b.name)}">
+            <td class="px-4 py-2.5 font-mono text-xs">${esc(b.name)}${tag}</td>
+            <td class="px-4 py-2.5 text-xs text-spire-muted">${esc(b.author)}</td>
             <td class="px-4 py-2.5 text-xs text-spire-muted">${formatRelativeTime(b.lastModified)}</td>
         </tr>`;
     }).join('');
@@ -607,10 +639,22 @@ $('#branch-modal').addEventListener('click', e => {
     if (e.target === $('#branch-modal')) closeBranchModal();
 });
 
+// basic git branch name validation
+function isValidBranchName(name) {
+    if (/\s/.test(name)) return false;
+    if (/\.\./.test(name)) return false;
+    if (/[~^:\\\[\]{}]/.test(name)) return false;
+    if (name.startsWith('.') || name.startsWith('-')) return false;
+    if (name.endsWith('.') || name.endsWith('/') || name.endsWith('.lock')) return false;
+    if (/\/\//.test(name)) return false;
+    return true;
+}
+
 // create branch
 $('#btn-create').addEventListener('click', () => {
     const name = $('#inp-branch').value.trim();
     if (!name) { toast('请输入分支名称', 'error'); return; }
+    if (!isValidBranchName(name)) { toast('分支名称格式无效（不能包含空格、..、~、^、:、\\、[ ] 等字符）', 'error'); return; }
     sendMessage('CREATE_MY_BRANCH', { branchName: name });
 });
 
@@ -693,6 +737,8 @@ function openMergeCompareModal() {
     mergeCompareData.forEach(p => {
         const hasNormal = p.normal != null;
         const hasModded = p.modded != null;
+        const safeName = esc(p.name);
+        const safeAttrName = escAttr(p.name);
 
         const normalLabel = hasNormal
             ? `${formatSize(p.normal.sizeBytes)}<br><span class="text-spire-muted">${formatDate(p.normal.lastModified)}</span>`
@@ -712,18 +758,18 @@ function openMergeCompareModal() {
         const row = document.createElement('tr');
         row.className = 'border-b border-spire-border/50';
         row.innerHTML = `
-            <td class="py-2.5 px-2 font-mono">${p.name}</td>
+            <td class="py-2.5 px-2 font-mono">${safeName}</td>
             <td class="py-2.5 px-2 ${normalNewer ? 'text-spire-success' : ''}">${normalLabel}</td>
             <td class="py-2.5 px-2 ${moddedNewer ? 'text-spire-success' : ''}">${moddedLabel}</td>
             <td class="py-2.5 px-2 text-center">
                 ${canChoose ? `
                     <label class="inline-flex items-center gap-1 mr-2 cursor-pointer">
-                        <input type="radio" name="merge-${p.name}" value="normal"
+                        <input type="radio" name="merge-${safeAttrName}" value="normal"
                             ${defaultChoice === 'normal' ? 'checked' : ''} />
                         <span>普通</span>
                     </label>
                     <label class="inline-flex items-center gap-1 cursor-pointer">
-                        <input type="radio" name="merge-${p.name}" value="modded"
+                        <input type="radio" name="merge-${safeAttrName}" value="modded"
                             ${defaultChoice === 'modded' ? 'checked' : ''} />
                         <span>Mod</span>
                     </label>
@@ -743,7 +789,7 @@ function closeMergeCompareModal() {
 function collectMergeChoices() {
     const choices = {};
     mergeCompareData.forEach(p => {
-        const radio = document.querySelector(`input[name="merge-${p.name}"]:checked`);
+        const radio = document.querySelector(`input[name="merge-${CSS.escape(p.name)}"]:checked`);
         choices[p.name] = radio ? radio.value : 'normal';
     });
     return choices;
@@ -781,18 +827,20 @@ function renderBackupList(backups) {
             : '<span class="text-[10px] bg-spire-warn/20 text-spire-warn rounded px-1.5 py-0.5">Mod</span>';
 
         const isSave = b.type === 'save';
+        const safeName = esc(b.name);
+        const safeAttrName = escAttr(b.name);
 
         return `
             <div class="flex items-center justify-between py-2.5 group">
-                <div class="flex items-center gap-2 flex-1 min-w-0 ${isSave ? 'backup-row cursor-pointer' : ''}" data-backup="${b.name}">
+                <div class="flex items-center gap-2 flex-1 min-w-0 ${isSave ? 'backup-row cursor-pointer' : ''}" data-backup="${safeAttrName}">
                     ${typeBadge}
                     <div class="min-w-0">
-                        <div class="text-xs font-mono truncate">${b.name}</div>
+                        <div class="text-xs font-mono truncate">${safeName}</div>
                         <div class="text-[10px] text-spire-muted">${formatSize(b.sizeBytes)} · ${formatRelativeTime(b.createdAt)}</div>
                     </div>
                     ${isSave ? '<span class="text-[10px] text-spire-muted ml-auto shrink-0">点击恢复 →</span>' : ''}
                 </div>
-                <button class="backup-delete-btn text-spire-muted hover:text-spire-danger text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-name="${b.name}" title="删除备份">
+                <button class="backup-delete-btn text-spire-muted hover:text-spire-danger text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-name="${safeAttrName}" title="删除备份">
                     <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
                 </button>
             </div>
@@ -914,8 +962,10 @@ function getDownloadUrl() {
 }
 
 async function checkForUpdates(silent = true) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-        const res = await fetch(VERSION_CHECK_URL, { cache: 'no-cache' });
+        const res = await fetch(VERSION_CHECK_URL, { cache: 'no-cache', signal: controller.signal });
         if (!res.ok) return;
         latestVersionInfo = await res.json();
         updateAboutVersionStatus();
@@ -928,12 +978,17 @@ async function checkForUpdates(silent = true) {
                 `发现新版本 ${latestVersionInfo.latest_version}，是否立即下载？`,
                 '发现更新'
             );
-            if (ok) openExternal(getDownloadUrl());
+            if (ok) {
+                const url = getDownloadUrl();
+                if (url) openExternal(url);
+            }
         } else if (!silent) {
             toast('当前已是最新版本', 'success');
         }
     } catch (e) {
         if (!silent) toast('检查更新失败，请检查网络连接', 'error');
+    } finally {
+        clearTimeout(timeout);
     }
 }
 

@@ -70,9 +70,13 @@
 需要 Windows 10/11 和 .NET 10 SDK。
 
 ```bash
+# 开发运行
 dotnet run --project SyncTheSpire
+
+# 发布单文件 EXE（自包含）
+dotnet publish SyncTheSpire -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true
 ```
 
 ## 技术栈
 
-.NET 10 + WinForms + WebView2 | LibGit2Sharp | HTML/JS/TailwindCSS | GitHub Actions + Cloudflare Pages
+.NET 10 + WinForms + WebView2 | LibGit2Sharp | HTML/JS/TailwindCSS | GitHub Actions + GitHub Pages

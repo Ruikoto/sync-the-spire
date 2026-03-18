@@ -22,3 +22,7 @@ publish/
 
 ## Claude Code Temp
 tmpClaude*
+
+## node_modules
+node_modules/
+package-lock.json

@@ -10,11 +10,18 @@
     <!-- local builds get nightly-YYYYMMDD-HHmmss, CI overrides via -p:InformationalVersion=v1.0.0 -->
     <InformationalVersion>nightly-$([System.DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Version>1.0.0</Version>
+    <Authors>Ruikoto</Authors>
+    <Product>Sync the Spire</Product>
+    <Description>Git-based mod synchronizer for Slay the Spire 2</Description>
+    <RepositoryUrl>https://github.com/Ruikoto/sync-the-spire</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Copyright>Copyright (c) 2025-2026 Ruikoto</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.*" />
-    <PackageReference Include="LibGit2Sharp" Version="0.31.*" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3856.49" />
+    <PackageReference Include="LibGit2Sharp" Version="0.31.0" />
   </ItemGroup>
 
   <!-- embed wwwroot as content -->
