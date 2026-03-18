@@ -195,26 +195,28 @@ public class MessageRouter
             // most likely file-in-use by game process
             Send(IpcResponse.Error(req.Action, $"文件被占用，请先关闭游戏再操作！\n{ex.Message}"));
         }
-        catch (LibGit2Sharp.LibGit2SharpException ex) when (
-            ex.Message.Contains("401") ||
-            ex.Message.Contains("403") ||
-            ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase))
+        catch (LibGit2Sharp.LibGit2SharpException ex)
         {
-            // LibGit2Sharp throws "authentication that we do not support" for ALL auth failures,
-            // including wrong password. Distinguish by auth type.
+            Send(IpcResponse.Error(req.Action, $"Git 操作失败：{ex.Message}"));
+        }
+        catch (InvalidOperationException ex) when (
+            ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("could not read Username", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("401") || ex.Message.Contains("403"))
+        {
             var authType = _configService.LoadConfig().AuthType;
             var msg = authType switch
             {
                 "anonymous" =>
                     "该仓库需要认证，无法匿名访问。\n请切换到 HTTPS 或 SSH 认证方式。",
                 "https" =>
-                    "鉴权失败，请检查用户名和 Token 是否正确。\n" +
-                    "如果确认无误，可能是当前 Git 平台不支持此认证方式（如 Gitee），请改用 SSH。",
+                    "鉴权失败，请检查用户名和 Token 是否正确。",
                 _ => $"Git 认证失败：{ex.Message}"
             };
             Send(IpcResponse.Error(req.Action, msg));
         }
-        catch (LibGit2Sharp.LibGit2SharpException ex)
+        catch (InvalidOperationException ex) when (
+            ex.Message.Contains("git") && ex.Message.Contains("failed"))
         {
             Send(IpcResponse.Error(req.Action, $"Git 操作失败：{ex.Message}"));
         }

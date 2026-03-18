@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using LibGit2Sharp;
 using LibGit2Sharp.Handlers;
 
@@ -34,7 +35,6 @@ public class GitService
     private string GitDirPath => _config.GitDirPath;
 
     private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
-    private bool IsAnonymousMode => _config.LoadConfig().AuthType == "anonymous";
 
     // sentinel branch name used before the user picks a real branch
     public const string InitBranch = "_init";
@@ -48,8 +48,9 @@ public class GitService
     // HTTPS cred handler — null for anonymous (public repos)
     private CredentialsHandler? MakeCredHandler()
     {
-        if (IsAnonymousMode) return null;
         var cfg = _config.LoadConfig();
+        if (cfg.AuthType != "https") return null;
+        if (string.IsNullOrWhiteSpace(cfg.Username) || string.IsNullOrWhiteSpace(cfg.Token)) return null;
         return (_, _, _) => new UsernamePasswordCredentials
         {
             Username = cfg.Username,
@@ -57,13 +58,59 @@ public class GitService
         };
     }
 
+    // ── git CLI plumbing ─────────────────────────────────────────────────
+
     /// <summary>
-    /// run git.exe with proper env vars. LibGit2Sharp 0.30 dropped SSH support,
-    /// so we shell out for all network operations when SSH auth is configured.
+    /// set up env vars shared by all git.exe invocations:
+    /// SSH key, HTTPS auth header, safe.directory, terminal prompt suppression.
+    /// </summary>
+    private void ConfigureGitEnv(ProcessStartInfo psi, bool setGitDir = true)
+    {
+        var cfg = _config.LoadConfig();
+
+        if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
+        {
+            // ssh wants forward slashes in key path
+            var keyPath = cfg.SshKeyPath.Replace("\\", "/");
+            psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
+        }
+
+        // point git to our separated git dir
+        if (setGitDir && Directory.Exists(GitDirPath))
+        {
+            psi.Environment["GIT_DIR"] = GitDirPath;
+            psi.Environment["GIT_WORK_TREE"] = RepoPath;
+        }
+
+        var configIdx = 0;
+
+        // bypass ownership check for AppData repo path (same as GlobalSettings.SetOwnerValidation)
+        psi.Environment[$"GIT_CONFIG_KEY_{configIdx}"] = "safe.directory";
+        psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = RepoPath;
+        configIdx++;
+
+        // HTTPS auth: inject Basic auth header so git.exe works with any platform (GitHub, Gitee, etc.)
+        if (cfg.AuthType == "https" &&
+            !string.IsNullOrWhiteSpace(cfg.Username) && !string.IsNullOrWhiteSpace(cfg.Token))
+        {
+            var cred = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{cfg.Username}:{cfg.Token}"));
+            psi.Environment[$"GIT_CONFIG_KEY_{configIdx}"] = "http.extraHeader";
+            psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = $"Authorization: Basic {cred}";
+            configIdx++;
+        }
+
+        psi.Environment["GIT_CONFIG_COUNT"] = configIdx.ToString();
+
+        // never prompt for credentials interactively
+        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
+    }
+
+    /// <summary>
+    /// run git.exe with proper env vars. used for SSH (always) and as fallback for HTTPS
+    /// when LibGit2Sharp can't handle a platform's auth challenge.
     /// </summary>
     private void RunGitCli(string args, string? workDir = null, int timeout = 120_000)
     {
-        var cfg = _config.LoadConfig();
         var psi = new ProcessStartInfo
         {
             FileName = "git",
@@ -78,24 +125,7 @@ public class GitService
         foreach (var arg in args.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             psi.ArgumentList.Add(arg);
 
-        if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
-        {
-            // ssh wants forward slashes in key path
-            var keyPath = cfg.SshKeyPath.Replace("\\", "/");
-            psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
-        }
-
-        // point git to our separated git dir
-        if (Directory.Exists(GitDirPath))
-        {
-            psi.Environment["GIT_DIR"] = GitDirPath;
-            psi.Environment["GIT_WORK_TREE"] = RepoPath;
-        }
-
-        // bypass ownership check for AppData repo path (same as GlobalSettings.SetOwnerValidation)
-        psi.Environment["GIT_CONFIG_COUNT"] = "1";
-        psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
-        psi.Environment["GIT_CONFIG_VALUE_0"] = RepoPath;
+        ConfigureGitEnv(psi);
 
         using var proc = Process.Start(psi)!;
         // read stderr async to avoid deadlock when pipe buffer fills
@@ -126,52 +156,28 @@ public class GitService
 
         if (IsSshMode)
         {
-            // SSH: use git.exe since LibGit2Sharp 0.30 has no SSH cred classes
-            var psi = new ProcessStartInfo
-            {
-                FileName = "git",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            psi.ArgumentList.Add("clone");
-            psi.ArgumentList.Add(cfg.RepoUrl);
-            psi.ArgumentList.Add(RepoPath);
-
-            if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
-            {
-                var keyPath = cfg.SshKeyPath.Replace("\\", "/");
-                psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
-            }
-
-            // bypass ownership check for AppData repo path
-            psi.Environment["GIT_CONFIG_COUNT"] = "1";
-            psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
-            psi.Environment["GIT_CONFIG_VALUE_0"] = RepoPath;
-
-            using var proc = Process.Start(psi)!;
-            // read stderr async to avoid deadlock when pipe buffer fills
-            var stderrTask = proc.StandardError.ReadToEndAsync();
-            var stdout = proc.StandardOutput.ReadToEnd();
-
-            if (!proc.WaitForExit(300_000))
-            {
-                proc.Kill();
-                throw new InvalidOperationException("git clone timed out after 300s");
-            }
-
-            var stderr = stderrTask.Result;
-            if (proc.ExitCode != 0)
-                throw new InvalidOperationException($"git clone failed: {stderr.Trim()}");
+            // SSH: always use git.exe (LibGit2Sharp 0.30 dropped SSH support)
+            CloneViaGitCli(cfg);
         }
         else
         {
-            var opts = new CloneOptions();
-            var creds = MakeCredHandler();
-            if (creds != null)
-                opts.FetchOptions.CredentialsProvider = creds;
-            Repository.Clone(cfg.RepoUrl, RepoPath, opts);
+            // HTTPS / anonymous: try LibGit2Sharp first, fallback to git.exe
+            // (some platforms like Gitee use auth schemes LibGit2Sharp can't handle)
+            try
+            {
+                var opts = new CloneOptions();
+                var creds = MakeCredHandler();
+                if (creds != null)
+                    opts.FetchOptions.CredentialsProvider = creds;
+                Repository.Clone(cfg.RepoUrl, RepoPath, opts);
+            }
+            catch (LibGit2SharpException)
+            {
+                // clean up partial clone before retrying
+                if (Directory.Exists(RepoPath))
+                    Directory.Delete(RepoPath, true);
+                CloneViaGitCli(cfg);
+            }
         }
 
         // separate .git dir from working tree so junction stays clean
@@ -186,6 +192,39 @@ public class GitService
 
         // start on an empty orphan branch so the user's mod folder isn't wiped on first connect
         CheckoutEmptyInitBranch();
+    }
+
+    private void CloneViaGitCli(Models.AppConfig cfg)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("clone");
+        psi.ArgumentList.Add(cfg.RepoUrl);
+        psi.ArgumentList.Add(RepoPath);
+
+        // clone doesn't have a GitDir yet, so skip GIT_DIR/GIT_WORK_TREE
+        ConfigureGitEnv(psi, setGitDir: false);
+
+        using var proc = Process.Start(psi)!;
+        // read stderr async to avoid deadlock when pipe buffer fills
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        var stdout = proc.StandardOutput.ReadToEnd();
+
+        if (!proc.WaitForExit(300_000))
+        {
+            proc.Kill();
+            throw new InvalidOperationException("git clone timed out after 300s");
+        }
+
+        var stderr = stderrTask.Result;
+        if (proc.ExitCode != 0)
+            throw new InvalidOperationException($"git clone failed: {stderr.Trim()}");
     }
 
     // ── repo validation ─────────────────────────────────────────────────
@@ -391,7 +430,8 @@ public class GitService
     }
 
     /// <summary>
-    /// fetch from origin, using git.exe CLI for SSH or LibGit2Sharp for HTTPS
+    /// fetch from origin: SSH always uses git.exe, HTTPS/anonymous try LibGit2Sharp first
+    /// with git.exe fallback for platforms that LibGit2Sharp can't handle.
     /// </summary>
     private void FetchAll(Repository repo)
     {
@@ -401,19 +441,28 @@ public class GitService
             return;
         }
 
-        var remote = repo.Network.Remotes["origin"];
-        if (remote is null) return;
+        try
+        {
+            var remote = repo.Network.Remotes["origin"];
+            if (remote is null) return;
 
-        var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-        var fetchOpts = new FetchOptions();
-        var creds = MakeCredHandler();
-        if (creds != null)
-            fetchOpts.CredentialsProvider = creds;
-        Commands.Fetch(repo, remote.Name, refSpecs, fetchOpts, null);
+            var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
+            var fetchOpts = new FetchOptions();
+            var creds = MakeCredHandler();
+            if (creds != null)
+                fetchOpts.CredentialsProvider = creds;
+            Commands.Fetch(repo, remote.Name, refSpecs, fetchOpts, null);
+        }
+        catch (LibGit2SharpException)
+        {
+            // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
+            RunGitCli("fetch --all --prune");
+        }
     }
 
     /// <summary>
-    /// push current branch to origin, using git.exe CLI for SSH or LibGit2Sharp for HTTPS
+    /// push current branch to origin: SSH always uses git.exe, HTTPS/anonymous try LibGit2Sharp
+    /// first with git.exe fallback for platforms that LibGit2Sharp can't handle.
     /// </summary>
     private void PushCurrentBranch(Repository repo)
     {
@@ -423,12 +472,20 @@ public class GitService
             return;
         }
 
-        var currentBranch = repo.Head;
-        var pushOpts = new PushOptions();
-        var creds = MakeCredHandler();
-        if (creds != null)
-            pushOpts.CredentialsProvider = creds;
-        repo.Network.Push(currentBranch, pushOpts);
+        try
+        {
+            var currentBranch = repo.Head;
+            var pushOpts = new PushOptions();
+            var creds = MakeCredHandler();
+            if (creds != null)
+                pushOpts.CredentialsProvider = creds;
+            repo.Network.Push(currentBranch, pushOpts);
+        }
+        catch (LibGit2SharpException)
+        {
+            // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
+            RunGitCli("push -u origin HEAD");
+        }
     }
 
     /// <summary>
