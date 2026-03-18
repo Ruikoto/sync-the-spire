@@ -1,4 +1,8 @@
-# Sync the Spire
+<p align="center">
+  <img src="SyncTheSpire/assets/icon_origin.png" alt="Sync the Spire" width="128" />
+</p>
+
+<h1 align="center">Sync the Spire</h1>
 
 基于 Git 的极简 Mod 同步器，为《杀戮尖塔2》等缺乏官方创意工坊的游戏设计。
 

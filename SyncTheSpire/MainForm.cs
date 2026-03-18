@@ -30,6 +30,11 @@ public class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new System.Drawing.Size((int)(MinWidth * scale), (int)(MinHeight * scale));
 
+        // taskbar icon (borderless form hides the title bar, but taskbar still shows it)
+        var icoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "icon.ico");
+        if (File.Exists(icoPath))
+            Icon = new Icon(icoPath);
+
         _webView = new WebView2 { Dock = DockStyle.Fill };
         _webView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x0F, 0x11, 0x17);
         Controls.Add(_webView);

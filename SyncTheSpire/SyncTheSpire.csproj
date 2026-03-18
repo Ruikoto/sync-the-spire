@@ -6,7 +6,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationIcon />
+    <ApplicationIcon>assets\icon.ico</ApplicationIcon>
     <!-- local builds get nightly-YYYYMMDD-HHmmss, CI overrides via -p:InformationalVersion=v1.0.0 -->
     <InformationalVersion>nightly-$([System.DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -27,6 +27,7 @@
   <!-- embed wwwroot as content -->
   <ItemGroup>
     <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

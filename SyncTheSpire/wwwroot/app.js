@@ -76,6 +76,11 @@ function showPage(name) {
     if (!el) return;
     el.classList.remove('hidden');
     el.classList.add('flex');
+
+    // pick a random quote when entering the main page
+    if (name === 'main') {
+        $('#header-quote').textContent = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+    }
 }
 
 function showLoading(text) {
@@ -891,6 +896,17 @@ $('#backup-list-modal').addEventListener('click', e => {
 
 const REPO_URL = 'https://github.com/Ruikoto/sync-the-spire';
 const AUTHOR_URL = 'https://github.com/Ruikoto';
+
+const QUOTES = [
+    '此事已成',
+    '咔咔！',
+    '你好……',
+    '我们又见面了！',
+    '把钱交出来！',
+    '为什么你还在这里？',
+    '时间到了。',
+    '你是我的了',
+];
 
 $('#about-repo').textContent = 'GitHub';
 $('#about-author').textContent = 'Ruikoto（泡菜）';
