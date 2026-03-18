@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using SyncTheSpire.Models;
@@ -81,6 +82,10 @@ public class MessageRouter
             {
                 case "GET_STATUS":
                     HandleGetStatus();
+                    break;
+
+                case "GET_VERSION":
+                    HandleGetVersion();
                     break;
 
                 case "GET_CONFIG":
@@ -201,6 +206,13 @@ public class MessageRouter
     }
 
     // ── action handlers ──────────────────────────────────────────────────
+
+    private void HandleGetVersion()
+    {
+        var version = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        Send(IpcResponse.Success("GET_VERSION", new { version }));
+    }
 
     private void HandleGetStatus()
     {

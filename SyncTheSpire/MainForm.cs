@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -98,6 +99,13 @@ public class MainForm : Form
         _webView.CoreWebView2.WebMessageReceived += (_, e) =>
         {
             _router.HandleMessage(e.WebMessageAsJson);
+        };
+
+        // open external links in default browser instead of inside WebView2
+        _webView.CoreWebView2.NewWindowRequested += (_, e) =>
+        {
+            e.Handled = true;
+            Process.Start(new ProcessStartInfo(e.Uri) { UseShellExecute = true });
         };
 
         // navigate via virtual host instead of file://

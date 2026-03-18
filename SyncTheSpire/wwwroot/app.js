@@ -50,6 +50,7 @@ let currentBranch = '';
 let needsBranchSelection = false;
 let saveMergeState = null;
 let mergeCompareData = null;
+let appVersion = '';
 
 function showPage(name) {
     $('#page-setup').classList.add('hidden');
@@ -273,6 +274,15 @@ function prefillConfigForm(cfg) {
 
 
 // ── event handlers (from backend) ────────────────────────────────────────────
+
+on('GET_VERSION', data => {
+    if (data.status !== 'success') return;
+    appVersion = data.payload?.version || 'unknown';
+    $('#about-version').textContent = appVersion;
+    if (appVersion.startsWith('nightly-')) {
+        toast('当前为 Nightly 构建版本，建议前往 About 页面下载最新正式版', 'info');
+    }
+});
 
 on('GET_STATUS', data => {
     if (data.status === 'success') {
@@ -826,6 +836,33 @@ $('#backup-list-modal').addEventListener('click', e => {
 });
 
 
+// ── about modal ──────────────────────────────────────────────────────────────
+
+const REPO_URL = 'https://github.com/Ruikoto/sync-the-spire';
+const AUTHOR_URL = 'https://github.com/Ruikoto';
+
+$('#about-repo').textContent = 'GitHub';
+$('#about-author').textContent = 'Ruikoto（泡菜）';
+
+// open external links via WebView2's built-in navigation handler
+function openExternal(url) {
+    window.open(url, '_blank');
+}
+
+$('#about-repo').addEventListener('click', e => { e.preventDefault(); openExternal(REPO_URL); });
+$('#about-author').addEventListener('click', e => { e.preventDefault(); openExternal(AUTHOR_URL); });
+
+$('#btn-about').addEventListener('click', () => {
+    $('#about-modal').classList.remove('hidden');
+});
+$('#about-modal-close').addEventListener('click', () => {
+    $('#about-modal').classList.add('hidden');
+});
+$('#about-modal').addEventListener('click', e => {
+    if (e.target === $('#about-modal')) $('#about-modal').classList.add('hidden');
+});
+
+
 // ── title bar controls ──────────────────────────────────────────────────────
 
 $('#titlebar-drag').addEventListener('mousedown', () => sendMessage('WINDOW_DRAG'));
@@ -866,4 +903,5 @@ $('#titlebar-drag').addEventListener('dblclick', () => sendMessage('WINDOW_MAXIM
 
 // ── bootstrap ────────────────────────────────────────────────────────────────
 
+sendMessage('GET_VERSION');
 sendMessage('GET_STATUS');

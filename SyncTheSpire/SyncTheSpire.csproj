@@ -7,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationIcon />
+    <!-- local builds get nightly-YYYYMMDD-HHmmss, CI overrides via -p:InformationalVersion=v1.0.0 -->
+    <InformationalVersion>nightly-$([System.DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

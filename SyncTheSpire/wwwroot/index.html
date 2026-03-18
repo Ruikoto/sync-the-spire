@@ -212,9 +212,14 @@
         <!-- header bar -->
         <div class="flex items-center justify-between">
             <h1 class="text-lg font-bold">Sync the Spire</h1>
-            <button id="btn-settings" class="text-spire-muted hover:text-spire-text text-sm transition-colors">
-                Settings
-            </button>
+            <div class="flex items-center gap-3">
+                <button id="btn-about" class="text-spire-muted hover:text-spire-text text-sm transition-colors">
+                    About
+                </button>
+                <button id="btn-settings" class="text-spire-muted hover:text-spire-text text-sm transition-colors">
+                    Settings
+                </button>
+            </div>
         </div>
 
         <!-- status card -->
@@ -409,6 +414,35 @@
             <div class="overflow-auto flex-1">
                 <div id="backup-list-body" class="divide-y divide-spire-border/50 px-4"></div>
                 <p id="backup-list-empty" class="hidden text-center text-spire-muted text-xs py-8">暂无可用备份</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- about modal -->
+    <div id="about-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-xs mx-4 p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-sm font-medium">关于</h2>
+                <button id="about-modal-close"
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+            </div>
+            <div class="flex flex-col gap-3 text-sm">
+                <div class="flex items-center justify-between">
+                    <span class="text-spire-muted">版本</span>
+                    <span id="about-version" class="font-mono text-xs">—</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-spire-muted">项目</span>
+                    <a id="about-repo" href="#" class="text-spire-accent hover:text-spire-accentHover text-xs transition-colors">
+                        GitHub
+                    </a>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-spire-muted">作者</span>
+                    <a id="about-author" href="#" class="text-spire-accent hover:text-spire-accentHover text-xs transition-colors">
+                        Ruikoto（泡菜）
+                    </a>
+                </div>
             </div>
         </div>
     </div>

@@ -1,0 +1,146 @@
+name: Publish Windows (Single EXE)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  PROJECT_PATH: "SyncTheSpire/SyncTheSpire.csproj"
+  BINARY_NAME: "SyncTheSpire"
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }} (${{ matrix.self_contained == true && 'Full' || 'Lite' }})
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
+        self_contained: [true, false]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Get Version Name
+        id: version
+        run: |
+          $ver = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "dev-build" }
+          echo "VERSION_TAG=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Get File Suffix
+        id: suffix
+        run: |
+          $suf = if ("${{ matrix.self_contained }}" -eq "true") { "" } else { "-dependent" }
+          echo "FILE_SUFFIX=$suf" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: |
+          $r2r = "${{ matrix.self_contained }}"
+          dotnet publish ${{ env.PROJECT_PATH }} `
+            -c Release `
+            -r ${{ matrix.rid }} `
+            --self-contained ${{ matrix.self_contained }} `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:IncludeAllContentForSelfExtract=true `
+            -p:PublishReadyToRun=$r2r `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -p:AssemblyName=${{ env.BINARY_NAME }} `
+            -p:InformationalVersion=${{ steps.version.outputs.VERSION_TAG }} `
+            -o ./publish_output
+
+      - name: Prepare Package
+        run: |
+          New-Item -ItemType Directory -Force -Path ./package
+          Copy-Item -Path "./publish_output/${{ env.BINARY_NAME }}.exe" -Destination "./package/${{ env.BINARY_NAME }}.exe"
+          # wwwroot is embedded as content — SingleFile + IncludeAllContentForSelfExtract bundles it inside the exe,
+          # but we also ship it alongside for users who want to tinker with the frontend
+          if (Test-Path "./publish_output/wwwroot") {
+            Copy-Item -Recurse -Path "./publish_output/wwwroot" -Destination "./package/wwwroot"
+          }
+          if (Test-Path "README.md") { Copy-Item -Path "README.md" -Destination "./package/README.md" }
+
+      - name: Create ZIP Archive
+        run: |
+          $zipName = "${{ env.BINARY_NAME }}-${{ steps.version.outputs.VERSION_TAG }}-${{ matrix.rid }}${{ steps.suffix.outputs.FILE_SUFFIX }}.zip"
+          Compress-Archive -Path "./package/*" -DestinationPath "./$zipName"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.rid }}${{ steps.suffix.outputs.FILE_SUFFIX }}
+          path: ./*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Generate Release Notes
+        run: |
+          REPO="${{ github.repository }}"
+          TAG="${{ github.ref_name }}"
+          BASE_URL="https://github.com/$REPO/releases/download/$TAG"
+          NAME="${{ env.BINARY_NAME }}"
+
+          FILE_X64_FULL="$NAME-$TAG-win-x64.zip"
+          FILE_X64_LITE="$NAME-$TAG-win-x64-dependent.zip"
+          FILE_ARM64_FULL="$NAME-$TAG-win-arm64.zip"
+          FILE_ARM64_LITE="$NAME-$TAG-win-arm64-dependent.zip"
+
+          cat <<EOF > release_note.md
+          ### 📥 下载指南 / Download Guide
+
+          请选择你需要的版本。如果你不知道要下载哪个，请下载 👉 **[推荐版本 (Recommended)]($BASE_URL/$FILE_X64_FULL)** 👈。
+
+          | 架构 (Arch) | 自包含 (Self-Contained) <br> *(无需运行环境，体积稍大)* | 非自包含 (Framework-Dependent) <br> *(需要 .NET 运行时，体积小)* |
+          | :--- | :---: | :---: |
+          | **Windows x64** <br> *(绝大多数电脑)* | [**下载 / Download**]($BASE_URL/$FILE_X64_FULL) | [下载 / Download]($BASE_URL/$FILE_X64_LITE) |
+          | **Windows ARM64** <br> *(Surface Pro X, Mac VM)* | [**下载 / Download**]($BASE_URL/$FILE_ARM64_FULL) | [下载 / Download]($BASE_URL/$FILE_ARM64_LITE) |
+
+          ---
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./artifacts/**/*.zip
+          body_path: release_note.md
+          generate_release_notes: true
+
+      - name: Deploy version info to gh-pages
+        run: |
+          mkdir -p pages_output
+          cat <<EOF > pages_output/version.json
+          {
+            "latest_version": "${{ github.ref_name }}",
+            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}",
+            "download_url_x64": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ env.BINARY_NAME }}-${{ github.ref_name }}-win-x64.zip",
+            "force_update": false
+          }
+          EOF
+
+          cd pages_output
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b gh-pages
+          git add version.json
+          git commit -m "chore: update version.json for ${{ github.ref_name }}"
+          git push -f https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
