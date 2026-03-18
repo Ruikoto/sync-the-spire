@@ -77,13 +77,24 @@ public class MainForm : Form
 
     private async Task InitWebView()
     {
-        // use a dedicated user-data folder so we don't pollute the default profile
-        var udFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SyncTheSpire", "WebView2Data");
+        try
+        {
+            // use a dedicated user-data folder so we don't pollute the default profile
+            var udFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SyncTheSpire", "WebView2Data");
 
-        var env = await CoreWebView2Environment.CreateAsync(null, udFolder);
-        await _webView.EnsureCoreWebView2Async(env);
+            var env = await CoreWebView2Environment.CreateAsync(null, udFolder);
+            await _webView.EnsureCoreWebView2Async(env);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"无法初始化 WebView2，请确认已安装 WebView2 Runtime。\n\n{ex.Message}",
+                "Sync the Spire", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Close();
+            return;
+        }
 
         // map the wwwroot folder to a virtual hostname so CDN resources work
         // (file:// protocol blocks external scripts due to security policies)
@@ -110,7 +121,12 @@ public class MainForm : Form
         _webView.CoreWebView2.NewWindowRequested += (_, e) =>
         {
             e.Handled = true;
-            Process.Start(new ProcessStartInfo(e.Uri) { UseShellExecute = true });
+            // only allow http(s) links to prevent file:// or other dangerous schemes
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == "http" || uri.Scheme == "https"))
+            {
+                Process.Start(new ProcessStartInfo(e.Uri) { UseShellExecute = true });
+            }
         };
 
         // navigate via virtual host instead of file://

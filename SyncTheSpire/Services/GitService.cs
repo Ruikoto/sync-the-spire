@@ -67,13 +67,16 @@ public class GitService
         var psi = new ProcessStartInfo
         {
             FileName = "git",
-            Arguments = args,
             WorkingDirectory = workDir ?? RepoPath,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+
+        // use ArgumentList for safe arg passing instead of raw Arguments string
+        foreach (var arg in args.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            psi.ArgumentList.Add(arg);
 
         if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
         {
@@ -92,16 +95,22 @@ public class GitService
         // bypass ownership check for AppData repo path (same as GlobalSettings.SetOwnerValidation)
         psi.Environment["GIT_CONFIG_COUNT"] = "1";
         psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
-        psi.Environment["GIT_CONFIG_VALUE_0"] = "*";
+        psi.Environment["GIT_CONFIG_VALUE_0"] = RepoPath;
 
         using var proc = Process.Start(psi)!;
-        // read stderr before WaitForExit to avoid deadlock when pipe buffer fills
-        var stderr = proc.StandardError.ReadToEnd();
+        // read stderr async to avoid deadlock when pipe buffer fills
+        var stderrTask = proc.StandardError.ReadToEndAsync();
         var stdout = proc.StandardOutput.ReadToEnd();
-        proc.WaitForExit(timeout);
 
+        if (!proc.WaitForExit(timeout))
+        {
+            proc.Kill();
+            throw new InvalidOperationException($"git {psi.ArgumentList.FirstOrDefault()} timed out after {timeout / 1000}s");
+        }
+
+        var stderr = stderrTask.Result;
         if (proc.ExitCode != 0)
-            throw new InvalidOperationException($"git {args.Split(' ')[0]} failed: {stderr.Trim()}");
+            throw new InvalidOperationException($"git {psi.ArgumentList.FirstOrDefault()} failed: {stderr.Trim()}");
     }
 
     /// <summary>
@@ -121,12 +130,14 @@ public class GitService
             var psi = new ProcessStartInfo
             {
                 FileName = "git",
-                Arguments = $"clone \"{cfg.RepoUrl}\" \"{RepoPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+            psi.ArgumentList.Add("clone");
+            psi.ArgumentList.Add(cfg.RepoUrl);
+            psi.ArgumentList.Add(RepoPath);
 
             if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
             {
@@ -137,14 +148,20 @@ public class GitService
             // bypass ownership check for AppData repo path
             psi.Environment["GIT_CONFIG_COUNT"] = "1";
             psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
-            psi.Environment["GIT_CONFIG_VALUE_0"] = "*";
+            psi.Environment["GIT_CONFIG_VALUE_0"] = RepoPath;
 
             using var proc = Process.Start(psi)!;
-            // read both streams before WaitForExit to avoid deadlock
-            var stderr = proc.StandardError.ReadToEnd();
+            // read stderr async to avoid deadlock when pipe buffer fills
+            var stderrTask = proc.StandardError.ReadToEndAsync();
             var stdout = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(300_000);
 
+            if (!proc.WaitForExit(300_000))
+            {
+                proc.Kill();
+                throw new InvalidOperationException("git clone timed out after 300s");
+            }
+
+            var stderr = stderrTask.Result;
             if (proc.ExitCode != 0)
                 throw new InvalidOperationException($"git clone failed: {stderr.Trim()}");
         }

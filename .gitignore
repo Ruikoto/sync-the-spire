@@ -11,6 +11,7 @@ obj/
 .idea/
 *.swp
 *~
+*.DotSettings.user
 
 ## OS junk
 Thumbs.db
@@ -19,6 +20,10 @@ desktop.ini
 
 ## Build artifacts
 publish/
+
+## Secrets
+.env
+.env.*
 
 ## Claude Code Temp
 tmpClaude*

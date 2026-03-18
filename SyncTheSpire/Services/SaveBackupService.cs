@@ -93,7 +93,12 @@ public class SaveBackupService
         foreach (var file in Directory.GetFiles(source))
             File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
         foreach (var dir in Directory.GetDirectories(source))
+        {
+            // skip junctions/symlinks to avoid circular references
+            var info = new DirectoryInfo(dir);
+            if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
             CopyDirectoryRecursive(dir, Path.Combine(dest, Path.GetFileName(dir)));
+        }
     }
 
     private static void CopyContentsInto(string source, string dest)

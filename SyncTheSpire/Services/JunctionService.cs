@@ -77,9 +77,9 @@ public class JunctionService
 
         foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
-            // skip .git internals
+            // skip .git directory itself but not .github/, .gitkeep, etc.
             var relativePath = Path.GetRelativePath(sourceDir, file);
-            if (relativePath.StartsWith(".git"))
+            if (relativePath == ".git" || relativePath.StartsWith(".git" + Path.DirectorySeparatorChar))
                 continue;
 
             var destFile = Path.Combine(destDir, relativePath);

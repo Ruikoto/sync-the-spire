@@ -83,6 +83,8 @@ public class SaveMergeService
         {
             foreach (var (profileName, choice) in choices)
             {
+                // reject keys that aren't valid profile names to prevent path traversal
+                if (!ProfileNames.Contains(profileName)) continue;
                 if (choice != "modded") continue;
 
                 var normalPath = Path.Combine(saveFolderPath, profileName);

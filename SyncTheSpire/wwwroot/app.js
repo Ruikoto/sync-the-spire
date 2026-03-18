@@ -39,7 +39,9 @@ window.chrome.webview.addEventListener('message', e => {
 
     // fire registered handlers
     if (handlers[event]) {
-        handlers[event].forEach(fn => fn(data));
+        handlers[event].forEach(fn => {
+            try { fn(data); } catch (err) { /* prevent one bad handler from breaking the rest */ }
+        });
     }
 });
 
@@ -86,9 +88,16 @@ function showPage(name) {
 function showLoading(text) {
     $('#loading-text').textContent = text;
     $('#loading-overlay').classList.remove('hidden');
+    // safety net: auto-hide after 2 min if backend never responds
+    clearTimeout(showLoading._timer);
+    showLoading._timer = setTimeout(() => {
+        hideLoading();
+        toast('操作超时，请重试', 'error');
+    }, 120_000);
 }
 
 function hideLoading() {
+    clearTimeout(showLoading._timer);
     $('#loading-overlay').classList.add('hidden');
 }
 
@@ -121,6 +130,26 @@ function toast(message, type = 'info') {
     // auto-dismiss
     const timer = setTimeout(dismiss, 4000);
 }
+
+// themed confirm dialog — returns a Promise<boolean>
+
+// debounce guard: disable button during IPC round-trip, re-enable on hideLoading
+const _guardedBtns = new Set();
+function guardClick(btn, fn) {
+    btn.addEventListener('click', async () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        _guardedBtns.add(btn);
+        try { await fn(); } catch { /* handled elsewhere */ }
+    });
+}
+// patch hideLoading to re-enable guarded buttons
+const _origHideLoading = hideLoading;
+hideLoading = function () {
+    _origHideLoading();
+    _guardedBtns.forEach(btn => btn.disabled = false);
+    _guardedBtns.clear();
+};
 
 // themed confirm dialog — returns a Promise<boolean>
 function showConfirm(message, title) {
@@ -525,10 +554,10 @@ $('#btn-pick-save').addEventListener('click', () => {
 });
 
 // refresh
-$('#btn-refresh').addEventListener('click', () => sendMessage('GET_STATUS'));
+guardClick($('#btn-refresh'), () => sendMessage('GET_STATUS'));
 
 // vanilla mode
-$('#btn-vanilla').addEventListener('click', async () => {
+guardClick($('#btn-vanilla'), async () => {
     const ok = await showConfirm(
         '确定要断开 Mod 连接吗？（不会删除 Mod 文件）',
         '切换到纯净模式'
@@ -537,7 +566,7 @@ $('#btn-vanilla').addEventListener('click', async () => {
 });
 
 // restore junction
-$('#btn-restore').addEventListener('click', () => sendMessage('RESTORE_JUNCTION'));
+guardClick($('#btn-restore'), () => sendMessage('RESTORE_JUNCTION'));
 
 // ── branch modal ────────────────────────────────────────────────────────────
 
@@ -558,6 +587,7 @@ function closeBranchModal() {
 
 function formatRelativeTime(ms) {
     const diff = Date.now() - ms;
+    if (diff < 0) return '刚刚'; // clock skew guard
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return '刚刚';
     if (mins < 60) return `${mins} 分钟前`;
@@ -656,7 +686,7 @@ function isValidBranchName(name) {
 }
 
 // create branch
-$('#btn-create').addEventListener('click', () => {
+guardClick($('#btn-create'), () => {
     const name = $('#inp-branch').value.trim();
     if (!name) { toast('请输入分支名称', 'error'); return; }
     if (!isValidBranchName(name)) { toast('分支名称格式无效（不能包含空格、..、~、^、:、\\、[ ] 等字符）', 'error'); return; }
@@ -664,7 +694,7 @@ $('#btn-create').addEventListener('click', () => {
 });
 
 // save & push (with themed confirmation dialog showing target branch)
-$('#btn-push').addEventListener('click', async () => {
+guardClick($('#btn-push'), async () => {
     const branch = currentBranch || '当前分支';
     const ok = await showConfirm(
         `此操作会将本地 Mod 文件夹的当前状态保存并上传到分支「${branch}」，覆盖云端配置，是否继续？`,
@@ -704,11 +734,11 @@ $('#btn-open-config').addEventListener('click', () => sendMessage('OPEN_FOLDER',
 
 // ── save merge & backup buttons ────────────────────────────────────────────
 
-$('#btn-merge-saves').addEventListener('click', () => {
+guardClick($('#btn-merge-saves'), () => {
     sendMessage('ANALYZE_SAVE_MERGE');
 });
 
-$('#btn-unlink-saves').addEventListener('click', async () => {
+guardClick($('#btn-unlink-saves'), async () => {
     const ok = await showConfirm(
         '取消合并后，Mod 存档将变为普通存档的独立副本，两者不再共享数据。\n操作前会自动备份所有存档。',
         '取消存档合并'
@@ -716,7 +746,7 @@ $('#btn-unlink-saves').addEventListener('click', async () => {
     if (ok) sendMessage('UNLINK_SAVES');
 });
 
-$('#btn-backup-saves').addEventListener('click', async () => {
+guardClick($('#btn-backup-saves'), async () => {
     const ok = await showConfirm(
         '将备份整个存档文件夹到应用数据目录。\n可通过备份管理中的文件夹按钮查看备份位置。',
         '备份存档'

@@ -97,6 +97,10 @@ public class MessageRouter
             case "WINDOW_CLOSE":
                 _uiContext.Post(_ => _form.Close(), null);
                 return;
+            // PICK_FOLDER needs UI dialog — handle outside the gate to avoid blocking other IPC
+            case "PICK_FOLDER":
+                HandlePickFolder();
+                return;
         }
 
         _gate.Wait();
@@ -146,10 +150,6 @@ public class MessageRouter
 
                 case "OPEN_FOLDER":
                     HandleOpenFolder(req.Payload);
-                    break;
-
-                case "PICK_FOLDER":
-                    HandlePickFolder();
                     break;
 
                 // ── save management ──────────────────────────────────
@@ -706,6 +706,13 @@ public class MessageRouter
         if (string.IsNullOrWhiteSpace(backupName))
         {
             Send(IpcResponse.Error("RESTORE_BACKUP", "未指定备份名称"));
+            return;
+        }
+
+        // sanitize: prevent path traversal (same check as DeleteBackup)
+        if (backupName.Contains("..") || backupName.Contains('/') || backupName.Contains('\\'))
+        {
+            Send(IpcResponse.Error("RESTORE_BACKUP", "备份名称无效"));
             return;
         }
 
