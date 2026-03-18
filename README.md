@@ -8,11 +8,6 @@
 
 前往 [Releases](https://github.com/Ruikoto/sync-the-spire/releases) 下载最新版本。
 
-| 版本 | 说明 |
-|------|------|
-| **Self-Contained (推荐)** | 自包含，开箱即用，无需安装任何运行时 |
-| Framework-Dependent | 体积更小，需要预装 [.NET 10 运行时](https://dotnet.microsoft.com/download/dotnet/10.0) |
-
 ## 快速开始
 
 1. 下载并解压，运行 `SyncTheSpire.exe`
