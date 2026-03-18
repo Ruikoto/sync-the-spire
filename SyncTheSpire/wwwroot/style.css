@@ -99,12 +99,8 @@ button, select {
     border-color: #6366f1;
     color: #e2e8f0;
 }
-.help-tip::after {
-    content: attr(data-tip);
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+.help-tip-bubble {
+    position: fixed;
     background: #1a1d27;
     border: 1px solid #2a2d3a;
     color: #e2e8f0;
@@ -114,13 +110,28 @@ button, select {
     border-radius: 8px;
     width: 260px;
     pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s;
     z-index: 60;
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
     white-space: normal;
     font-weight: 400;
+    opacity: 0;
+    transition: opacity 0.15s;
 }
-.help-tip:hover::after {
+.help-tip-bubble.visible {
     opacity: 1;
+}
+
+/* radio buttons in merge comparison */
+input[type="radio"] {
+    accent-color: #6366f1;
+}
+
+/* backup row hover */
+.backup-row:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+/* confirm message line breaks */
+#confirm-message {
+    white-space: pre-line;
 }

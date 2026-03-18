@@ -11,6 +11,8 @@ public class MessageRouter
     private readonly ConfigService _configService;
     private readonly GitService _gitService;
     private readonly JunctionService _junctionService;
+    private readonly SaveBackupService _backupService;
+    private readonly SaveMergeService _mergeService;
     private readonly MainForm _form;
     private readonly SynchronizationContext _uiContext;
 
@@ -19,12 +21,16 @@ public class MessageRouter
         ConfigService configService,
         GitService gitService,
         JunctionService junctionService,
+        SaveBackupService backupService,
+        SaveMergeService mergeService,
         MainForm form)
     {
         _webView = webView;
         _configService = configService;
         _gitService = gitService;
         _junctionService = junctionService;
+        _backupService = backupService;
+        _mergeService = mergeService;
         _form = form;
         // capture the UI SynchronizationContext so background threads can post back
         _uiContext = SynchronizationContext.Current
@@ -115,6 +121,39 @@ public class MessageRouter
 
                 case "PICK_FOLDER":
                     HandlePickFolder();
+                    break;
+
+                // ── save management ──────────────────────────────────
+                case "GET_SAVE_STATUS":
+                    HandleGetSaveStatus();
+                    break;
+
+                case "ANALYZE_SAVE_MERGE":
+                    HandleAnalyzeSaveMerge();
+                    break;
+
+                case "EXECUTE_SAVE_MERGE":
+                    HandleExecuteSaveMerge(req.Payload);
+                    break;
+
+                case "UNLINK_SAVES":
+                    HandleUnlinkSaves();
+                    break;
+
+                case "BACKUP_SAVES":
+                    HandleBackupSaves();
+                    break;
+
+                case "GET_BACKUP_LIST":
+                    HandleGetBackupList();
+                    break;
+
+                case "RESTORE_BACKUP":
+                    HandleRestoreBackup(req.Payload);
+                    break;
+
+                case "DELETE_BACKUP":
+                    HandleDeleteBackup(req.Payload);
                     break;
 
                 // window chrome controls — must run on UI thread
@@ -240,6 +279,19 @@ public class MessageRouter
             {
                 Send(IpcResponse.Error("INIT_CONFIG",
                     $"游戏安装路径无效：未找到 SlayTheSpire2.exe\n请确认路径是否正确：{cfg.GameInstallPath}"));
+                return;
+            }
+        }
+
+        // validate save folder: must contain profile1/ dir and profile.save file
+        if (!string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
+        {
+            var profileDir = Path.Combine(cfg.SaveFolderPath, "profile1");
+            var profileSave = Path.Combine(cfg.SaveFolderPath, "profile.save");
+            if (!Directory.Exists(profileDir) || !File.Exists(profileSave))
+            {
+                Send(IpcResponse.Error("INIT_CONFIG",
+                    $"存档路径无效：未找到 profile1 文件夹或 profile.save 文件\n请确认路径是否正确：{cfg.SaveFolderPath}"));
                 return;
             }
         }
@@ -387,6 +439,7 @@ public class MessageRouter
             "mod" => cfg.GameModPath,
             "save" => cfg.SaveFolderPath,
             "config" => ConfigService.AppDataDirPath,
+            "backup" => SaveBackupService.BackupDir,
             _ => null
         };
 
@@ -444,15 +497,10 @@ public class MessageRouter
         if (_junctionService.IsJunction(gameModPath))
             return; // already good
 
-        // backup existing real folder to config directory instead of game root
+        // backup existing real folder using the backup service
         if (Directory.Exists(gameModPath))
         {
-            var backupDir = Path.Combine(ConfigService.AppDataDirPath, "Backups");
-            Directory.CreateDirectory(backupDir);
-            var backupPath = Path.Combine(backupDir, "Mods_backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
-
-            // Directory.Move can't cross volume boundaries, so copy + delete
-            CopyDirectoryRecursive(gameModPath, backupPath);
+            _backupService.BackupModFolder(gameModPath);
             Directory.Delete(gameModPath, true);
         }
 
@@ -465,13 +513,220 @@ public class MessageRouter
         }
     }
 
-    private static void CopyDirectoryRecursive(string source, string dest)
+    // ── save management handlers ─────────────────────────────────────
+
+    private void HandleGetSaveStatus()
     {
-        Directory.CreateDirectory(dest);
-        foreach (var file in Directory.GetFiles(source))
-            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
-        foreach (var dir in Directory.GetDirectories(source))
-            CopyDirectoryRecursive(dir, Path.Combine(dest, Path.GetFileName(dir)));
+        var cfg = _configService.LoadConfig();
+
+        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath) || !Directory.Exists(cfg.SaveFolderPath))
+        {
+            Send(IpcResponse.Success("GET_SAVE_STATUS", new { isConfigured = false }));
+            return;
+        }
+
+        var status = _mergeService.GetStatus(cfg.SaveFolderPath);
+
+        var mergeState = status.IsFullyLinked ? "linked"
+                       : status.IsPartiallyLinked ? "partial"
+                       : status.HasModdedFolder ? "unlinked"
+                       : "no_modded";
+
+        Send(IpcResponse.Success("GET_SAVE_STATUS", new
+        {
+            isConfigured = true,
+            mergeState,
+            profiles = status.Profiles.Select(p => new
+            {
+                name = p.Name,
+                normalExists = p.NormalExists,
+                moddedExists = p.ModdedExists,
+                isJunction = p.IsJunction
+            })
+        }));
+    }
+
+    private void HandleAnalyzeSaveMerge()
+    {
+        var cfg = _configService.LoadConfig();
+        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
+        {
+            Send(IpcResponse.Error("ANALYZE_SAVE_MERGE", "存档路径未配置"));
+            return;
+        }
+
+        var moddedDir = Path.Combine(cfg.SaveFolderPath, "modded");
+        var hasRealModded = Directory.Exists(moddedDir) &&
+            Directory.GetDirectories(moddedDir)
+                .Any(d => !_junctionService.IsJunction(d));
+
+        if (!hasRealModded)
+        {
+            // no comparison needed, can merge directly
+            Send(IpcResponse.Success("ANALYZE_SAVE_MERGE", new { needsComparison = false }));
+            return;
+        }
+
+        var comparisons = _mergeService.CompareProfiles(cfg.SaveFolderPath);
+
+        Send(IpcResponse.Success("ANALYZE_SAVE_MERGE", new
+        {
+            needsComparison = true,
+            profiles = comparisons.Select(c => new
+            {
+                name = c.Name,
+                normal = c.Normal == null ? null : new
+                {
+                    sizeBytes = c.Normal.SizeBytes,
+                    lastModified = new DateTimeOffset(c.Normal.LastModified).ToUnixTimeMilliseconds(),
+                    fileCount = c.Normal.FileCount
+                },
+                modded = c.Modded == null ? null : new
+                {
+                    sizeBytes = c.Modded.SizeBytes,
+                    lastModified = new DateTimeOffset(c.Modded.LastModified).ToUnixTimeMilliseconds(),
+                    fileCount = c.Modded.FileCount
+                },
+                recommendation = c.Recommendation
+            })
+        }));
+    }
+
+    private void HandleExecuteSaveMerge(JsonElement? payload)
+    {
+        var cfg = _configService.LoadConfig();
+        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
+        {
+            Send(IpcResponse.Error("EXECUTE_SAVE_MERGE", "存档路径未配置"));
+            return;
+        }
+
+        Send(IpcResponse.Progress("EXECUTE_SAVE_MERGE", "正在备份并合并存档..."));
+
+        // parse choices from payload (may be null for simple case)
+        Dictionary<string, string>? choices = null;
+        if (payload != null && payload.Value.TryGetProperty("choices", out var choicesEl))
+        {
+            choices = new Dictionary<string, string>();
+            foreach (var prop in choicesEl.EnumerateObject())
+                choices[prop.Name] = prop.Value.GetString() ?? "normal";
+        }
+
+        var backupPath = _mergeService.Merge(cfg.SaveFolderPath, choices);
+
+        Send(IpcResponse.Success("EXECUTE_SAVE_MERGE", new
+        {
+            message = "存档合并完成！操作前已自动备份。",
+            backupName = Path.GetFileName(backupPath)
+        }));
+    }
+
+    private void HandleUnlinkSaves()
+    {
+        var cfg = _configService.LoadConfig();
+        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
+        {
+            Send(IpcResponse.Error("UNLINK_SAVES", "存档路径未配置"));
+            return;
+        }
+
+        Send(IpcResponse.Progress("UNLINK_SAVES", "正在取消合并..."));
+
+        var backupPath = _mergeService.Unlink(cfg.SaveFolderPath);
+
+        Send(IpcResponse.Success("UNLINK_SAVES", new
+        {
+            message = "存档已取消合并，Mod 存档恢复为独立副本。",
+            backupName = Path.GetFileName(backupPath)
+        }));
+    }
+
+    private void HandleBackupSaves()
+    {
+        var cfg = _configService.LoadConfig();
+        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
+        {
+            Send(IpcResponse.Error("BACKUP_SAVES", "存档路径未配置"));
+            return;
+        }
+
+        Send(IpcResponse.Progress("BACKUP_SAVES", "正在备份存档..."));
+
+        var backupPath = _backupService.BackupSaveFolder(cfg.SaveFolderPath);
+
+        Send(IpcResponse.Success("BACKUP_SAVES", new
+        {
+            message = $"存档已备份到 {Path.GetFileName(backupPath)}"
+        }));
+    }
+
+    private void HandleGetBackupList()
+    {
+        var backups = _backupService.ListBackups();
+
+        Send(IpcResponse.Success("GET_BACKUP_LIST", new
+        {
+            backups = backups.Select(b => new
+            {
+                name = b.Name,
+                createdAt = new DateTimeOffset(b.CreatedAt).ToUnixTimeMilliseconds(),
+                sizeBytes = b.SizeBytes,
+                type = b.Type
+            })
+        }));
+    }
+
+    private void HandleRestoreBackup(JsonElement? payload)
+    {
+        var backupName = payload?.GetProperty("backupName").GetString();
+        if (string.IsNullOrWhiteSpace(backupName))
+        {
+            Send(IpcResponse.Error("RESTORE_BACKUP", "未指定备份名称"));
+            return;
+        }
+
+        var cfg = _configService.LoadConfig();
+        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
+        {
+            Send(IpcResponse.Error("RESTORE_BACKUP", "存档路径未配置"));
+            return;
+        }
+
+        var backupPath = Path.Combine(SaveBackupService.BackupDir, backupName);
+        if (!Directory.Exists(backupPath))
+        {
+            Send(IpcResponse.Error("RESTORE_BACKUP", "备份不存在或已被删除"));
+            return;
+        }
+
+        Send(IpcResponse.Progress("RESTORE_BACKUP", "正在备份当前存档并恢复..."));
+
+        // auto-backup current state before restoring
+        _backupService.BackupSaveFolder(cfg.SaveFolderPath);
+
+        _backupService.RestoreSaveBackup(backupPath, cfg.SaveFolderPath, _junctionService);
+
+        Send(IpcResponse.Success("RESTORE_BACKUP", new
+        {
+            message = "存档已恢复！恢复前的状态已自动备份。"
+        }));
+    }
+
+    private void HandleDeleteBackup(JsonElement? payload)
+    {
+        var backupName = payload?.GetProperty("backupName").GetString();
+        if (string.IsNullOrWhiteSpace(backupName))
+        {
+            Send(IpcResponse.Error("DELETE_BACKUP", "未指定备份名称"));
+            return;
+        }
+
+        _backupService.DeleteBackup(backupName);
+
+        Send(IpcResponse.Success("DELETE_BACKUP", new
+        {
+            message = "备份已删除"
+        }));
     }
 
     private void Send(IpcResponse response)

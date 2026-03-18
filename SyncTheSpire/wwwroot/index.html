@@ -191,10 +191,16 @@
                             </button>
                         </div>
                     </div>
-                    <button type="submit"
-                        class="mt-2 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 transition-colors">
-                        保存并初始化
-                    </button>
+                    <div class="mt-2 flex gap-2">
+                        <button id="btn-setup-back" type="button"
+                            class="hidden text-sm text-spire-muted hover:text-spire-text border border-spire-border font-medium rounded-lg py-2 px-4 transition-colors">
+                            返回
+                        </button>
+                        <button type="submit"
+                            class="flex-1 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 transition-colors">
+                            保存并初始化
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -244,6 +250,57 @@
             </button>
         </div>
 
+        <!-- save merge card -->
+        <div id="card-save-merge" class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-medium">存档合并</h2>
+                        <span class="help-tip" data-tip="合并后，普通模式和 Mod 模式共用同一份存档。取消合并后，两者恢复独立。所有操作前均会自动备份。">?</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span id="save-merge-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                        <span id="save-merge-label" class="text-xs text-spire-muted">检查中...</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-merge-saves"
+                        class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors">
+                        合并存档
+                    </button>
+                    <button id="btn-unlink-saves"
+                        class="hidden text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-3 py-1.5 transition-colors">
+                        取消合并
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- save backup card -->
+        <div id="card-save-backup" class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">存档备份</h2>
+                    <p class="text-xs text-spire-muted mt-0.5">手动备份或恢复游戏存档</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-backup-saves"
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                        备份存档
+                    </button>
+                    <button id="btn-restore-saves"
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                        恢复存档
+                    </button>
+                    <button id="btn-open-backup"
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
+                        title="打开备份文件夹">
+                        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- mode 1: vanilla -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
@@ -252,10 +309,10 @@
                     <p class="text-xs text-spire-muted mt-0.5">断开 Mod 连接，回归原版游戏</p>
                 </div>
                 <div class="flex gap-2">
-                    <button id="btn-vanilla" class="text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-3 py-1.5 transition-colors">
+                    <button id="btn-vanilla" class="hidden text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-3 py-1.5 transition-colors">
                         清空 Mod
                     </button>
-                    <button id="btn-restore" class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                    <button id="btn-restore" class="hidden text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
                         恢复 Mod
                     </button>
                 </div>
@@ -294,6 +351,64 @@
                 <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors">
                     创建
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- save merge comparison modal -->
+    <div id="merge-compare-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 flex flex-col">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
+                <h2 class="text-sm font-medium">选择要保留的存档版本</h2>
+                <button id="merge-compare-close"
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+            </div>
+            <div class="px-4 py-3">
+                <p class="text-xs text-spire-muted mb-3 leading-relaxed">
+                    检测到已有 Mod 存档数据。请选择每个存档位要保留的版本，另一份将被覆盖。
+                    <span class="text-spire-warn">合并前会自动备份所有存档。</span>
+                </p>
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="border-b border-spire-border text-spire-muted">
+                            <th class="text-left py-2 px-2">存档位</th>
+                            <th class="text-left py-2 px-2">普通存档</th>
+                            <th class="text-left py-2 px-2">Mod 存档</th>
+                            <th class="text-center py-2 px-2">保留</th>
+                        </tr>
+                    </thead>
+                    <tbody id="merge-compare-body"></tbody>
+                </table>
+            </div>
+            <div class="flex justify-end gap-2 px-4 py-3 border-t border-spire-border">
+                <button id="merge-compare-cancel"
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    取消
+                </button>
+                <button id="merge-compare-confirm"
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">
+                    确认合并
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- backup restore modal -->
+    <div id="backup-list-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 max-h-[70vh] flex flex-col">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
+                <h2 class="text-sm font-medium">存档备份管理</h2>
+                <button id="backup-list-close"
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1">&times;</button>
+            </div>
+            <div class="px-4 py-2">
+                <p class="text-xs text-spire-muted leading-relaxed">
+                    选择一个存档备份进行恢复，恢复前会自动备份当前存档。
+                </p>
+            </div>
+            <div class="overflow-auto flex-1">
+                <div id="backup-list-body" class="divide-y divide-spire-border/50 px-4"></div>
+                <p id="backup-list-empty" class="hidden text-center text-spire-muted text-xs py-8">暂无可用备份</p>
             </div>
         </div>
     </div>

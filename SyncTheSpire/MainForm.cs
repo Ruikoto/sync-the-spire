@@ -12,7 +12,7 @@ public class MainForm : Form
 
     // base sizes designed at 96 DPI (100% scaling)
     private const int DesignWidth = 650;
-    private const int DesignHeight = 610;
+    private const int DesignHeight = 600;
     private const int MinWidth = 640;
     private const int MinHeight = 480;
 
@@ -89,7 +89,11 @@ public class MainForm : Form
         var configService = new ConfigService();
         var junctionService = new JunctionService();
         var gitService = new GitService(configService);
-        _router = new MessageRouter(_webView.CoreWebView2, configService, gitService, junctionService, this);
+        var backupService = new SaveBackupService();
+        var mergeService = new SaveMergeService(junctionService, backupService);
+        _router = new MessageRouter(
+            _webView.CoreWebView2, configService, gitService, junctionService,
+            backupService, mergeService, this);
 
         _webView.CoreWebView2.WebMessageReceived += (_, e) =>
         {
