@@ -196,6 +196,14 @@ public class MessageRouter
             Send(IpcResponse.Error(req.Action, $"文件被占用，请先关闭游戏再操作！\n{ex.Message}"));
         }
         catch (LibGit2Sharp.LibGit2SharpException ex) when (
+            ex.Message.Contains("authentication that we do not support", StringComparison.OrdinalIgnoreCase))
+        {
+            // gitee (and some other hosts) use auth schemes LibGit2Sharp can't handle over HTTPS
+            Send(IpcResponse.Error(req.Action,
+                "当前 Git 平台要求的 HTTPS 认证方式不受支持（常见于 Gitee）。\n" +
+                "请改用 SSH 方式连接，或更换到 GitHub 等平台。"));
+        }
+        catch (LibGit2Sharp.LibGit2SharpException ex) when (
             ex.Message.Contains("401") ||
             ex.Message.Contains("403") ||
             ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase))
