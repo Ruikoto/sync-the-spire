@@ -196,19 +196,23 @@ public class MessageRouter
             Send(IpcResponse.Error(req.Action, $"文件被占用，请先关闭游戏再操作！\n{ex.Message}"));
         }
         catch (LibGit2Sharp.LibGit2SharpException ex) when (
-            ex.Message.Contains("authentication that we do not support", StringComparison.OrdinalIgnoreCase))
-        {
-            // gitee (and some other hosts) use auth schemes LibGit2Sharp can't handle over HTTPS
-            Send(IpcResponse.Error(req.Action,
-                "当前 Git 平台要求的 HTTPS 认证方式不受支持（常见于 Gitee）。\n" +
-                "请改用 SSH 方式连接，或更换到 GitHub 等平台。"));
-        }
-        catch (LibGit2Sharp.LibGit2SharpException ex) when (
             ex.Message.Contains("401") ||
             ex.Message.Contains("403") ||
             ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase))
         {
-            Send(IpcResponse.Error(req.Action, $"鉴权失败，请检查用户名和 Token 是否正确。\n{ex.Message}"));
+            // LibGit2Sharp throws "authentication that we do not support" for ALL auth failures,
+            // including wrong password. Distinguish by auth type.
+            var authType = _configService.LoadConfig().AuthType;
+            var msg = authType switch
+            {
+                "anonymous" =>
+                    "该仓库需要认证，无法匿名访问。\n请切换到 HTTPS 或 SSH 认证方式。",
+                "https" =>
+                    "鉴权失败，请检查用户名和 Token 是否正确。\n" +
+                    "如果确认无误，可能是当前 Git 平台不支持此认证方式（如 Gitee），请改用 SSH。",
+                _ => $"Git 认证失败：{ex.Message}"
+            };
+            Send(IpcResponse.Error(req.Action, msg));
         }
         catch (LibGit2Sharp.LibGit2SharpException ex)
         {
@@ -237,7 +241,7 @@ public class MessageRouter
     private void HandleGetStatus()
     {
         var cfg = _configService.LoadConfig();
-        var repoExists = _configService.IsRepoInitialized;
+        var repoExists = _gitService.IsRepoValid;
 
         object data;
         if (!cfg.IsConfigured || !repoExists)
@@ -345,17 +349,40 @@ public class MessageRouter
         _configService.InvalidateCache();
         _configService.SaveConfig(cfg);
 
-        Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
-
-        // clone if repo doesn't exist yet
-        if (!_configService.IsRepoInitialized)
+        // check if remote URL changed — if so, nuke the old repo and re-clone
+        // (could be a completely different repo, can't just update the remote)
+        var needsClone = !_gitService.IsRepoValid;
+        if (!needsClone)
         {
+            var currentUrl = _gitService.GetCurrentRemoteUrl();
+            if (!string.Equals(currentUrl, cfg.RepoUrl, StringComparison.Ordinal))
+                needsClone = true;
+        }
+
+        if (needsClone)
+        {
+            Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
+
+            // detach junction so deleting Repo/ doesn't wipe the user's mods
+            if (_junctionService.IsJunction(cfg.GameModPath))
+                _junctionService.RemoveJunction(cfg.GameModPath);
+
+            // stash mod files before nuking Repo/ — we'll put them back after clone
+            var stashPath = _configService.RepoPath + "_stash";
+            ForceDeleteDirectory(stashPath);
             if (Directory.Exists(_configService.RepoPath))
-                Directory.Delete(_configService.RepoPath, true);
-            if (Directory.Exists(_configService.GitDirPath))
-                Directory.Delete(_configService.GitDirPath, true);
+                Directory.Move(_configService.RepoPath, stashPath);
+
+            ForceDeleteDirectory(_configService.GitDirPath);
 
             _gitService.CloneRepo();
+
+            // restore mod files into the fresh Repo/ so the user's mods survive
+            if (Directory.Exists(stashPath))
+            {
+                _junctionService.FallbackCopy(stashPath, _configService.RepoPath);
+                ForceDeleteDirectory(stashPath);
+            }
         }
 
         // set up junction: backup existing game mod folder, then create junction
@@ -773,5 +800,23 @@ public class MessageRouter
         var json = response.ToJson();
         // PostWebMessageAsString must be called on the UI thread
         _uiContext.Post(_ => _webView.PostWebMessageAsString(json), null);
+    }
+
+    /// <summary>
+    /// git marks object files as read-only, so Directory.Delete chokes on Windows.
+    /// strip the flag first, then nuke the whole tree.
+    /// </summary>
+    private static void ForceDeleteDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return;
+
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            var attr = File.GetAttributes(file);
+            if (attr.HasFlag(FileAttributes.ReadOnly))
+                File.SetAttributes(file, attr & ~FileAttributes.ReadOnly);
+        }
+
+        Directory.Delete(path, true);
     }
 }

@@ -188,6 +188,24 @@ public class GitService
         CheckoutEmptyInitBranch();
     }
 
+    // ── repo validation ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// check if GitDir is actually a valid git repo (not just leftover dirs)
+    /// </summary>
+    public bool IsRepoValid => Repository.IsValid(GitDirPath);
+
+    /// <summary>
+    /// get the current origin remote URL from the git repo config
+    /// </summary>
+    public string? GetCurrentRemoteUrl()
+    {
+        if (!IsRepoValid) return null;
+        using var repo = OpenRepo();
+        var remote = repo.Network.Remotes["origin"];
+        return remote?.Url;
+    }
+
     // ── branch queries ───────────────────────────────────────────────────
 
     public string GetCurrentBranch()
