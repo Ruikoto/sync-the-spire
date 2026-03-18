@@ -96,6 +96,7 @@ jobs:
           REPO="${{ github.repository }}"
           TAG="${{ github.ref_name }}"
           BASE_URL="https://github.com/$REPO/releases/download/$TAG"
+          PROXY_URL="https://sts-dl.rkto.cc/$REPO/releases/download/$TAG"
           NAME="${{ env.BINARY_NAME }}"
 
           FILE_X64_FULL="$NAME-$TAG-win-x64.zip"
@@ -106,12 +107,21 @@ jobs:
           cat <<EOF > release_note.md
           ### 📥 下载指南 / Download Guide
 
-          请选择你需要的版本。如果你不知道要下载哪个，请下载 👉 **[推荐版本 (Recommended)]($BASE_URL/$FILE_X64_FULL)** 👈。
+          请选择你需要的版本。如果你不知道要下载哪个，请下载 👉 **[推荐版本 (Recommended)]($PROXY_URL/$FILE_X64_FULL)** 👈。
+
+          #### 🇨🇳 中国大陆用户推荐 (Proxy)
 
           | 架构 (Arch) | 自包含 (Self-Contained) <br> *(无需运行环境，体积稍大)* | 非自包含 (Framework-Dependent) <br> *(需要 .NET 运行时，体积小)* |
           | :--- | :---: | :---: |
-          | **Windows x64** <br> *(绝大多数电脑)* | [**下载 / Download**]($BASE_URL/$FILE_X64_FULL) | [下载 / Download]($BASE_URL/$FILE_X64_LITE) |
-          | **Windows ARM64** <br> *(Surface Pro X, Mac VM)* | [**下载 / Download**]($BASE_URL/$FILE_ARM64_FULL) | [下载 / Download]($BASE_URL/$FILE_ARM64_LITE) |
+          | **Windows x64** <br> *(绝大多数电脑)* | [**下载 / Download**]($PROXY_URL/$FILE_X64_FULL) | [下载 / Download]($PROXY_URL/$FILE_X64_LITE) |
+          | **Windows ARM64** <br> *(Surface Pro X, Mac VM)* | [**下载 / Download**]($PROXY_URL/$FILE_ARM64_FULL) | [下载 / Download]($PROXY_URL/$FILE_ARM64_LITE) |
+
+          #### GitHub Direct
+
+          | 架构 (Arch) | 自包含 (Self-Contained) | 非自包含 (Framework-Dependent) |
+          | :--- | :---: | :---: |
+          | **Windows x64** | [下载 / Download]($BASE_URL/$FILE_X64_FULL) | [下载 / Download]($BASE_URL/$FILE_X64_LITE) |
+          | **Windows ARM64** | [下载 / Download]($BASE_URL/$FILE_ARM64_FULL) | [下载 / Download]($BASE_URL/$FILE_ARM64_LITE) |
 
           ---
           EOF
@@ -132,6 +142,7 @@ jobs:
             "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}",
             "download_url_x64": "https://sts-dl.rkto.cc/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ env.BINARY_NAME }}-${{ github.ref_name }}-win-x64.zip",
+            "download_url_arm": "https://sts-dl.rkto.cc/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ env.BINARY_NAME }}-${{ github.ref_name }}-win-arm64.zip",
             "force_update": false
           }
           EOF

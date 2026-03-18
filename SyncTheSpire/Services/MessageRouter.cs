@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using SyncTheSpire.Models;
@@ -211,7 +212,8 @@ public class MessageRouter
     {
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
-        Send(IpcResponse.Success("GET_VERSION", new { version }));
+        var arch = RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant(); // x64, arm64, etc.
+        Send(IpcResponse.Success("GET_VERSION", new { version, arch }));
     }
 
     private void HandleGetStatus()

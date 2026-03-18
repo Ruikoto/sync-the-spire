@@ -51,6 +51,7 @@ let needsBranchSelection = false;
 let saveMergeState = null;
 let mergeCompareData = null;
 let appVersion = '';
+let appArch = 'x64';
 
 function showPage(name) {
     $('#page-setup').classList.add('hidden');
@@ -278,6 +279,7 @@ function prefillConfigForm(cfg) {
 on('GET_VERSION', data => {
     if (data.status !== 'success') return;
     appVersion = data.payload?.version || 'unknown';
+    appArch = data.payload?.arch || 'x64';
     $('#about-version').textContent = appVersion;
     if (appVersion.startsWith('nightly-')) {
         toast('当前为 Nightly 构建版本，建议前往 About 页面下载最新正式版', 'info');
@@ -904,6 +906,13 @@ function updateAboutVersionStatus() {
     }
 }
 
+function getDownloadUrl() {
+    if (!latestVersionInfo) return null;
+    return appArch === 'arm64'
+        ? latestVersionInfo.download_url_arm
+        : latestVersionInfo.download_url_x64;
+}
+
 async function checkForUpdates(silent = true) {
     try {
         const res = await fetch(VERSION_CHECK_URL, { cache: 'no-cache' });
@@ -916,10 +925,10 @@ async function checkForUpdates(silent = true) {
 
         if (compareVersions(appVersion, latestVersionInfo.latest_version) > 0) {
             const ok = await showConfirm(
-                `发现新版本 ${latestVersionInfo.latest_version}，是否前往下载页面？`,
+                `发现新版本 ${latestVersionInfo.latest_version}，是否立即下载？`,
                 '发现更新'
             );
-            if (ok) openExternal(latestVersionInfo.release_url);
+            if (ok) openExternal(getDownloadUrl());
         } else if (!silent) {
             toast('当前已是最新版本', 'success');
         }
@@ -930,7 +939,8 @@ async function checkForUpdates(silent = true) {
 
 $('#about-download').addEventListener('click', e => {
     e.preventDefault();
-    if (latestVersionInfo) openExternal(latestVersionInfo.release_url);
+    const url = getDownloadUrl();
+    if (url) openExternal(url);
 });
 
 $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
