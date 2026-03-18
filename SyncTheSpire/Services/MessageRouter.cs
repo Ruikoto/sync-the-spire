@@ -195,24 +195,30 @@ public class MessageRouter
             // most likely file-in-use by game process
             Send(IpcResponse.Error(req.Action, $"文件被占用，请先关闭游戏再操作！\n{ex.Message}"));
         }
-        catch (LibGit2Sharp.LibGit2SharpException ex) when (
-            ex.Message.Contains("authentication that we do not support", StringComparison.OrdinalIgnoreCase))
+        catch (LibGit2Sharp.RepositoryNotFoundException)
         {
-            // gitee (and some other hosts) use auth schemes LibGit2Sharp can't handle over HTTPS
-            Send(IpcResponse.Error(req.Action,
-                "当前 Git 平台要求的 HTTPS 认证方式不受支持（常见于 Gitee）。\n" +
-                "请改用 SSH 方式连接，或更换到 GitHub 等平台。"));
-        }
-        catch (LibGit2Sharp.LibGit2SharpException ex) when (
-            ex.Message.Contains("401") ||
-            ex.Message.Contains("403") ||
-            ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase))
-        {
-            Send(IpcResponse.Error(req.Action, $"鉴权失败，请检查用户名和 Token 是否正确。\n{ex.Message}"));
+            // repo dirs exist but are corrupt/incomplete — auto-cleanup so user can rebuild
+            try
+            {
+                if (Directory.Exists(_configService.RepoPath))
+                    Directory.Delete(_configService.RepoPath, true);
+                if (Directory.Exists(_configService.GitDirPath))
+                    Directory.Delete(_configService.GitDirPath, true);
+            }
+            catch { /* best-effort cleanup */ }
+            Send(IpcResponse.Error(req.Action, "仓库数据损坏，已自动清理。请重新保存配置以重建仓库。"));
         }
         catch (LibGit2Sharp.LibGit2SharpException ex)
         {
             Send(IpcResponse.Error(req.Action, $"Git 操作失败：{ex.Message}"));
+        }
+        catch (InvalidOperationException ex) when (
+            ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("could not read Username", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("401") || ex.Message.Contains("403"))
+        {
+            // git.exe auth failures — credential mismatch or anonymous access denied
+            Send(IpcResponse.Error(req.Action, $"鉴权失败，请检查用户名和 Token 是否正确。\n{ex.Message}"));
         }
         catch (Exception ex)
         {
@@ -245,6 +251,7 @@ public class MessageRouter
             data = new
             {
                 isConfigured = false,
+                repoMode = cfg.RepoMode,
                 currentBranch = (string?)null,
                 isJunctionActive = false,
                 hasLocalChanges = false
@@ -258,6 +265,7 @@ public class MessageRouter
             data = new
             {
                 isConfigured = true,
+                repoMode = cfg.RepoMode,
                 currentBranch = isInit ? (string?)null : branch,
                 isJunctionActive = isJunction,
                 hasLocalChanges = isInit ? false : _gitService.HasLocalChanges(),
@@ -277,6 +285,7 @@ public class MessageRouter
         var cfg = _configService.LoadConfig();
         Send(IpcResponse.Success("GET_CONFIG", new
         {
+            repoMode = cfg.RepoMode,
             repoUrl = cfg.RepoUrl,
             authType = cfg.AuthType,
             username = cfg.Username,
@@ -345,17 +354,59 @@ public class MessageRouter
         _configService.InvalidateCache();
         _configService.SaveConfig(cfg);
 
-        Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
+        var progressMsg = cfg.IsLocalMode
+            ? "正在初始化本地仓库，请稍候..."
+            : "正在克隆仓库，请稍候...";
+        Send(IpcResponse.Progress("INIT_CONFIG", progressMsg));
 
-        // clone if repo doesn't exist yet
-        if (!_configService.IsRepoInitialized)
+        // decide whether we need a fresh clone/init or can reuse the existing repo
+        var repoReady = _configService.IsRepoInitialized;
+        if (repoReady)
+        {
+            // verify repo is actually valid (dir structure might exist but be corrupt)
+            string? currentOriginUrl;
+            try { currentOriginUrl = _gitService.GetOriginUrl(); }
+            catch (LibGit2Sharp.RepositoryNotFoundException)
+            {
+                // repo dir exists but is incomplete/corrupt — nuke and rebuild
+                if (Directory.Exists(_configService.RepoPath))
+                    Directory.Delete(_configService.RepoPath, true);
+                if (Directory.Exists(_configService.GitDirPath))
+                    Directory.Delete(_configService.GitDirPath, true);
+                repoReady = false;
+                currentOriginUrl = null;
+            }
+
+            // remote URL changed → git history won't match, must re-clone
+            if (repoReady && !cfg.IsLocalMode &&
+                currentOriginUrl is not null &&
+                !string.Equals(currentOriginUrl, cfg.RepoUrl, StringComparison.Ordinal))
+            {
+                Send(IpcResponse.Progress("INIT_CONFIG", "远程仓库地址已变更，正在重新克隆..."));
+                if (Directory.Exists(_configService.RepoPath))
+                    Directory.Delete(_configService.RepoPath, true);
+                if (Directory.Exists(_configService.GitDirPath))
+                    Directory.Delete(_configService.GitDirPath, true);
+                repoReady = false;
+            }
+        }
+
+        if (!repoReady)
         {
             if (Directory.Exists(_configService.RepoPath))
                 Directory.Delete(_configService.RepoPath, true);
             if (Directory.Exists(_configService.GitDirPath))
                 Directory.Delete(_configService.GitDirPath, true);
 
-            _gitService.CloneRepo();
+            if (cfg.IsLocalMode)
+                _gitService.InitLocalRepo();
+            else
+                _gitService.CloneRepo();
+        }
+        else
+        {
+            // repo exists and no URL change — handle mode switches (local↔remote)
+            _gitService.EnsureRemote(cfg.RepoUrl, cfg.IsLocalMode);
         }
 
         // set up junction: backup existing game mod folder, then create junction
@@ -366,9 +417,15 @@ public class MessageRouter
 
     private void HandleGetBranches()
     {
-        Send(IpcResponse.Progress("GET_BRANCHES", "正在获取分支列表..."));
+        var cfg = _configService.LoadConfig();
+        var progressMsg = cfg.IsLocalMode
+            ? "正在获取本地分支列表..."
+            : "正在获取分支列表...";
+        Send(IpcResponse.Progress("GET_BRANCHES", progressMsg));
 
-        var branches = _gitService.GetRemoteBranches();
+        var branches = cfg.IsLocalMode
+            ? _gitService.GetLocalBranches()
+            : _gitService.GetRemoteBranches();
         var current = _gitService.GetCurrentBranch();
 
         // flatten BranchInfo to plain objects so JSON stays predictable
@@ -404,7 +461,11 @@ public class MessageRouter
             return;
         }
 
-        Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}..."));
+        var cfg = _configService.LoadConfig();
+        var progressMsg = cfg.IsLocalMode
+            ? $"正在切换到 {branchName}..."
+            : $"正在同步 {branchName}...";
+        Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", progressMsg));
 
         // save current work first
         _gitService.SilentCommitIfDirty();
@@ -412,10 +473,12 @@ public class MessageRouter
         _gitService.ForceCheckoutBranch(branchName);
 
         // make sure junction is pointing correctly
-        var cfg = _configService.LoadConfig();
         EnsureJunction(cfg.GameModPath);
 
-        Send(IpcResponse.Success("SYNC_OTHER_BRANCH", new { message = $"已同步到 {branchName}" }));
+        var successMsg = cfg.IsLocalMode
+            ? $"已切换到 {branchName}"
+            : $"已同步到 {branchName}";
+        Send(IpcResponse.Success("SYNC_OTHER_BRANCH", new { message = successMsg }));
     }
 
     private void HandleCreateMyBranch(JsonElement? payload)
@@ -446,11 +509,18 @@ public class MessageRouter
             return;
         }
 
-        Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
+        var cfg = _configService.LoadConfig();
+        var progressMsg = cfg.IsLocalMode ? "正在保存改动..." : "正在保存并上传...";
+        Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", progressMsg));
 
-        _gitService.CommitAndPush();
+        var hadChanges = _gitService.CommitAndPush();
 
-        Send(IpcResponse.Success("SAVE_AND_PUSH_MY_BRANCH", new { message = "已保存并上传！" }));
+        string successMsg;
+        if (!hadChanges)
+            successMsg = "没有检测到新的改动。";
+        else
+            successMsg = cfg.IsLocalMode ? "已保存改动！" : "已保存并上传！";
+        Send(IpcResponse.Success("SAVE_AND_PUSH_MY_BRANCH", new { message = successMsg }));
     }
 
     private void HandleRestoreJunction()

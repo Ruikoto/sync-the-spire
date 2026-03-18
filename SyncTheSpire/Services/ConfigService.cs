@@ -69,6 +69,7 @@ public class ConfigService
             Username = config.Username,
             Token = DpapiEncrypt(config.Token),
             AuthType = config.AuthType,
+            RepoMode = config.RepoMode,
             SshKeyPath = config.SshKeyPath,
             SshPassphrase = DpapiEncrypt(config.SshPassphrase),
             GameInstallPath = config.GameInstallPath,

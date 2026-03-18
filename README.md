@@ -19,9 +19,10 @@
 ## 快速开始
 
 1. 下载并解压，运行 `SyncTheSpire.exe`
-2. 填写远程仓库 URL（支持 HTTPS / SSH / 匿名）
-3. 填写游戏安装路径和存档路径（可选）
-4. 点击「保存并初始化」
+2. 选择仓库模式：**远程仓库**（多人同步）或 **本地仓库**（单机管理）
+3. 远程模式下填写仓库 URL（支持 HTTPS / SSH / 匿名）
+4. 填写游戏安装路径和存档路径（可选）
+5. 点击「保存并初始化」
 
 > **游戏安装路径怎么找？** Steam 中右键游戏 → 管理 → 浏览本地文件。
 >
@@ -29,7 +30,7 @@
 
 ## 功能介绍
 
-### Mod 同步
+### Mod 同步（远程仓库模式）
 
 核心功能。每个人通过「分支」管理自己的 Mod 配置，所有人共享同一个 Git 仓库。
 
@@ -43,6 +44,14 @@
 
 1. 点击「浏览分支」，选择房主的分支
 2. 确认后自动拉取该分支的 Mod 配置，完成后直接启动游戏即可
+
+### Mod 管理（本地仓库模式）
+
+不需要远程仓库，适合只想在本地管理多套 Mod 方案的玩家。
+
+1. 创建不同的分支来保存不同的 Mod 配置方案
+2. 随时在方案之间切换
+3. 所有操作都在本地完成，无需网络
 
 ### 纯净模式
 
@@ -71,7 +80,7 @@
 游戏目录\Mods\  ──(NTFS Junction)──>  %LocalAppData%\SyncTheSpire\Repo\
 ```
 
-通过 NTFS Junction（目录联接）将游戏 Mods 文件夹指向 AppData 下的 Git 仓库。游戏读取 Mods 时直接穿透到仓库目录，`.git` 等文件不会被游戏扫到。所有 Git 操作在后台自动完成，用户无需了解 Git。
+通过 NTFS Junction（目录联接）将游戏 Mods 文件夹指向 AppData 下的 Git 仓库。游戏读取 Mods 时直接穿透到仓库目录，`.git` 等文件不会被游戏扫到。所有 Git 操作在后台自动完成，用户无需了解 Git。程序内置 [MinGit](https://github.com/git-for-windows/git/wiki/MinGit)，无需额外安装 Git。
 
 ## 从源码构建
 
@@ -87,4 +96,4 @@ dotnet publish SyncTheSpire -c Release -r win-x64 --self-contained -p:PublishSin
 
 ## 技术栈
 
-.NET 10 + WinForms + WebView2 | LibGit2Sharp | HTML/JS/TailwindCSS | GitHub Actions + GitHub Pages
+.NET 10 + WinForms + WebView2 | LibGit2Sharp + MinGit | HTML/JS/TailwindCSS | GitHub Actions + GitHub Pages

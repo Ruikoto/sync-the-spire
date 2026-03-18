@@ -64,6 +64,7 @@ function escAttr(str) {
 
 let currentBranch = '';
 let needsBranchSelection = false;
+let repoMode = 'remote'; // 'remote' | 'local'
 let mergeCompareData = null;
 let appVersion = '';
 let appArch = 'x64';
@@ -198,6 +199,12 @@ function updatePushButton() {
         btn.textContent = '请先选择或创建分支';
         btn.disabled = true;
         btn.classList.add('opacity-50', 'cursor-not-allowed');
+    } else if (repoMode === 'local') {
+        btn.textContent = currentBranch
+            ? `保存改动到 ${currentBranch}`
+            : '保存改动';
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
     } else {
         btn.textContent = currentBranch
             ? `保存改动并上传到 ${currentBranch}`
@@ -237,6 +244,26 @@ function updateStatusCard(data) {
     }
 
     updatePushButton();
+}
+
+function updateMainPageForMode() {
+    const isLocal = repoMode === 'local';
+
+    // "follow others" card: adapt text for local mode
+    const followTitle = $('#follow-title');
+    const followSubtitle = $('#follow-subtitle');
+    if (followTitle) followTitle.textContent = isLocal ? '切换分支' : '联机跟随';
+    if (followSubtitle) followSubtitle.textContent = isLocal
+        ? '在本地分支之间切换'
+        : '选择朋友的分支，强制同步他们的 Mod 配置';
+
+    // "my branch" card: adapt text for local mode
+    const myTitle = $('#mybranch-title');
+    const mySubtitle = $('#mybranch-subtitle');
+    if (myTitle) myTitle.textContent = isLocal ? '我的分支' : '做房主';
+    if (mySubtitle) mySubtitle.textContent = isLocal
+        ? '管理你的 Mod 配置'
+        : '管理和分享你的 Mod 配置';
 }
 
 // ── save merge card helpers ──────────────────────────────────────────────────
@@ -319,6 +346,21 @@ function setAuthType(type) {
     });
 }
 
+function setRepoMode(mode) {
+    document.querySelectorAll('input[name="repoMode"]').forEach(r => {
+        r.checked = r.value === mode;
+    });
+    // show/hide remote-specific fields
+    const remoteFields = $('#remote-fields');
+    if (remoteFields) remoteFields.classList.toggle('hidden', mode === 'local');
+    // swap active tab style
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        const input = tab.querySelector('input');
+        tab.classList.toggle('active', input.checked);
+        tab.classList.toggle('text-spire-muted', !input.checked);
+    });
+}
+
 // ── config form prefill ──────────────────────────────────────────────────────
 
 let isEditMode = false; // true when coming from Settings button, false for first-time setup
@@ -329,6 +371,7 @@ function prefillConfigForm(cfg) {
     $('#cfg-ssh-pass').value = '';
 
     if (!cfg) return;
+    setRepoMode(cfg.repoMode || 'remote');
     if (cfg.repoUrl) $('#cfg-repo').value = cfg.repoUrl;
     if (cfg.username) $('#cfg-user').value = cfg.username;
     if (cfg.sshKeyPath) $('#cfg-ssh-key').value = cfg.sshKeyPath;
@@ -355,6 +398,8 @@ on('GET_VERSION', data => {
 on('GET_STATUS', data => {
     if (data.status === 'success') {
         const payload = data.payload;
+        repoMode = payload.repoMode || 'remote';
+
         if (!payload.isConfigured) {
             // first-time setup: request saved config for pre-fill
             $('#btn-setup-back').classList.add('hidden');
@@ -364,6 +409,7 @@ on('GET_STATUS', data => {
         } else {
             showPage('main');
             updateStatusCard(payload);
+            updateMainPageForMode();
             // pre-fetch branches so the modal opens instantly
             sendMessage('GET_BRANCHES');
             sendMessage('GET_SAVE_STATUS');
@@ -374,8 +420,8 @@ on('GET_STATUS', data => {
 on('GET_CONFIG', data => {
     if (data.status === 'success') {
         prefillConfigForm(data.payload);
-        // update subtitle based on whether there's existing config
-        if (data.payload?.repoUrl) {
+        // detect edit mode: either has repoUrl (remote) or is local mode
+        if (data.payload?.repoUrl || data.payload?.repoMode === 'local') {
             isEditMode = true;
             $('#setup-subtitle').textContent = '编辑配置';
         }
@@ -523,22 +569,26 @@ let pendingPickTarget = null;
 // setup form
 $('#setup-form').addEventListener('submit', e => {
     e.preventDefault();
+    const repoModeValue = document.querySelector('input[name="repoMode"]:checked').value;
     const authType = document.querySelector('input[name="authType"]:checked').value;
     const payload = {
+        repoMode: repoModeValue,
         repoUrl: $('#cfg-repo').value.trim(),
         authType,
         gameInstallPath: $('#cfg-path').value.trim(),
         saveFolderPath: $('#cfg-save').value.trim(),
     };
 
-    if (authType === 'ssh') {
-        payload.sshKeyPath = $('#cfg-ssh-key').value.trim();
-        payload.sshPassphrase = $('#cfg-ssh-pass').value.trim();
-    } else if (authType === 'https') {
-        payload.username = $('#cfg-user').value.trim();
-        payload.token = $('#cfg-token').value.trim();
+    if (repoModeValue === 'remote') {
+        if (authType === 'ssh') {
+            payload.sshKeyPath = $('#cfg-ssh-key').value.trim();
+            payload.sshPassphrase = $('#cfg-ssh-pass').value.trim();
+        } else if (authType === 'https') {
+            payload.username = $('#cfg-user').value.trim();
+            payload.token = $('#cfg-token').value.trim();
+        }
     }
-    // anonymous: no extra fields
+    // local mode: no auth fields needed
 
     sendMessage('INIT_CONFIG', payload);
 });
@@ -633,10 +683,11 @@ function renderBranchTable() {
     tbody.querySelectorAll('.branch-row').forEach(row => {
         row.addEventListener('click', async () => {
             const name = row.dataset.branch;
-            const ok = await showConfirm(
-                `确定要强制同步到「${name}」？本地改动将被覆盖。`,
-                '同步分支'
-            );
+            const message = repoMode === 'local'
+                ? `确定要切换到「${name}」？未保存的改动将丢失。`
+                : `确定要强制同步到「${name}」？本地改动将被覆盖。`;
+            const title = repoMode === 'local' ? '切换分支' : '同步分支';
+            const ok = await showConfirm(message, title);
             if (ok) {
                 closeBranchModal();
                 sendMessage('SYNC_OTHER_BRANCH', { branchName: name });
@@ -696,10 +747,11 @@ guardClick($('#btn-create'), () => {
 // save & push (with themed confirmation dialog showing target branch)
 guardClick($('#btn-push'), async () => {
     const branch = currentBranch || '当前分支';
-    const ok = await showConfirm(
-        `此操作会将本地 Mod 文件夹的当前状态保存并上传到分支「${branch}」，覆盖云端配置，是否继续？`,
-        '保存并上传'
-    );
+    const message = repoMode === 'local'
+        ? `此操作会将本地 Mod 文件夹的当前状态保存到分支「${branch}」，是否继续？`
+        : `此操作会将本地 Mod 文件夹的当前状态保存并上传到分支「${branch}」，覆盖云端配置，是否继续？`;
+    const title = repoMode === 'local' ? '保存改动' : '保存并上传';
+    const ok = await showConfirm(message, title);
     if (ok) sendMessage('SAVE_AND_PUSH_MY_BRANCH');
 });
 
@@ -724,6 +776,11 @@ document.querySelectorAll('input[name="authType"]').forEach(radio => {
     radio.addEventListener('change', () => {
         setAuthType(radio.value);
     });
+});
+
+// repo mode toggle: show/hide remote-only fields
+document.querySelectorAll('input[name="repoMode"]').forEach(radio => {
+    radio.addEventListener('change', () => setRepoMode(radio.value));
 });
 
 // quick-open folder buttons

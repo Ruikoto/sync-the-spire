@@ -22,6 +22,9 @@ public class AppConfig
     [JsonPropertyName("sshPassphrase")]
     public string SshPassphrase { get; set; } = string.Empty;
 
+    [JsonPropertyName("repoMode")]
+    public string RepoMode { get; set; } = "remote"; // "remote" | "local"
+
     /// <summary>
     /// game install root, e.g. "D:\SteamLibrary\steamapps\common\SlayTheSpire2"
     /// the actual mod folder is {GameInstallPath}\Mods
@@ -46,14 +49,18 @@ public class AppConfig
             : GameModPathLegacy; // fallback for old configs
 
     [JsonIgnore]
+    public bool IsLocalMode => RepoMode == "local";
+
+    [JsonIgnore]
     public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(RepoUrl) &&
         !string.IsNullOrWhiteSpace(GameModPath) &&
-        AuthType switch
-        {
-            "ssh" => !string.IsNullOrWhiteSpace(SshKeyPath),
-            "https" => !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(Token),
-            "anonymous" => true,
-            _ => false
-        };
+        (IsLocalMode ||
+         (!string.IsNullOrWhiteSpace(RepoUrl) &&
+          AuthType switch
+          {
+              "ssh" => !string.IsNullOrWhiteSpace(SshKeyPath),
+              "https" => !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(Token),
+              "anonymous" => true,
+              _ => false
+          }));
 }

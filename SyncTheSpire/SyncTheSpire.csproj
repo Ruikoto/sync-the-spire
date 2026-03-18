@@ -30,4 +30,9 @@
     <Content Include="assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- bundle MinGit into output as mingit/ -->
+  <ItemGroup>
+    <Content Include="tools\mingit\**\*" Link="mingit\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

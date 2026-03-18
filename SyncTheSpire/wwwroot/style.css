@@ -63,6 +63,16 @@ button, select {
     font-weight: 500;
 }
 
+/* segmented repo mode toggle (same style as auth toggle) */
+.mode-tab {
+    color: #94a3b8;
+}
+.mode-tab.active {
+    background: #6366f1;
+    color: #fff;
+    font-weight: 500;
+}
+
 /* title bar */
 #titlebar-drag {
     -webkit-app-region: drag;

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using LibGit2Sharp;
-using LibGit2Sharp.Handlers;
 
 namespace SyncTheSpire.Services;
 
@@ -33,9 +32,6 @@ public class GitService
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
 
-    private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
-    private bool IsAnonymousMode => _config.LoadConfig().AuthType == "anonymous";
-
     // sentinel branch name used before the user picks a real branch
     public const string InitBranch = "_init";
 
@@ -45,28 +41,65 @@ public class GitService
 
     public bool IsOnInitBranch => GetCurrentBranch() == InitBranch;
 
-    // HTTPS cred handler — null for anonymous (public repos)
-    private CredentialsHandler? MakeCredHandler()
+    private bool IsLocalMode => _config.LoadConfig().IsLocalMode;
+
+    // ── git.exe CLI layer ────────────────────────────────────────────────
+
+    // resolve bundled MinGit first, fall back to system git
+    private static string ResolveGitExe()
     {
-        if (IsAnonymousMode) return null;
+        var bundled = Path.Combine(AppContext.BaseDirectory, "mingit", "cmd", "git.exe");
+        return File.Exists(bundled) ? bundled : "git";
+    }
+
+    // configure env vars shared by all git.exe invocations:
+    // safe.directory bypass, SSH key, HTTPS credential URL rewriting
+    private void ConfigureGitEnv(ProcessStartInfo psi, string? workDir = null)
+    {
         var cfg = _config.LoadConfig();
-        return (_, _, _) => new UsernamePasswordCredentials
+        int idx = 0;
+
+        // bypass ownership check for AppData repo path
+        psi.Environment[$"GIT_CONFIG_KEY_{idx}"] = "safe.directory";
+        psi.Environment[$"GIT_CONFIG_VALUE_{idx}"] = workDir ?? RepoPath;
+        idx++;
+
+        // HTTPS auth: rewrite URL to embed credentials (per-process only, never persisted)
+        if (cfg.AuthType == "https" &&
+            !string.IsNullOrWhiteSpace(cfg.Username) &&
+            !string.IsNullOrWhiteSpace(cfg.Token) &&
+            !string.IsNullOrWhiteSpace(cfg.RepoUrl))
         {
-            Username = cfg.Username,
-            Password = cfg.Token
-        };
+            var uri = new Uri(cfg.RepoUrl);
+            var cleanBase = $"{uri.Scheme}://{uri.Host}/";
+            var authBase = $"{uri.Scheme}://{Uri.EscapeDataString(cfg.Username)}:{Uri.EscapeDataString(cfg.Token)}@{uri.Host}/";
+            psi.Environment[$"GIT_CONFIG_KEY_{idx}"] = $"url.{authBase}.insteadOf";
+            psi.Environment[$"GIT_CONFIG_VALUE_{idx}"] = cleanBase;
+            idx++;
+        }
+
+        psi.Environment["GIT_CONFIG_COUNT"] = idx.ToString();
+
+        // SSH auth: point git at the private key
+        if (cfg.AuthType == "ssh" && !string.IsNullOrWhiteSpace(cfg.SshKeyPath))
+        {
+            var keyPath = cfg.SshKeyPath.Replace("\\", "/");
+            psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
+        }
+
+        // never hang waiting for interactive credential input
+        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
     }
 
     /// <summary>
-    /// run git.exe with proper env vars. LibGit2Sharp 0.30 dropped SSH support,
-    /// so we shell out for all network operations when SSH auth is configured.
+    /// run git.exe for network and misc CLI operations.
+    /// all auth (SSH, HTTPS, anonymous) is handled via env vars.
     /// </summary>
     private void RunGitCli(string args, string? workDir = null, int timeout = 120_000)
     {
-        var cfg = _config.LoadConfig();
         var psi = new ProcessStartInfo
         {
-            FileName = "git",
+            FileName = ResolveGitExe(),
             WorkingDirectory = workDir ?? RepoPath,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -78,13 +111,6 @@ public class GitService
         foreach (var arg in args.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             psi.ArgumentList.Add(arg);
 
-        if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
-        {
-            // ssh wants forward slashes in key path
-            var keyPath = cfg.SshKeyPath.Replace("\\", "/");
-            psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
-        }
-
         // point git to our separated git dir
         if (Directory.Exists(GitDirPath))
         {
@@ -92,10 +118,7 @@ public class GitService
             psi.Environment["GIT_WORK_TREE"] = RepoPath;
         }
 
-        // bypass ownership check for AppData repo path (same as GlobalSettings.SetOwnerValidation)
-        psi.Environment["GIT_CONFIG_COUNT"] = "1";
-        psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
-        psi.Environment["GIT_CONFIG_VALUE_0"] = RepoPath;
+        ConfigureGitEnv(psi);
 
         using var proc = Process.Start(psi)!;
         // read stderr async to avoid deadlock when pipe buffer fills
@@ -124,55 +147,35 @@ public class GitService
     {
         var cfg = _config.LoadConfig();
 
-        if (IsSshMode)
+        // all auth modes use git.exe -- unified network layer
+        var psi = new ProcessStartInfo
         {
-            // SSH: use git.exe since LibGit2Sharp 0.30 has no SSH cred classes
-            var psi = new ProcessStartInfo
-            {
-                FileName = "git",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            psi.ArgumentList.Add("clone");
-            psi.ArgumentList.Add(cfg.RepoUrl);
-            psi.ArgumentList.Add(RepoPath);
+            FileName = ResolveGitExe(),
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("clone");
+        psi.ArgumentList.Add(cfg.RepoUrl);
+        psi.ArgumentList.Add(RepoPath);
 
-            if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
-            {
-                var keyPath = cfg.SshKeyPath.Replace("\\", "/");
-                psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
-            }
+        ConfigureGitEnv(psi);
 
-            // bypass ownership check for AppData repo path
-            psi.Environment["GIT_CONFIG_COUNT"] = "1";
-            psi.Environment["GIT_CONFIG_KEY_0"] = "safe.directory";
-            psi.Environment["GIT_CONFIG_VALUE_0"] = RepoPath;
+        using var proc = Process.Start(psi)!;
+        // read stderr async to avoid deadlock when pipe buffer fills
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        var stdout = proc.StandardOutput.ReadToEnd();
 
-            using var proc = Process.Start(psi)!;
-            // read stderr async to avoid deadlock when pipe buffer fills
-            var stderrTask = proc.StandardError.ReadToEndAsync();
-            var stdout = proc.StandardOutput.ReadToEnd();
-
-            if (!proc.WaitForExit(300_000))
-            {
-                proc.Kill();
-                throw new InvalidOperationException("git clone timed out after 300s");
-            }
-
-            var stderr = stderrTask.Result;
-            if (proc.ExitCode != 0)
-                throw new InvalidOperationException($"git clone failed: {stderr.Trim()}");
-        }
-        else
+        if (!proc.WaitForExit(300_000))
         {
-            var opts = new CloneOptions();
-            var creds = MakeCredHandler();
-            if (creds != null)
-                opts.FetchOptions.CredentialsProvider = creds;
-            Repository.Clone(cfg.RepoUrl, RepoPath, opts);
+            proc.Kill();
+            throw new InvalidOperationException("git clone timed out after 300s");
         }
+
+        var stderr = stderrTask.Result;
+        if (proc.ExitCode != 0)
+            throw new InvalidOperationException($"git clone failed: {stderr.Trim()}");
 
         // separate .git dir from working tree so junction stays clean
         SeparateGitDir();
@@ -185,6 +188,18 @@ public class GitService
         CleanGitArtifactsFromWorkTree();
 
         // start on an empty orphan branch so the user's mod folder isn't wiped on first connect
+        CheckoutEmptyInitBranch();
+    }
+
+    /// <summary>
+    /// initialize a fresh local git repo (no remote) with separate git dir
+    /// </summary>
+    public void InitLocalRepo()
+    {
+        Directory.CreateDirectory(RepoPath);
+        Repository.Init(RepoPath);
+        SeparateGitDir();
+        EnsureExcludeRules();
         CheckoutEmptyInitBranch();
     }
 
@@ -221,6 +236,20 @@ public class GitService
             .ToList();
     }
 
+    public List<BranchInfo> GetLocalBranches()
+    {
+        using var repo = OpenRepo();
+        return repo.Branches
+            .Where(b => !b.IsRemote)
+            .Select(b => new BranchInfo(
+                b.FriendlyName,
+                b.Tip.Author.Name,
+                b.Tip.Author.When))
+            .Where(b => !IsProtectedBranch(b.Name) && b.Name != InitBranch)
+            .OrderByDescending(b => b.LastModified)
+            .ToList();
+    }
+
     public bool HasLocalChanges()
     {
         using var repo = OpenRepo();
@@ -236,6 +265,22 @@ public class GitService
             throw new InvalidOperationException($"不允许检出受保护的分支：{branchName}");
 
         using var repo = OpenRepo();
+
+        // local mode: checkout local branch directly (no fetch, no remote tracking)
+        if (IsLocalMode)
+        {
+            var branch = repo.Branches[branchName];
+            if (branch is null)
+                throw new InvalidOperationException($"本地分支不存在：{branchName}");
+
+            Commands.Checkout(repo, branch, new CheckoutOptions
+            {
+                CheckoutModifiers = CheckoutModifiers.Force
+            });
+            repo.Reset(ResetMode.Hard, branch.Tip);
+            CleanUntracked(repo);
+            return;
+        }
 
         FetchAll(repo);
 
@@ -279,22 +324,41 @@ public class GitService
         if (existing is not null)
         {
             Commands.Checkout(repo, existing);
+
+            // branch might have been created in local mode and now we're online —
+            // ensure upstream tracking is set and push
+            if (!IsLocalMode && !existing.IsTracking)
+            {
+                var remote = repo.Network.Remotes["origin"];
+                if (remote is not null)
+                {
+                    repo.Branches.Update(existing,
+                        b => b.Remote = remote.Name,
+                        b => b.UpstreamBranch = existing.CanonicalName);
+                    PushCurrentBranch(repo);
+                }
+            }
+
             return;
         }
 
         var newBranch = repo.CreateBranch(branchName);
         Commands.Checkout(repo, newBranch);
 
-        // push so remote knows about it
-        var remote = repo.Network.Remotes["origin"];
-        repo.Branches.Update(newBranch,
-            b => b.Remote = remote.Name,
-            b => b.UpstreamBranch = newBranch.CanonicalName);
+        if (!IsLocalMode)
+        {
+            // push so remote knows about it
+            var remote = repo.Network.Remotes["origin"];
+            repo.Branches.Update(newBranch,
+                b => b.Remote = remote.Name,
+                b => b.UpstreamBranch = newBranch.CanonicalName);
 
-        PushCurrentBranch(repo);
+            PushCurrentBranch(repo);
+        }
     }
 
-    public void CommitAndPush()
+    /// <returns>true if changes were committed (and pushed in remote mode), false if nothing to commit</returns>
+    public bool CommitAndPush()
     {
         using var repo = OpenRepo();
 
@@ -306,13 +370,14 @@ public class GitService
 
         var status = repo.RetrieveStatus(new StatusOptions());
         if (!status.IsDirty)
-            return; // nothing to commit
+            return false; // nothing to commit
 
         var cfg = _config.LoadConfig();
         var sig = MakeSignature(cfg);
         repo.Commit("Auto-save", sig, sig);
 
         PushCurrentBranch(repo);
+        return true;
     }
 
     /// <summary>
@@ -329,6 +394,45 @@ public class GitService
         var cfg = _config.LoadConfig();
         var sig = MakeSignature(cfg);
         repo.Commit("Auto-save (before switch)", sig, sig);
+    }
+
+    // ── remote management ─────────────────────────────────────────────
+
+    /// <summary>
+    /// get the current origin remote URL, or null if no origin exists
+    /// </summary>
+    public string? GetOriginUrl()
+    {
+        using var repo = OpenRepo();
+        return repo.Network.Remotes["origin"]?.Url;
+    }
+
+    /// <summary>
+    /// make sure the "origin" remote exists and points to the right URL.
+    /// handles local-to-remote switch (add) or remote-to-local (remove).
+    /// for URL changes between different remotes, caller should re-clone instead.
+    /// </summary>
+    public void EnsureRemote(string? repoUrl, bool isLocalMode)
+    {
+        using var repo = OpenRepo();
+        var existing = repo.Network.Remotes["origin"];
+
+        if (isLocalMode)
+        {
+            // local mode doesn't need a remote — remove if left over
+            if (existing is not null)
+                repo.Network.Remotes.Remove("origin");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(repoUrl))
+            return;
+
+        if (existing is null)
+        {
+            // local-to-remote switch: add origin for the first time
+            repo.Network.Remotes.Add("origin", repoUrl);
+        }
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
@@ -373,44 +477,21 @@ public class GitService
     }
 
     /// <summary>
-    /// fetch from origin, using git.exe CLI for SSH or LibGit2Sharp for HTTPS
+    /// fetch from origin using git.exe CLI (all auth modes)
     /// </summary>
     private void FetchAll(Repository repo)
     {
-        if (IsSshMode)
-        {
-            RunGitCli("fetch --all --prune");
-            return;
-        }
-
-        var remote = repo.Network.Remotes["origin"];
-        if (remote is null) return;
-
-        var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-        var fetchOpts = new FetchOptions();
-        var creds = MakeCredHandler();
-        if (creds != null)
-            fetchOpts.CredentialsProvider = creds;
-        Commands.Fetch(repo, remote.Name, refSpecs, fetchOpts, null);
+        if (IsLocalMode) return; // no remote to fetch from
+        RunGitCli("fetch --all --prune");
     }
 
     /// <summary>
-    /// push current branch to origin, using git.exe CLI for SSH or LibGit2Sharp for HTTPS
+    /// push current branch to origin using git.exe CLI (all auth modes)
     /// </summary>
     private void PushCurrentBranch(Repository repo)
     {
-        if (IsSshMode)
-        {
-            RunGitCli("push -u origin HEAD");
-            return;
-        }
-
-        var currentBranch = repo.Head;
-        var pushOpts = new PushOptions();
-        var creds = MakeCredHandler();
-        if (creds != null)
-            pushOpts.CredentialsProvider = creds;
-        repo.Network.Push(currentBranch, pushOpts);
+        if (IsLocalMode) return; // no remote to push to
+        RunGitCli("push -u origin HEAD");
     }
 
     /// <summary>
