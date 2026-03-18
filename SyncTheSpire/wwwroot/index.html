@@ -431,6 +431,16 @@
                     <span class="text-spire-muted">版本</span>
                     <span id="about-version" class="font-mono text-xs">—</span>
                 </div>
+                <div id="about-update-row" class="hidden flex items-center justify-between">
+                    <span class="text-spire-muted">最新版本</span>
+                    <div class="flex items-center gap-2">
+                        <span id="about-latest" class="font-mono text-xs">—</span>
+                        <a id="about-download" href="#"
+                            class="hidden text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-2 py-0.5 transition-colors">
+                            下载
+                        </a>
+                    </div>
+                </div>
                 <div class="flex items-center justify-between">
                     <span class="text-spire-muted">项目</span>
                     <a id="about-repo" href="#" class="text-spire-accent hover:text-spire-accentHover text-xs transition-colors">
@@ -444,6 +454,10 @@
                     </a>
                 </div>
             </div>
+            <button id="btn-check-update"
+                class="mt-3 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors">
+                检查更新
+            </button>
         </div>
     </div>
 

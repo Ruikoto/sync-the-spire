@@ -282,6 +282,7 @@ on('GET_VERSION', data => {
     if (appVersion.startsWith('nightly-')) {
         toast('当前为 Nightly 构建版本，建议前往 About 页面下载最新正式版', 'info');
     }
+    checkForUpdates();
 });
 
 on('GET_STATUS', data => {
@@ -861,6 +862,78 @@ $('#about-modal-close').addEventListener('click', () => {
 $('#about-modal').addEventListener('click', e => {
     if (e.target === $('#about-modal')) $('#about-modal').classList.add('hidden');
 });
+
+
+// ── update check ─────────────────────────────────────────────────────────────
+
+const VERSION_CHECK_URL = 'https://sts.rkto.cc/version.json';
+let latestVersionInfo = null;
+
+function compareVersions(current, latest) {
+    const parse = v => v.replace(/^v/i, '').split('.').map(Number);
+    const c = parse(current), l = parse(latest);
+    for (let i = 0; i < 3; i++) {
+        if ((l[i] || 0) !== (c[i] || 0)) return (l[i] || 0) - (c[i] || 0);
+    }
+    return 0;
+}
+
+function updateAboutVersionStatus() {
+    const row = $('#about-update-row');
+    const latestEl = $('#about-latest');
+    const dlBtn = $('#about-download');
+
+    if (!latestVersionInfo) {
+        row.classList.add('hidden');
+        return;
+    }
+
+    row.classList.remove('hidden');
+    const isNightly = appVersion.startsWith('nightly-');
+    const hasUpdate = !isNightly && appVersion !== 'unknown' &&
+                      compareVersions(appVersion, latestVersionInfo.latest_version) > 0;
+
+    if (isNightly || hasUpdate) {
+        latestEl.textContent = latestVersionInfo.latest_version;
+        latestEl.className = 'font-mono text-xs text-spire-success';
+        dlBtn.classList.remove('hidden');
+    } else {
+        latestEl.textContent = latestVersionInfo.latest_version + '（已是最新）';
+        latestEl.className = 'font-mono text-xs text-spire-muted';
+        dlBtn.classList.add('hidden');
+    }
+}
+
+async function checkForUpdates(silent = true) {
+    try {
+        const res = await fetch(VERSION_CHECK_URL, { cache: 'no-cache' });
+        if (!res.ok) return;
+        latestVersionInfo = await res.json();
+        updateAboutVersionStatus();
+
+        // nightly users already got a toast, don't double-nag
+        if (appVersion.startsWith('nightly-') || appVersion === 'unknown') return;
+
+        if (compareVersions(appVersion, latestVersionInfo.latest_version) > 0) {
+            const ok = await showConfirm(
+                `发现新版本 ${latestVersionInfo.latest_version}，是否前往下载页面？`,
+                '发现更新'
+            );
+            if (ok) openExternal(latestVersionInfo.release_url);
+        } else if (!silent) {
+            toast('当前已是最新版本', 'success');
+        }
+    } catch (e) {
+        if (!silent) toast('检查更新失败，请检查网络连接', 'error');
+    }
+}
+
+$('#about-download').addEventListener('click', e => {
+    e.preventDefault();
+    if (latestVersionInfo) openExternal(latestVersionInfo.release_url);
+});
+
+$('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
 
 
 // ── title bar controls ──────────────────────────────────────────────────────
