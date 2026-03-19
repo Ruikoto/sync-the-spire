@@ -319,6 +319,7 @@ on('GET_STATUS', data => {
             // pre-fetch branches so the modal opens instantly
             sendMessage('GET_BRANCHES');
             sendMessage('GET_SAVE_STATUS');
+            sendMessage('GET_REDIRECT_STATUS');
         }
     }
 });
@@ -387,6 +388,54 @@ on('RESTORE_JUNCTION', data => {
     if (data.status === 'success') {
         toast(data.payload?.message || 'Restored!', 'success');
         sendMessage('GET_STATUS');
+    }
+});
+
+// ── save redirect handlers ──────────────────────────────────────────────────
+
+function updateRedirectCard(data) {
+    const dot = $('#redirect-dot');
+    const label = $('#redirect-label');
+    const checkbox = $('#redirect-checkbox');
+
+    if (!data.isJunctionActive) {
+        dot.className = 'w-2 h-2 rounded-full bg-gray-500';
+        label.textContent = '需要先连接 Mod';
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        return;
+    }
+
+    checkbox.disabled = false;
+
+    if (!data.isModInstalled) {
+        dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
+        label.textContent = '辅助 Mod 未安装（启用时自动安装）';
+        checkbox.checked = false;
+    } else if (data.isEnabled) {
+        dot.className = 'w-2 h-2 rounded-full bg-spire-success';
+        label.textContent = '已启用';
+        checkbox.checked = true;
+    } else {
+        dot.className = 'w-2 h-2 rounded-full bg-spire-muted';
+        label.textContent = '未启用';
+        checkbox.checked = false;
+    }
+}
+
+on('GET_REDIRECT_STATUS', data => {
+    if (data.status === 'success') {
+        updateRedirectCard(data.payload);
+    }
+});
+
+on('SET_REDIRECT', data => {
+    if (data.status === 'success') {
+        toast(data.payload?.message || '操作完成', 'success');
+        sendMessage('GET_REDIRECT_STATUS');
+    } else {
+        // revert toggle on failure
+        sendMessage('GET_REDIRECT_STATUS');
     }
 });
 
@@ -671,6 +720,13 @@ document.querySelectorAll('input[name="authType"]').forEach(radio => {
 $('#btn-open-mod').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'mod' }));
 $('#btn-open-save').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'save' }));
 $('#btn-open-config').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'config' }));
+
+
+// ── save redirect toggle ────────────────────────────────────────────────────
+
+$('#redirect-checkbox').addEventListener('change', (e) => {
+    sendMessage('SET_REDIRECT', { enabled: e.target.checked });
+});
 
 
 // ── save backup buttons ─────────────────────────────────────────────────────

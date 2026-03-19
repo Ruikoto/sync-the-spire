@@ -112,7 +112,7 @@ button, select {
     pointer-events: none;
     z-index: 60;
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    white-space: normal;
+    white-space: pre-line;
     font-weight: 400;
     opacity: 0;
     transition: opacity 0.15s;
@@ -124,6 +124,53 @@ button, select {
 /* backup row hover */
 .backup-row:hover {
     background: rgba(99, 102, 241, 0.08);
+}
+
+/* toggle switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #3f3f46;
+    border-radius: 999px;
+    transition: background 0.2s;
+}
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: 3px;
+    bottom: 3px;
+    background: #a1a1aa;
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+}
+.toggle-switch input:checked + .toggle-slider {
+    background: #6366f1;
+}
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(16px);
+    background: #fff;
+}
+.toggle-switch input:disabled + .toggle-slider {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.toggle-switch:has(input:disabled) {
+    cursor: not-allowed;
 }
 
 /* confirm message line breaks */

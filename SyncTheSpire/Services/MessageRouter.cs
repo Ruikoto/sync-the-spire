@@ -177,6 +177,15 @@ public class MessageRouter
                     HandleDeleteBackup(req.Payload);
                     break;
 
+                // ── save redirect ─────────────────────────────────────
+                case "GET_REDIRECT_STATUS":
+                    HandleGetRedirectStatus();
+                    break;
+
+                case "SET_REDIRECT":
+                    HandleSetRedirect(req.Payload);
+                    break;
+
                 default:
                     Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
                     break;
@@ -711,6 +720,105 @@ public class MessageRouter
         Send(IpcResponse.Success("DELETE_BACKUP", new
         {
             message = "备份已删除"
+        }));
+    }
+
+    // ── save redirect handlers ────────────────────────────────────
+
+    private const string RedirectModId = "sts2-heybox-support";
+
+    private void HandleGetRedirectStatus()
+    {
+        var cfg = _configService.LoadConfig();
+        var isJunction = cfg.IsConfigured && _junctionService.IsJunction(cfg.GameModPath);
+
+        if (!isJunction)
+        {
+            Send(IpcResponse.Success("GET_REDIRECT_STATUS", new
+            {
+                isJunctionActive = false,
+                isModInstalled = false,
+                isEnabled = false
+            }));
+            return;
+        }
+
+        var settingsPath = Path.Combine(cfg.GameModPath, RedirectModId, "settings.json");
+        var isInstalled = File.Exists(settingsPath);
+        var isEnabled = false;
+
+        if (isInstalled)
+        {
+            try
+            {
+                var json = JsonDocument.Parse(File.ReadAllText(settingsPath));
+                if (json.RootElement.TryGetProperty("EnableProfileSkip", out var prop))
+                    isEnabled = prop.GetBoolean();
+            }
+            catch { /* corrupted settings, treat as disabled */ }
+        }
+
+        Send(IpcResponse.Success("GET_REDIRECT_STATUS", new
+        {
+            isJunctionActive = true,
+            isModInstalled = isInstalled,
+            isEnabled
+        }));
+    }
+
+    private void HandleSetRedirect(JsonElement? payload)
+    {
+        var cfg = _configService.LoadConfig();
+        if (!cfg.IsConfigured || !_junctionService.IsJunction(cfg.GameModPath))
+        {
+            Send(IpcResponse.Error("SET_REDIRECT", "Mod 未连接，请先连接 Mod"));
+            return;
+        }
+
+        var enabled = payload?.GetProperty("enabled").GetBoolean() ?? true;
+        var modDir = Path.Combine(cfg.GameModPath, RedirectModId);
+        var settingsPath = Path.Combine(modDir, "settings.json");
+
+        // auto-install the helper mod if not present
+        if (!File.Exists(settingsPath))
+        {
+            var assetsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", RedirectModId);
+            if (!Directory.Exists(assetsDir))
+            {
+                Send(IpcResponse.Error("SET_REDIRECT", "辅助 Mod 资源缺失，请重新安装软件"));
+                return;
+            }
+            SaveBackupService.CopyDirectoryRecursive(assetsDir, modDir);
+        }
+
+        // read, modify EnableProfileSkip, write back
+        var text = File.ReadAllText(settingsPath);
+        using var doc = JsonDocument.Parse(text);
+        var root = doc.RootElement;
+
+        using var ms = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
+        {
+            writer.WriteStartObject();
+            foreach (var prop in root.EnumerateObject())
+            {
+                if (prop.Name == "EnableProfileSkip")
+                    writer.WriteBoolean("EnableProfileSkip", enabled);
+                else
+                    prop.WriteTo(writer);
+            }
+            // add the field if it didn't exist
+            if (!root.TryGetProperty("EnableProfileSkip", out _))
+                writer.WriteBoolean("EnableProfileSkip", enabled);
+            writer.WriteEndObject();
+        }
+
+        File.WriteAllBytes(settingsPath, ms.ToArray());
+
+        Send(IpcResponse.Success("SET_REDIRECT", new
+        {
+            isEnabled = enabled,
+            message = enabled ? "存档重定向已启用" : "存档重定向已关闭"
         }));
     }
 

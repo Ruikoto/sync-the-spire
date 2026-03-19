@@ -1,0 +1,12 @@
+{
+  "id": "sts2-heybox-support",
+  "name": "STS2 Heybox Support",
+  "author": "Heybox",
+  "description": "Support Heybox Overlay",
+  "version": "0.3",
+  "has_pck": true,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": false,
+  "EnableProfileSkip": true
+}

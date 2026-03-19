@@ -282,6 +282,28 @@
             </button>
         </div>
 
+        <!-- save redirect card -->
+        <div id="card-redirect" class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-medium">存档重定向</h2>
+                        <span class="help-tip" data-tip="建议开启，在 Mod 模式下使用常规存档。
+                        通过辅助 Mod (sts2-heybox-support) 实现，首次启用时自动安装。
+                        辅助 Mod 来自 @皮一下就很凡">?</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span id="redirect-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                        <span id="redirect-label" class="text-xs text-spire-muted">检查中...</span>
+                    </div>
+                </div>
+                <label id="redirect-toggle" class="toggle-switch">
+                    <input type="checkbox" id="redirect-checkbox" disabled>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
         <!-- save backup card -->
         <div id="card-save-backup" class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
