@@ -220,6 +220,9 @@ function updateStatusCard(data) {
     const dot = $('#status-dot');
     const label = $('#status-label');
     const branch = $('#status-branch');
+    const modDot = $('#mod-dot');
+    const modLabel = $('#mod-label');
+    const modCheckbox = $('#mod-checkbox');
 
     currentBranch = data.currentBranch || '';
     needsBranchSelection = !!data.needsBranchSelection;
@@ -228,20 +231,25 @@ function updateStatusCard(data) {
         branch.textContent = '未选择';
         dot.className = 'w-2 h-2 rounded-full bg-spire-muted';
         label.textContent = '请通过下方选择一个分支开始';
-        $('#btn-vanilla').classList.add('hidden');
-        $('#btn-restore').classList.add('hidden');
+        modCheckbox.checked = false;
+        modCheckbox.disabled = true;
+        modDot.className = 'w-2 h-2 rounded-full bg-gray-500';
+        modLabel.textContent = '请先选择分支';
     } else {
         branch.textContent = currentBranch || '—';
+        modCheckbox.disabled = false;
         if (data.isJunctionActive) {
             dot.className = 'w-2 h-2 rounded-full bg-spire-success';
             label.textContent = 'Mod 已连接';
-            $('#btn-vanilla').classList.remove('hidden');
-            $('#btn-restore').classList.add('hidden');
+            modCheckbox.checked = true;
+            modDot.className = 'w-2 h-2 rounded-full bg-spire-success';
+            modLabel.textContent = '已连接';
         } else {
             dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
             label.textContent = '纯净模式 (Mod 未连接)';
-            $('#btn-vanilla').classList.add('hidden');
-            $('#btn-restore').classList.remove('hidden');
+            modCheckbox.checked = false;
+            modDot.className = 'w-2 h-2 rounded-full bg-spire-warn';
+            modLabel.textContent = '未连接';
         }
     }
 
@@ -551,17 +559,14 @@ $('#btn-pick-save').addEventListener('click', () => {
 // refresh
 guardClick($('#btn-refresh'), () => sendMessage('GET_STATUS'));
 
-// vanilla mode
-guardClick($('#btn-vanilla'), async () => {
-    const ok = await showConfirm(
-        '确定要断开 Mod 连接吗？（不会删除 Mod 文件）',
-        '切换到纯净模式'
-    );
-    if (ok) sendMessage('SWITCH_TO_VANILLA');
+// mod toggle
+$('#mod-checkbox').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        sendMessage('RESTORE_JUNCTION');
+    } else {
+        sendMessage('SWITCH_TO_VANILLA');
+    }
 });
-
-// restore junction
-guardClick($('#btn-restore'), () => sendMessage('RESTORE_JUNCTION'));
 
 // ── branch modal ────────────────────────────────────────────────────────────
 
@@ -871,6 +876,56 @@ const QUOTES = [
     '啊……居然有人来了…',
     '愚蠢……何等愚蠢！',
     '一直……都不…喜欢你……',
+    '嘎！哑！',
+    '重生中……',
+    '是时候了',
+    '滴 答 滴 答',
+    '撤退 撤退啊！',
+    '你好啊！买点什么吧！买买买！',
+    '你的发型很不错哦',
+    '看起来你还挺闲？',
+    '你是狗党还是猫党？',
+    '你看起来很~危险~啊，嘿嘿……',
+    '慢慢看…… 不慢也行',
+    '你喜欢这张地毯吗？可惜这个不卖',
+    '要支持我这样的小店啊！',
+    '面具就是酷，我也是同党啊！',
+    '多留会儿，听听音乐啊！',
+    '一个人前进太危险了！把你的钱都给我吧！',
+    '买点儿啥吧',
+    '我喜欢金币。',
+    '我最喜欢的颜色是蓝色。你呢？',
+    '这可是最后一次买东西的机会咯！ *挤眼* *挤眼*',
+    '其实呢，我是个猫党。',
+    '不用着急，不用着急。',
+    '曾经我也和你一样。',
+    '唷，还往上爬呢？',
+    '你好…… 我是… 涅奥……',
+    '你又… 来啦……',
+    '还想 再来……？',
+    '见到 Boss... 就能获得 更多… 祝福……',
+    '至少… 也要见到 第一个 Boss 吧……',
+    '我把你 带回来了……',
+    '选择……',
+    '实现了……',
+    '风险…… 与回报……',
+    '来试试 挑战 吧……',
+    '哎呀呀，这点金币可不够啊。',
+    '嘿兄弟，你没钱啊！',
+    '这个你买不起。',
+    '我这儿不是做慈善的。',
+    '谢 啦~',
+    '又一笔买卖…… 嚯嚯嚯！有得赚！',
+    '成交！',
+    '概不退换。',
+    '祝你顺利啊。',
+    '面具就是酷，我也是同党啊！',
+    '你有没有看见我的送货员？',
+    '多留会儿，听听音乐啊！',
+    '一个人前进太危险了！把你的钱都给我吧！',
+    '这是… 怎么了…？…难道…真的… …做到了吗…？',
+    '…高塔沉睡了… 那么… 我也… …该睡了……',
+    '启程去屠戮这座高塔。',
 ];
 
 function setRandomQuote(animate) {

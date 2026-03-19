@@ -282,6 +282,23 @@
             </button>
         </div>
 
+        <!-- mod toggle -->
+        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">Mod 开关</h2>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span id="mod-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                        <span id="mod-label" class="text-xs text-spire-muted">检查中...</span>
+                    </div>
+                </div>
+                <label id="mod-toggle" class="toggle-switch">
+                    <input type="checkbox" id="mod-checkbox" disabled>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
         <!-- save redirect card -->
         <div id="card-redirect" class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
@@ -301,49 +318,6 @@
                     <input type="checkbox" id="redirect-checkbox" disabled>
                     <span class="toggle-slider"></span>
                 </label>
-            </div>
-        </div>
-
-        <!-- save backup card -->
-        <div id="card-save-backup" class="bg-spire-card rounded-xl border border-spire-border p-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h2 class="text-sm font-medium">存档备份</h2>
-                    <p class="text-xs text-spire-muted mt-0.5">手动备份或恢复游戏存档</p>
-                </div>
-                <div class="flex gap-2">
-                    <button id="btn-backup-saves"
-                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
-                        备份存档
-                    </button>
-                    <button id="btn-restore-saves"
-                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
-                        恢复存档
-                    </button>
-                    <button id="btn-open-backup"
-                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
-                        title="打开备份文件夹">
-                        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- mode 1: vanilla -->
-        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h2 class="text-sm font-medium">纯净模式</h2>
-                    <p class="text-xs text-spire-muted mt-0.5">断开 Mod 连接，回归原版游戏</p>
-                </div>
-                <div class="flex gap-2">
-                    <button id="btn-vanilla" class="hidden text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-3 py-1.5 transition-colors">
-                        清空 Mod
-                    </button>
-                    <button id="btn-restore" class="hidden text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
-                        恢复 Mod
-                    </button>
-                </div>
             </div>
         </div>
 
@@ -379,6 +353,31 @@
                 <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors">
                     创建
                 </button>
+            </div>
+        </div>
+
+        <!-- save backup card -->
+        <div id="card-save-backup" class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-medium">存档备份</h2>
+                    <p class="text-xs text-spire-muted mt-0.5">手动备份或恢复游戏存档</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-backup-saves"
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                        备份存档
+                    </button>
+                    <button id="btn-restore-saves"
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                        恢复存档
+                    </button>
+                    <button id="btn-open-backup"
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
+                        title="打开备份文件夹">
+                        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
