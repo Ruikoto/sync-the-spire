@@ -6,6 +6,10 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
 env:
   PROJECT_PATH: "SyncTheSpire/SyncTheSpire.csproj"
   BINARY_NAME: "SyncTheSpire"

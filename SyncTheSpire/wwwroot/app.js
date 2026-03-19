@@ -1158,18 +1158,18 @@ async function checkAnnouncements() {
 
             const colors = colorMap[a.type] || colorMap.info;
             const banner = document.createElement('div');
-            banner.className = `announcement-banner rounded-xl border ${colors.border} ${colors.bg} p-3 flex items-start gap-3`;
+            banner.className = `announcement-banner rounded-lg border ${colors.border} ${colors.bg} p-2.5 flex items-start gap-2`;
 
             const content = document.createElement('div');
             content.className = 'flex-1 min-w-0';
             if (a.title) {
                 const title = document.createElement('div');
-                title.className = `text-xs font-medium ${colors.text} mb-0.5`;
+                title.className = `text-sm font-bold ${colors.text}`;
                 title.textContent = a.title;
                 content.appendChild(title);
             }
             const body = document.createElement('div');
-            body.className = 'text-xs text-spire-muted leading-relaxed';
+            body.className = 'text-xs text-spire-muted leading-relaxed announcement-body';
             body.textContent = a.content;
             content.appendChild(body);
             banner.appendChild(content);

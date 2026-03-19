@@ -159,6 +159,9 @@ input[type="radio"] {
 .announcement-banner {
     animation: fadeIn 0.2s ease-out;
 }
+.announcement-body {
+    white-space: pre-line;
+}
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-4px); }
