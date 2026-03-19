@@ -1,4 +1,4 @@
 {
-  "changelog": "",
-  "force_update": false
+  "changelog": "【重要更新】移除有严重BUG的存档合并功能，新增存档重定向功能用以代替存档合并。",
+  "force_update": true
 }
