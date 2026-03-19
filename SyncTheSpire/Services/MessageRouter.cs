@@ -157,14 +157,6 @@ public class MessageRouter
                     HandleGetSaveStatus();
                     break;
 
-                case "ANALYZE_SAVE_MERGE":
-                    HandleAnalyzeSaveMerge();
-                    break;
-
-                case "EXECUTE_SAVE_MERGE":
-                    HandleExecuteSaveMerge(req.Payload);
-                    break;
-
                 case "UNLINK_SAVES":
                     HandleUnlinkSaves();
                     break;
@@ -604,81 +596,6 @@ public class MessageRouter
                 moddedExists = p.ModdedExists,
                 isJunction = p.IsJunction
             })
-        }));
-    }
-
-    private void HandleAnalyzeSaveMerge()
-    {
-        var cfg = _configService.LoadConfig();
-        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
-        {
-            Send(IpcResponse.Error("ANALYZE_SAVE_MERGE", "存档路径未配置"));
-            return;
-        }
-
-        var moddedDir = Path.Combine(cfg.SaveFolderPath, "modded");
-        var hasRealModded = Directory.Exists(moddedDir) &&
-            Directory.GetDirectories(moddedDir)
-                .Any(d => !_junctionService.IsJunction(d));
-
-        if (!hasRealModded)
-        {
-            // no comparison needed, can merge directly
-            Send(IpcResponse.Success("ANALYZE_SAVE_MERGE", new { needsComparison = false }));
-            return;
-        }
-
-        var comparisons = _mergeService.CompareProfiles(cfg.SaveFolderPath);
-
-        Send(IpcResponse.Success("ANALYZE_SAVE_MERGE", new
-        {
-            needsComparison = true,
-            profiles = comparisons.Select(c => new
-            {
-                name = c.Name,
-                normal = c.Normal == null ? null : new
-                {
-                    sizeBytes = c.Normal.SizeBytes,
-                    lastModified = new DateTimeOffset(c.Normal.LastModified).ToUnixTimeMilliseconds(),
-                    fileCount = c.Normal.FileCount
-                },
-                modded = c.Modded == null ? null : new
-                {
-                    sizeBytes = c.Modded.SizeBytes,
-                    lastModified = new DateTimeOffset(c.Modded.LastModified).ToUnixTimeMilliseconds(),
-                    fileCount = c.Modded.FileCount
-                },
-                recommendation = c.Recommendation
-            })
-        }));
-    }
-
-    private void HandleExecuteSaveMerge(JsonElement? payload)
-    {
-        var cfg = _configService.LoadConfig();
-        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
-        {
-            Send(IpcResponse.Error("EXECUTE_SAVE_MERGE", "存档路径未配置"));
-            return;
-        }
-
-        Send(IpcResponse.Progress("EXECUTE_SAVE_MERGE", "正在备份并合并存档..."));
-
-        // parse choices from payload (may be null for simple case)
-        Dictionary<string, string>? choices = null;
-        if (payload != null && payload.Value.TryGetProperty("choices", out var choicesEl))
-        {
-            choices = new Dictionary<string, string>();
-            foreach (var prop in choicesEl.EnumerateObject())
-                choices[prop.Name] = prop.Value.GetString() ?? "normal";
-        }
-
-        var backupPath = _mergeService.Merge(cfg.SaveFolderPath, choices);
-
-        Send(IpcResponse.Success("EXECUTE_SAVE_MERGE", new
-        {
-            message = "存档合并完成！操作前已自动备份。",
-            backupName = Path.GetFileName(backupPath)
         }));
     }
 

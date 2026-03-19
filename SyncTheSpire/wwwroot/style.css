@@ -121,11 +121,6 @@ button, select {
     opacity: 1;
 }
 
-/* radio buttons in merge comparison */
-input[type="radio"] {
-    accent-color: #6366f1;
-}
-
 /* backup row hover */
 .backup-row:hover {
     background: rgba(99, 102, 241, 0.08);

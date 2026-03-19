@@ -38,6 +38,29 @@
         </div>
     </div>
 
+    <!-- save merge migration modal (non-dismissible) -->
+    <div id="save-unlink-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
+            <div class="flex items-center gap-2 mb-3">
+                <svg width="20" height="20" class="text-spire-danger shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+                </svg>
+                <h3 class="text-sm font-medium">存档合并功能已下线</h3>
+            </div>
+            <p class="text-xs text-spire-muted mb-2 leading-relaxed">
+                检测到你的存档处于合并状态。该功能存在严重问题，会导致<span class="text-spire-danger font-medium">最新游玩记录丢失（被回档）</span>。
+            </p>
+            <p class="text-xs text-spire-muted mb-5 leading-relaxed">
+                请点击下方按钮关闭存档合并，操作前会自动备份所有存档。
+            </p>
+            <p id="save-unlink-error" class="hidden text-xs text-spire-danger mb-3 leading-relaxed"></p>
+            <button id="btn-do-unlink"
+                class="w-full text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-4 py-2 transition-colors font-medium">
+                关闭存档合并
+            </button>
+        </div>
+    </div>
+
     <!-- confirm dialog (replaces native confirm()) -->
     <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
@@ -259,33 +282,6 @@
             </button>
         </div>
 
-        <!-- save merge card -->
-        <div id="card-save-merge" class="bg-spire-card rounded-xl border border-spire-border p-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h2 class="text-sm font-medium">存档合并</h2>
-                        <span class="help-tip" data-tip="合并后，普通模式和 Mod 模式共用同一份存档。取消合并后，两者恢复独立。所有操作前均会自动备份。">?</span>
-                    </div>
-                    <div class="flex items-center gap-2 mt-1">
-                        <span id="save-merge-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                        <span id="save-merge-label" class="text-xs text-spire-muted">检查中...</span>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <button id="btn-merge-saves" disabled
-                        class="text-xs bg-spire-accent text-white rounded-lg px-3 py-1.5 opacity-50 cursor-not-allowed"
-                        title="此功能存在 BUG，暂时不能使用">
-                        合并存档
-                    </button>
-                    <button id="btn-unlink-saves"
-                        class="hidden text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-3 py-1.5 transition-colors">
-                        取消合并
-                    </button>
-                </div>
-            </div>
-        </div>
-
         <!-- save backup card -->
         <div id="card-save-backup" class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
@@ -360,44 +356,6 @@
                     class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent" />
                 <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors">
                     创建
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- save merge comparison modal -->
-    <div id="merge-compare-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
-        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 flex flex-col">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
-                <h2 class="text-sm font-medium">选择要保留的存档版本</h2>
-                <button id="merge-compare-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
-            </div>
-            <div class="px-4 py-3">
-                <p class="text-xs text-spire-muted mb-3 leading-relaxed">
-                    检测到已有 Mod 存档数据。请选择每个存档位要保留的版本，另一份将被覆盖。
-                    <span class="text-spire-warn">合并前会自动备份所有存档。</span>
-                </p>
-                <table class="w-full text-xs">
-                    <thead>
-                        <tr class="border-b border-spire-border text-spire-muted">
-                            <th class="text-left py-2 px-2">存档位</th>
-                            <th class="text-left py-2 px-2">普通存档</th>
-                            <th class="text-left py-2 px-2">Mod 存档</th>
-                            <th class="text-center py-2 px-2">保留</th>
-                        </tr>
-                    </thead>
-                    <tbody id="merge-compare-body"></tbody>
-                </table>
-            </div>
-            <div class="flex justify-end gap-2 px-4 py-3 border-t border-spire-border">
-                <button id="merge-compare-cancel"
-                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
-                    取消
-                </button>
-                <button id="merge-compare-confirm"
-                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">
-                    确认合并
                 </button>
             </div>
         </div>

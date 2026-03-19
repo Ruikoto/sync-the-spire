@@ -64,7 +64,6 @@ function escAttr(str) {
 
 let currentBranch = '';
 let needsBranchSelection = false;
-let mergeCompareData = null;
 let appVersion = '';
 let appArch = 'x64';
 
@@ -182,7 +181,7 @@ function showConfirm(message, title) {
 // close any closeable modal on Escape
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    const modals = ['#branch-modal', '#merge-compare-modal', '#backup-list-modal', '#about-modal'];
+    const modals = ['#branch-modal', '#backup-list-modal', '#about-modal'];
     for (const sel of modals) {
         const m = $(sel);
         if (m && !m.classList.contains('hidden')) {
@@ -244,60 +243,13 @@ function updateStatusCard(data) {
     updatePushButton();
 }
 
-// ── save merge card helpers ──────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 function formatSize(bytes) {
     if (bytes == null) return '—';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDate(ms) {
-    if (!ms) return '—';
-    return new Date(ms).toLocaleString('zh-CN', {
-        month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit'
-    });
-}
-
-function updateSaveMergeCard(data) {
-    const dot = $('#save-merge-dot');
-    const label = $('#save-merge-label');
-    const btnMerge = $('#btn-merge-saves');
-    const btnUnlink = $('#btn-unlink-saves');
-
-    if (!data || !data.isConfigured) {
-        dot.className = 'w-2 h-2 rounded-full bg-gray-500';
-        label.textContent = '存档路径未配置';
-        btnMerge.classList.remove('hidden');
-        btnUnlink.classList.add('hidden');
-        return;
-    }
-
-    if (data.mergeState === 'linked') {
-        dot.className = 'w-2 h-2 rounded-full bg-spire-success';
-        label.textContent = '已合并 — 普通存档与 Mod 存档共享';
-        btnMerge.classList.add('hidden');
-        btnUnlink.classList.remove('hidden');
-        btnUnlink.disabled = false;
-        btnUnlink.classList.remove('opacity-50', 'cursor-not-allowed');
-    } else if (data.mergeState === 'partial') {
-        dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
-        label.textContent = '部分合并 — 存在异常状态';
-        btnMerge.classList.remove('hidden');
-        btnUnlink.classList.remove('hidden');
-        btnUnlink.disabled = false;
-        btnUnlink.classList.remove('opacity-50', 'cursor-not-allowed');
-    } else {
-        // "unlinked" or "no_modded"
-        dot.className = 'w-2 h-2 rounded-full bg-spire-muted';
-        label.textContent = data.mergeState === 'no_modded'
-            ? '未合并 — Mod 存档文件夹不存在'
-            : '未合并 — 普通存档与 Mod 存档独立';
-        btnMerge.classList.remove('hidden');
-        btnUnlink.classList.add('hidden');
-    }
 }
 
 // ── auth type UI sync ────────────────────────────────────────────────────────
@@ -441,39 +393,28 @@ on('RESTORE_JUNCTION', data => {
 // ── save management handlers ────────────────────────────────────────────────
 
 on('GET_SAVE_STATUS', data => {
-    if (data.status === 'success') {
-        updateSaveMergeCard(data.payload);
-    }
-});
-
-on('ANALYZE_SAVE_MERGE', data => {
     if (data.status !== 'success') return;
-
-    if (!data.payload.needsComparison) {
-        // no modded data to compare, go straight with a confirm
-        showConfirm(
-            'Mod 存档文件夹不存在或为空，合并后将自动创建并链接到普通存档。\n操作前会自动备份所有存档，如不放心可在备份管理中手动备份。',
-            '合并存档'
-        ).then(ok => {
-            if (ok) sendMessage('EXECUTE_SAVE_MERGE', {});
-        });
-    } else {
-        mergeCompareData = data.payload.profiles;
-        openMergeCompareModal();
-    }
-});
-
-on('EXECUTE_SAVE_MERGE', data => {
-    if (data.status === 'success') {
-        toast(data.payload?.message || '合并完成', 'success');
-        sendMessage('GET_SAVE_STATUS');
+    const p = data.payload;
+    // if saves are in merged state, prompt user to unlink
+    if (p.isConfigured && (p.mergeState === 'linked' || p.mergeState === 'partial')) {
+        $('#save-unlink-modal').classList.remove('hidden');
     }
 });
 
 on('UNLINK_SAVES', data => {
+    const btn = $('#btn-do-unlink');
     if (data.status === 'success') {
-        toast(data.payload?.message || '已取消合并', 'success');
-        sendMessage('GET_SAVE_STATUS');
+        $('#save-unlink-modal').classList.add('hidden');
+        btn.disabled = false;
+        btn.textContent = '关闭存档合并';
+        toast(data.payload?.message || '已关闭存档合并', 'success');
+    } else {
+        // show error inside the modal, keep it open
+        btn.disabled = false;
+        btn.textContent = '关闭存档合并';
+        const errEl = $('#save-unlink-error');
+        errEl.textContent = data.message || '操作失败，请重试';
+        errEl.classList.remove('hidden');
     }
 });
 
@@ -732,18 +673,15 @@ $('#btn-open-save').addEventListener('click', () => sendMessage('OPEN_FOLDER', {
 $('#btn-open-config').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'config' }));
 
 
-// ── save merge & backup buttons ────────────────────────────────────────────
+// ── save backup buttons ─────────────────────────────────────────────────────
 
-guardClick($('#btn-merge-saves'), () => {
-    sendMessage('ANALYZE_SAVE_MERGE');
-});
-
-guardClick($('#btn-unlink-saves'), async () => {
-    const ok = await showConfirm(
-        '取消合并后，Mod 存档将变为普通存档的独立副本，两者不再共享数据。\n操作前会自动备份所有存档。',
-        '取消存档合并'
-    );
-    if (ok) sendMessage('UNLINK_SAVES');
+// migration modal: one-click unlink
+$('#btn-do-unlink').addEventListener('click', () => {
+    const btn = $('#btn-do-unlink');
+    btn.disabled = true;
+    btn.textContent = '正在处理...';
+    $('#save-unlink-error').classList.add('hidden');
+    sendMessage('UNLINK_SAVES');
 });
 
 guardClick($('#btn-backup-saves'), async () => {
@@ -760,86 +698,6 @@ $('#btn-restore-saves').addEventListener('click', () => {
 
 $('#btn-open-backup').addEventListener('click', () => {
     sendMessage('OPEN_FOLDER', { folderType: 'backup' });
-});
-
-
-// ── merge comparison modal ──────────────────────────────────────────────────
-
-function openMergeCompareModal() {
-    const tbody = $('#merge-compare-body');
-    tbody.innerHTML = '';
-
-    mergeCompareData.forEach(p => {
-        const hasNormal = p.normal != null;
-        const hasModded = p.modded != null;
-        const safeName = esc(p.name);
-        const safeAttrName = escAttr(p.name);
-
-        const normalLabel = hasNormal
-            ? `${formatSize(p.normal.sizeBytes)}<br><span class="text-spire-muted">${formatDate(p.normal.lastModified)}</span>`
-            : '<span class="text-spire-muted">不存在</span>';
-
-        const moddedLabel = hasModded
-            ? `${formatSize(p.modded.sizeBytes)}<br><span class="text-spire-muted">${formatDate(p.modded.lastModified)}</span>`
-            : '<span class="text-spire-muted">不存在</span>';
-
-        // highlight the newer one
-        const normalNewer = hasNormal && hasModded && p.normal.lastModified >= p.modded.lastModified;
-        const moddedNewer = hasNormal && hasModded && p.modded.lastModified > p.normal.lastModified;
-
-        const canChoose = hasNormal && hasModded;
-        const defaultChoice = p.recommendation || 'normal';
-
-        const row = document.createElement('tr');
-        row.className = 'border-b border-spire-border/50';
-        row.innerHTML = `
-            <td class="py-2.5 px-2 font-mono">${safeName}</td>
-            <td class="py-2.5 px-2 ${normalNewer ? 'text-spire-success' : ''}">${normalLabel}</td>
-            <td class="py-2.5 px-2 ${moddedNewer ? 'text-spire-success' : ''}">${moddedLabel}</td>
-            <td class="py-2.5 px-2 text-center">
-                ${canChoose ? `
-                    <label class="inline-flex items-center gap-1 mr-2 cursor-pointer">
-                        <input type="radio" name="merge-${safeAttrName}" value="normal"
-                            ${defaultChoice === 'normal' ? 'checked' : ''} />
-                        <span>普通</span>
-                    </label>
-                    <label class="inline-flex items-center gap-1 cursor-pointer">
-                        <input type="radio" name="merge-${safeAttrName}" value="modded"
-                            ${defaultChoice === 'modded' ? 'checked' : ''} />
-                        <span>Mod</span>
-                    </label>
-                ` : `<span class="text-spire-muted">自动</span>`}
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
-
-    $('#merge-compare-modal').classList.remove('hidden');
-}
-
-function closeMergeCompareModal() {
-    $('#merge-compare-modal').classList.add('hidden');
-}
-
-function collectMergeChoices() {
-    const choices = {};
-    mergeCompareData.forEach(p => {
-        const radio = document.querySelector(`input[name="merge-${CSS.escape(p.name)}"]:checked`);
-        choices[p.name] = radio ? radio.value : 'normal';
-    });
-    return choices;
-}
-
-$('#merge-compare-confirm').addEventListener('click', () => {
-    const choices = collectMergeChoices();
-    closeMergeCompareModal();
-    sendMessage('EXECUTE_SAVE_MERGE', { choices });
-});
-
-$('#merge-compare-cancel').addEventListener('click', closeMergeCompareModal);
-$('#merge-compare-close').addEventListener('click', closeMergeCompareModal);
-$('#merge-compare-modal').addEventListener('click', e => {
-    if (e.target === $('#merge-compare-modal')) closeMergeCompareModal();
 });
 
 
