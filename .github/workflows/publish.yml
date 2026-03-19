@@ -86,6 +86,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -144,21 +147,43 @@ jobs:
 
       - name: Deploy version info to gh-pages
         run: |
-          mkdir -p pages_output
-          cat <<EOF > pages_output/version.json
-          {
-            "latest_version": "${{ github.ref_name }}",
-            "published_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "release_url": "https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}",
-            "download_url_x64": "https://sts-dl.rkto.cc/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ env.BINARY_NAME }}-${{ github.ref_name }}-win-x64.zip",
-            "download_url_arm": "https://sts-dl.rkto.cc/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ env.BINARY_NAME }}-${{ github.ref_name }}-win-arm64.zip",
-            "force_update": false
-          }
-          EOF
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+          NAME="${{ env.BINARY_NAME }}"
+          PROXY="https://sts-dl.rkto.cc/$REPO/releases/download/$TAG"
 
-          # CORS header so the WebView2 frontend can fetch this
+          # read release metadata from repo
+          CHANGELOG=$(jq -r '.changelog // ""' release-info.json)
+          FORCE=$(jq -r '.force_update // false' release-info.json)
+
+          mkdir -p pages_output
+
+          jq -n \
+            --arg ver "$TAG" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg rel_url "https://github.com/$REPO/releases/tag/$TAG" \
+            --arg dl_x64 "$PROXY/$NAME-$TAG-win-x64.zip" \
+            --arg dl_arm "$PROXY/$NAME-$TAG-win-arm64.zip" \
+            --arg changelog "$CHANGELOG" \
+            --argjson force "$FORCE" \
+            '{
+              latest_version: $ver,
+              published_at: $date,
+              release_url: $rel_url,
+              download_url_x64: $dl_x64,
+              download_url_arm: $dl_arm,
+              force_update: $force,
+              changelog: $changelog
+            }' > pages_output/version.json
+
+          # copy announcements from repo
+          cp announcements.json pages_output/announcements.json
+
+          # CORS headers for both JSON files
           cat <<EOF > pages_output/_headers
           /version.json
+            Access-Control-Allow-Origin: *
+          /announcements.json
             Access-Control-Allow-Origin: *
           EOF
 
@@ -167,6 +192,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b gh-pages
-          git add version.json _headers
-          git commit -m "chore: update version.json for ${{ github.ref_name }}"
-          git push -f https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
+          git add version.json announcements.json _headers
+          git commit -m "chore: update version.json for $TAG"
+          git push -f https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$REPO.git gh-pages

@@ -136,7 +136,31 @@ input[type="radio"] {
     white-space: pre-line;
 }
 
+/* update modal changelog area */
+.update-changelog {
+    white-space: pre-line;
+    border: 1px solid #2a2d3a;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #0f1117;
+}
+
+/* update modal above toasts */
+#update-modal {
+    z-index: 55;
+}
+
 /* confirm modal above toasts */
 #confirm-modal {
     z-index: 55;
+}
+
+/* announcement banner fade in */
+.announcement-banner {
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
 }

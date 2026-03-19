@@ -1,0 +1,53 @@
+name: Deploy Announcements
+
+on:
+  push:
+    branches: [main]
+    paths: [announcements.json]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Update announcements on gh-pages
+        run: |
+          REPO="${{ github.repository }}"
+          REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$REPO.git"
+
+          # grab existing gh-pages content so we don't clobber version.json
+          git clone --branch gh-pages --single-branch "$REMOTE" pages_output || {
+            # gh-pages doesn't exist yet, just init — release job will create it properly later
+            mkdir -p pages_output
+            cd pages_output
+            git init
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b gh-pages
+            cd ..
+          }
+
+          cd pages_output
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # overwrite only announcements.json, keep everything else intact
+          cp ../announcements.json announcements.json
+
+          # ensure CORS header covers announcements too
+          cat <<EOF > _headers
+          /version.json
+            Access-Control-Allow-Origin: *
+          /announcements.json
+            Access-Control-Allow-Origin: *
+          EOF
+
+          git add announcements.json _headers
+          # bail out gracefully if nothing changed
+          git diff --cached --quiet && echo "No changes to deploy" && exit 0
+          git commit -m "chore: update announcements"
+          git push "$REMOTE" gh-pages

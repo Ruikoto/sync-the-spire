@@ -1,0 +1,22 @@
+{
+  "announcements": [
+    {
+      "id": "1",
+      "enabled": true,
+      "title": "公告测试",
+      "content": "我说战个未来吧",
+      "type": "info",
+      "expires_at": null,
+      "dismissible": true
+    },
+    {
+      "id": "example-notice",
+      "enabled": false,
+      "title": "示例公告标题",
+      "content": "这是一条示例公告，发布前将 enabled 改为 true。",
+      "type": "info",
+      "expires_at": null,
+      "dismissible": true
+    }
+  ]
+}

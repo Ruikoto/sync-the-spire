@@ -56,6 +56,28 @@
         </div>
     </div>
 
+    <!-- update available modal (with changelog) -->
+    <div id="update-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
+            <div class="flex items-center justify-between mb-3">
+                <h3 id="update-title" class="text-sm font-medium"></h3>
+                <button id="update-modal-close"
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+            </div>
+            <div id="update-changelog" class="text-xs text-spire-muted mb-4 leading-relaxed max-h-48 overflow-y-auto update-changelog"></div>
+            <div class="flex justify-end gap-2">
+                <button id="update-cancel"
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    稍后
+                </button>
+                <button id="update-download"
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">
+                    立即下载
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- branch selector modal -->
     <div id="branch-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 max-h-[70vh] flex flex-col">
@@ -200,6 +222,9 @@
                 </button>
             </div>
         </div>
+
+        <!-- announcement banners (dynamically populated) -->
+        <div id="announcement-container" class="flex flex-col gap-2"></div>
 
         <!-- status card -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4 flex items-center gap-4">

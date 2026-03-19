@@ -190,6 +190,11 @@ document.addEventListener('keydown', e => {
             return;
         }
     }
+    // update modal: only close via Escape if not forced (cancel button visible)
+    const um = $('#update-modal');
+    if (um && !um.classList.contains('hidden') && !$('#update-cancel').classList.contains('hidden')) {
+        closeUpdateModal();
+    }
 });
 
 function updatePushButton() {
@@ -350,6 +355,7 @@ on('GET_VERSION', data => {
         toast('当前为 Nightly 构建版本，建议前往 About 页面下载最新正式版', 'info');
     }
     checkForUpdates();
+    checkAnnouncements();
 });
 
 on('GET_STATUS', data => {
@@ -979,6 +985,7 @@ $('#about-modal').addEventListener('click', e => {
 // ── update check ─────────────────────────────────────────────────────────────
 
 const VERSION_CHECK_URL = 'https://sts.rkto.cc/version.json';
+const ANNOUNCEMENTS_URL = 'https://sts.rkto.cc/announcements.json';
 let latestVersionInfo = null;
 
 function compareVersions(current, latest) {
@@ -1023,6 +1030,55 @@ function getDownloadUrl() {
         : latestVersionInfo.download_url_x64;
 }
 
+// dedicated update modal — supports changelog display and forced updates
+function showUpdateModal(isForced) {
+    const modal = $('#update-modal');
+    const titleEl = $('#update-title');
+    const changelogEl = $('#update-changelog');
+    const closeBtn = $('#update-modal-close');
+    const cancelBtn = $('#update-cancel');
+
+    titleEl.textContent = `发现新版本 ${latestVersionInfo.latest_version}`;
+
+    // render changelog
+    const changelog = latestVersionInfo.changelog;
+    if (changelog) {
+        changelogEl.textContent = changelog;
+        changelogEl.classList.remove('hidden');
+    } else {
+        changelogEl.classList.add('hidden');
+    }
+
+    // forced update: hide close/cancel, block escape and backdrop click
+    if (isForced) {
+        closeBtn.classList.add('hidden');
+        cancelBtn.classList.add('hidden');
+    } else {
+        closeBtn.classList.remove('hidden');
+        cancelBtn.classList.remove('hidden');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeUpdateModal() {
+    $('#update-modal').classList.add('hidden');
+}
+
+// update modal event bindings
+$('#update-download').addEventListener('click', () => {
+    const url = getDownloadUrl();
+    if (url) openExternal(url);
+});
+$('#update-cancel').addEventListener('click', closeUpdateModal);
+$('#update-modal-close').addEventListener('click', closeUpdateModal);
+$('#update-modal').addEventListener('click', e => {
+    // only close on backdrop if not forced
+    if (e.target === $('#update-modal') && !$('#update-cancel').classList.contains('hidden')) {
+        closeUpdateModal();
+    }
+});
+
 async function checkForUpdates(silent = true) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -1036,14 +1092,8 @@ async function checkForUpdates(silent = true) {
         if (appVersion.startsWith('nightly-') || appVersion === 'unknown') return;
 
         if (compareVersions(appVersion, latestVersionInfo.latest_version) > 0) {
-            const ok = await showConfirm(
-                `发现新版本 ${latestVersionInfo.latest_version}，是否立即下载？`,
-                '发现更新'
-            );
-            if (ok) {
-                const url = getDownloadUrl();
-                if (url) openExternal(url);
-            }
+            const isForced = !!latestVersionInfo.force_update;
+            showUpdateModal(isForced);
         } else if (!silent) {
             toast('当前已是最新版本', 'success');
         }
@@ -1061,6 +1111,90 @@ $('#about-download').addEventListener('click', e => {
 });
 
 $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
+
+
+// ── announcements ─────────────────────────────────────────────────────────────
+
+function getDismissedAnnouncements() {
+    try {
+        return JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
+    } catch { return []; }
+}
+
+function dismissAnnouncement(id) {
+    const dismissed = getDismissedAnnouncements();
+    if (!dismissed.includes(id)) {
+        dismissed.push(id);
+        localStorage.setItem('dismissed_announcements', JSON.stringify(dismissed));
+    }
+}
+
+async function checkAnnouncements() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+        const res = await fetch(ANNOUNCEMENTS_URL, { cache: 'no-cache', signal: controller.signal });
+        if (!res.ok) return;
+        const data = await res.json();
+        const announcements = data.announcements || [];
+        if (announcements.length === 0) return;
+
+        const dismissed = getDismissedAnnouncements();
+        const now = Date.now();
+        const container = $('#announcement-container');
+        container.innerHTML = '';
+
+        const colorMap = {
+            info: { border: 'border-spire-accent', bg: 'bg-spire-accent/10', text: 'text-spire-accent' },
+            warning: { border: 'border-spire-warn', bg: 'bg-spire-warn/20', text: 'text-spire-warn' },
+            error: { border: 'border-spire-danger', bg: 'bg-spire-danger/20', text: 'text-spire-danger' },
+        };
+
+        announcements.forEach(a => {
+            // skip disabled, dismissed, or expired
+            if (a.enabled === false) return;
+            if (dismissed.includes(a.id)) return;
+            if (a.expires_at && new Date(a.expires_at).getTime() < now) return;
+
+            const colors = colorMap[a.type] || colorMap.info;
+            const banner = document.createElement('div');
+            banner.className = `announcement-banner rounded-xl border ${colors.border} ${colors.bg} p-3 flex items-start gap-3`;
+
+            const content = document.createElement('div');
+            content.className = 'flex-1 min-w-0';
+            if (a.title) {
+                const title = document.createElement('div');
+                title.className = `text-xs font-medium ${colors.text} mb-0.5`;
+                title.textContent = a.title;
+                content.appendChild(title);
+            }
+            const body = document.createElement('div');
+            body.className = 'text-xs text-spire-muted leading-relaxed';
+            body.textContent = a.content;
+            content.appendChild(body);
+            banner.appendChild(content);
+
+            if (a.dismissible !== false) {
+                const btn = document.createElement('button');
+                btn.className = 'dismiss-btn text-spire-muted hover:text-spire-text text-lg leading-none transition-colors shrink-0 px-1';
+                btn.innerHTML = '&times;';
+                btn.addEventListener('click', () => {
+                    dismissAnnouncement(a.id);
+                    banner.style.opacity = '0';
+                    banner.style.transition = 'opacity 0.3s';
+                    setTimeout(() => banner.remove(), 300);
+                });
+                banner.appendChild(btn);
+            }
+
+            container.appendChild(banner);
+        });
+    } catch {
+        // fail silently — announcements are non-critical
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 
 // ── title bar controls ──────────────────────────────────────────────────────
