@@ -270,8 +270,6 @@ function updateSaveMergeCard(data) {
     if (!data || !data.isConfigured) {
         dot.className = 'w-2 h-2 rounded-full bg-gray-500';
         label.textContent = '存档路径未配置';
-        btnMerge.disabled = true;
-        btnMerge.classList.add('opacity-50', 'cursor-not-allowed');
         btnMerge.classList.remove('hidden');
         btnUnlink.classList.add('hidden');
         return;
@@ -288,8 +286,6 @@ function updateSaveMergeCard(data) {
         dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
         label.textContent = '部分合并 — 存在异常状态';
         btnMerge.classList.remove('hidden');
-        btnMerge.disabled = false;
-        btnMerge.classList.remove('opacity-50', 'cursor-not-allowed');
         btnUnlink.classList.remove('hidden');
         btnUnlink.disabled = false;
         btnUnlink.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -300,8 +296,6 @@ function updateSaveMergeCard(data) {
             ? '未合并 — Mod 存档文件夹不存在'
             : '未合并 — 普通存档与 Mod 存档独立';
         btnMerge.classList.remove('hidden');
-        btnMerge.disabled = false;
-        btnMerge.classList.remove('opacity-50', 'cursor-not-allowed');
         btnUnlink.classList.add('hidden');
     }
 }
