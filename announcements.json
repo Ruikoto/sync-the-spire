@@ -16,7 +16,7 @@
       "content": "目前存档合并功能存在问题，会导致游戏结束后云存档覆盖本地存档，导致无限回档。\n目前此问题尚在调查中，请暂时不要使用存档合并，改为手动拷贝MOD和普通存档。如已合并可以使用取消合并功能。",
       "type": "warning",
       "expires_at": null,
-      "dismissible": true
+      "dismissible": false
     },
     {
       "id": "example-notice",
