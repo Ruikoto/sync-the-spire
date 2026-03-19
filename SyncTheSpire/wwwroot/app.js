@@ -80,7 +80,7 @@ function showPage(name) {
 
     // pick a random quote when entering the main page
     if (name === 'main') {
-        $('#header-quote').textContent = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+        setRandomQuote();
     }
 }
 
@@ -140,6 +140,11 @@ function guardClick(btn, fn) {
         btn.disabled = true;
         _guardedBtns.add(btn);
         try { await fn(); } catch { /* handled elsewhere */ }
+        // if no IPC loading was triggered, re-enable immediately
+        if (_guardedBtns.has(btn)) {
+            btn.disabled = false;
+            _guardedBtns.delete(btn);
+        }
     });
 }
 // patch hideLoading to re-enable guarded buttons
@@ -867,6 +872,24 @@ const QUOTES = [
     '愚蠢……何等愚蠢！',
     '一直……都不…喜欢你……',
 ];
+
+function setRandomQuote(animate) {
+    const el = $('#header-quote');
+    const pick = () => {
+        let q;
+        do { q = QUOTES[Math.floor(Math.random() * QUOTES.length)]; } while (q === el.textContent && QUOTES.length > 1);
+        return q;
+    };
+    if (!animate) { el.textContent = pick(); return; }
+    el.style.transition = 'opacity 0.15s';
+    el.style.opacity = '0';
+    setTimeout(() => {
+        el.textContent = pick();
+        el.style.opacity = '1';
+    }, 150);
+}
+
+$('#header-quote').addEventListener('click', () => setRandomQuote(true));
 
 $('#about-repo').textContent = 'GitHub';
 $('#about-author').textContent = 'Ruikoto（泡菜）';
