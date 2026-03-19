@@ -4,7 +4,7 @@
       "id": "1",
       "enabled": true,
       "title": "公告测试",
-      "content": "我说战个未来吧",
+      "content": "我说战个未来吧\n我说战个未来吧",
       "type": "info",
       "expires_at": null,
       "dismissible": true
