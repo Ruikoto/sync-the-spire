@@ -109,7 +109,7 @@ public class GitService
     /// run git.exe with proper env vars. used for SSH (always) and as fallback for HTTPS
     /// when LibGit2Sharp can't handle a platform's auth challenge.
     /// </summary>
-    private void RunGitCli(string args, string? workDir = null, int timeout = 120_000)
+    private string RunGitCli(string args, string? workDir = null, int timeout = 120_000)
     {
         var psi = new ProcessStartInfo
         {
@@ -141,6 +141,8 @@ public class GitService
         var stderr = stderrTask.Result;
         if (proc.ExitCode != 0)
             throw new InvalidOperationException($"git {psi.ArgumentList.FirstOrDefault()} failed: {stderr.Trim()}");
+
+        return stdout;
     }
 
     /// <summary>
@@ -362,13 +364,14 @@ public class GitService
         Commands.Stage(repo, "*");
 
         var status = repo.RetrieveStatus(new StatusOptions());
-        if (!status.IsDirty)
-            return; // nothing to commit
+        if (status.IsDirty)
+        {
+            var cfg = _config.LoadConfig();
+            var sig = MakeSignature(cfg);
+            repo.Commit("Auto-save", sig, sig);
+        }
 
-        var cfg = _config.LoadConfig();
-        var sig = MakeSignature(cfg);
-        repo.Commit("Auto-save", sig, sig);
-
+        // always push — previous commits may be unpushed from a failed attempt
         PushCurrentBranch(repo);
     }
 
@@ -463,29 +466,75 @@ public class GitService
     /// <summary>
     /// push current branch to origin: SSH always uses git.exe, HTTPS/anonymous try LibGit2Sharp
     /// first with git.exe fallback for platforms that LibGit2Sharp can't handle.
+    /// validates remote URL before push and verifies the result after push.
     /// </summary>
     private void PushCurrentBranch(Repository repo)
     {
+        // sanity check: make sure the repo's remote matches user config
+        var cfg = _config.LoadConfig();
+        var remote = repo.Network.Remotes["origin"];
+        if (remote is null)
+            throw new InvalidOperationException("Git 仓库未配置 origin 远端");
+        if (!string.Equals(remote.Url, cfg.RepoUrl, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"远端地址不一致，期望 \"{cfg.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
+
+        var localTip = repo.Head.Tip.Sha;
+        var branchName = repo.Head.FriendlyName;
+
         if (IsSshMode)
         {
             RunGitCli("push -u origin HEAD");
-            return;
+        }
+        else
+        {
+            try
+            {
+                var currentBranch = repo.Head;
+                var pushOpts = new PushOptions();
+                var creds = MakeCredHandler();
+                if (creds != null)
+                    pushOpts.CredentialsProvider = creds;
+
+                // catch per-ref push rejection that LibGit2Sharp silently swallows
+                string? pushError = null;
+                pushOpts.OnPushStatusError = err =>
+                {
+                    pushError = $"Push rejected ({err.Reference}): {err.Message}";
+                };
+
+                repo.Network.Push(currentBranch, pushOpts);
+
+                if (pushError != null)
+                    throw new LibGit2SharpException(pushError);
+            }
+            catch (LibGit2SharpException)
+            {
+                // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
+                RunGitCli("push -u origin HEAD");
+            }
         }
 
-        try
-        {
-            var currentBranch = repo.Head;
-            var pushOpts = new PushOptions();
-            var creds = MakeCredHandler();
-            if (creds != null)
-                pushOpts.CredentialsProvider = creds;
-            repo.Network.Push(currentBranch, pushOpts);
-        }
-        catch (LibGit2SharpException)
-        {
-            // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
-            RunGitCli("push -u origin HEAD");
-        }
+        // final check: verify the commit actually landed on the remote
+        VerifyPushResult(branchName, localTip);
+    }
+
+    /// <summary>
+    /// ask the remote for the branch tip and compare it to what we just pushed
+    /// </summary>
+    private void VerifyPushResult(string branchName, string expectedSha)
+    {
+        var output = RunGitCli($"ls-remote origin refs/heads/{branchName}");
+        // output format: "<sha>\trefs/heads/<branch>\n"
+        var remoteSha = output.Split('\t', 2).FirstOrDefault()?.Trim();
+
+        if (string.IsNullOrEmpty(remoteSha))
+            throw new InvalidOperationException(
+                $"推送验证失败：远端未找到分支 {branchName}，推送可能未成功。");
+
+        if (!string.Equals(remoteSha, expectedSha, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"推送验证失败：远端提交 ({remoteSha[..7]}) 与本地 ({expectedSha[..7]}) 不一致，推送可能未成功。");
     }
 
     /// <summary>
