@@ -24,6 +24,7 @@ public class MessageRouter
         CoreWebView2 webView,
         ConfigService configService,
         GitService gitService,
+        GitResolver gitResolver,
         JunctionService junctionService,
         SaveBackupService backupService,
         SaveMergeService mergeService,
@@ -39,6 +40,10 @@ public class MessageRouter
         // capture the UI SynchronizationContext so background threads can post back
         _uiContext = SynchronizationContext.Current
                      ?? throw new InvalidOperationException("MessageRouter must be created on the UI thread");
+
+        // wire up MinGit download progress to IPC loading overlay
+        gitResolver.OnProgress = p =>
+            Send(IpcResponse.Progress("GIT_DOWNLOAD", p.Message, p.Percent));
     }
 
     public void HandleMessage(string rawJson)

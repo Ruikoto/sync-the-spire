@@ -35,6 +35,12 @@
         <div class="bg-spire-card rounded-xl p-6 flex flex-col items-center gap-3 border border-spire-border">
             <div class="spinner"></div>
             <p id="loading-text" class="text-spire-muted text-sm">Loading...</p>
+            <!-- download progress bar (hidden by default, shown when percent data is present) -->
+            <div id="loading-progress" class="hidden w-48">
+                <div class="h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div id="loading-bar-fill" class="h-full bg-spire-accent rounded-full progress-bar-fill"></div>
+                </div>
+            </div>
         </div>
     </div>
 

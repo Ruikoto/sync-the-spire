@@ -26,7 +26,7 @@ window.chrome.webview.addEventListener('message', e => {
 
     // show progress toasts automatically
     if (data.status === 'progress') {
-        showLoading(data.message || 'Processing...');
+        showLoading(data.message || 'Processing...', data.percent);
         return;
     }
 
@@ -85,8 +85,16 @@ function showPage(name) {
     }
 }
 
-function showLoading(text) {
+function showLoading(text, percent) {
     $('#loading-text').textContent = text;
+    const bar = $('#loading-progress');
+    const fill = $('#loading-bar-fill');
+    if (percent != null && bar && fill) {
+        fill.style.width = percent + '%';
+        bar.classList.remove('hidden');
+    } else if (bar) {
+        bar.classList.add('hidden');
+    }
     $('#loading-overlay').classList.remove('hidden');
     // safety net: auto-hide after 2 min if backend never responds
     clearTimeout(showLoading._timer);
@@ -152,6 +160,11 @@ function guardClick(btn, fn) {
 const _origHideLoading = hideLoading;
 hideLoading = function () {
     _origHideLoading();
+    // reset progress bar for next use
+    const bar = $('#loading-progress');
+    if (bar) bar.classList.add('hidden');
+    const fill = $('#loading-bar-fill');
+    if (fill) fill.style.width = '0';
     _guardedBtns.forEach(btn => btn.disabled = false);
     _guardedBtns.clear();
 };

@@ -218,3 +218,9 @@ button, select {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
 }
+
+/* download progress bar smooth fill */
+.progress-bar-fill {
+    width: 0;
+    transition: width 0.2s ease;
+}

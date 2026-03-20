@@ -8,6 +8,7 @@ namespace SyncTheSpire.Services;
 public class GitService
 {
     private readonly ConfigService _config;
+    private readonly GitResolver _resolver;
 
     // stuff we never want committed -- goes into info/exclude instead of .gitignore
     private const string DefaultExcludeRules =
@@ -26,9 +27,10 @@ public class GitService
         *.user
         """;
 
-    public GitService(ConfigService config)
+    public GitService(ConfigService config, GitResolver resolver)
     {
         _config = config;
+        _resolver = resolver;
     }
 
     private string RepoPath => _config.RepoPath;
@@ -113,7 +115,7 @@ public class GitService
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "git",
+            FileName = _resolver.GetGitPath(),
             WorkingDirectory = workDir ?? RepoPath,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -200,7 +202,7 @@ public class GitService
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "git",
+            FileName = _resolver.GetGitPath(),
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,

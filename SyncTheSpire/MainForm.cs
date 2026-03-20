@@ -105,12 +105,13 @@ public class MainForm : Form
         // wire up services & router (pass Form reference for window controls)
         var configService = new ConfigService();
         var junctionService = new JunctionService();
-        var gitService = new GitService(configService);
+        var gitResolver = new GitResolver();
+        var gitService = new GitService(configService, gitResolver);
         var backupService = new SaveBackupService();
         var mergeService = new SaveMergeService(junctionService, backupService);
         _router = new MessageRouter(
-            _webView.CoreWebView2, configService, gitService, junctionService,
-            backupService, mergeService, this);
+            _webView.CoreWebView2, configService, gitService, gitResolver,
+            junctionService, backupService, mergeService, this);
 
         _webView.CoreWebView2.WebMessageReceived += (_, e) =>
         {
