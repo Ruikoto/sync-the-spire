@@ -1,0 +1,4 @@
+/version.json
+  Access-Control-Allow-Origin: *
+/announcements.json
+  Access-Control-Allow-Origin: *

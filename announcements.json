@@ -1,0 +1,31 @@
+{
+  "announcements": [
+    {
+      "id": "260319-235000",
+      "enabled": true,
+      "title": "存档合并功能更新",
+      "content": "由于存档合并和游戏存档同步机制冲突，会导致游戏启动时云存档覆盖本地存档，进而导致无限回档，最新版本使用存档重定向功能代替了存档合并，开启后游戏会在启用MOD的情况下依然读取原版存档，推荐开启。",
+      "type": "info",
+      "expires_at": null,
+      "dismissible": true
+    },
+    {
+      "id": "260319-175036",
+      "enabled": false,
+      "title": "BUG提醒",
+      "content": "目前存档合并功能存在问题，会导致游戏结束后云存档覆盖本地存档，导致无限回档。\n目前此问题尚在调查中，请暂时不要使用存档合并，改为手动拷贝MOD和普通存档。如已合并可以使用取消合并功能。",
+      "type": "warning",
+      "expires_at": null,
+      "dismissible": false
+    },
+    {
+      "id": "example-notice",
+      "enabled": false,
+      "title": "示例公告标题",
+      "content": "这是一条示例公告，发布前将 enabled 改为 true。",
+      "type": "info",
+      "expires_at": null,
+      "dismissible": true
+    }
+  ]
+}
