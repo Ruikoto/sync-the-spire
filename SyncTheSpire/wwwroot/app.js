@@ -184,10 +184,40 @@ function showConfirm(message, title) {
     });
 }
 
+// conflict resolution dialog — returns 'force' | 'reset' | null
+function showConflictDialog(message) {
+    return new Promise(resolve => {
+        $('#conflict-message').textContent = message;
+        const modal = $('#conflict-modal');
+        modal.classList.remove('hidden');
+
+        function cleanup() {
+            modal.classList.add('hidden');
+            $('#conflict-use-local').removeEventListener('click', onLocal);
+            $('#conflict-use-remote').removeEventListener('click', onRemote);
+            $('#conflict-cancel').removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onBackdrop);
+            document.removeEventListener('keydown', onKeydown);
+        }
+
+        function onLocal() { cleanup(); resolve('force'); }
+        function onRemote() { cleanup(); resolve('reset'); }
+        function onCancel() { cleanup(); resolve(null); }
+        function onBackdrop(e) { if (e.target === modal) { cleanup(); resolve(null); } }
+        function onKeydown(e) { if (e.key === 'Escape') { cleanup(); resolve(null); } }
+
+        $('#conflict-use-local').addEventListener('click', onLocal);
+        $('#conflict-use-remote').addEventListener('click', onRemote);
+        $('#conflict-cancel').addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKeydown);
+    });
+}
+
 // close any closeable modal on Escape
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    const modals = ['#branch-modal', '#backup-list-modal', '#about-modal'];
+    const modals = ['#branch-modal', '#backup-list-modal', '#about-modal', '#conflict-modal'];
     for (const sel of modals) {
         const m = $(sel);
         if (m && !m.classList.contains('hidden')) {
@@ -394,9 +424,30 @@ on('CREATE_MY_BRANCH', data => {
     }
 });
 
-on('SAVE_AND_PUSH_MY_BRANCH', data => {
+on('SAVE_AND_PUSH_MY_BRANCH', async data => {
     if (data.status === 'success') {
         toast(data.payload?.message || 'Pushed!', 'success');
+        sendMessage('GET_STATUS');
+    }
+    if (data.status === 'conflict') {
+        const choice = await showConflictDialog(
+            data.payload?.message || '云端存在更新的配置，与本地改动冲突。'
+        );
+        if (choice === 'force') sendMessage('FORCE_PUSH');
+        else if (choice === 'reset') sendMessage('RESET_TO_REMOTE');
+    }
+});
+
+on('FORCE_PUSH', data => {
+    if (data.status === 'success') {
+        toast(data.payload?.message || 'Pushed!', 'success');
+        sendMessage('GET_STATUS');
+    }
+});
+
+on('RESET_TO_REMOTE', data => {
+    if (data.status === 'success') {
+        toast(data.payload?.message || 'Synced!', 'success');
         sendMessage('GET_STATUS');
     }
 });

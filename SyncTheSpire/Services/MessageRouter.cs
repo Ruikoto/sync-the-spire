@@ -144,6 +144,14 @@ public class MessageRouter
                     HandleSaveAndPush();
                     break;
 
+                case "FORCE_PUSH":
+                    HandleForcePush();
+                    break;
+
+                case "RESET_TO_REMOTE":
+                    HandleResetToRemote();
+                    break;
+
                 case "RESTORE_JUNCTION":
                     HandleRestoreJunction();
                     break;
@@ -478,9 +486,37 @@ public class MessageRouter
 
         Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
 
-        _gitService.CommitAndPush();
+        var pushed = _gitService.CommitAndPush();
+
+        if (!pushed)
+        {
+            // branches diverged — let the user pick a resolution
+            Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH", new
+            {
+                message = "云端存在更新的配置，与本地改动冲突。"
+            }));
+            return;
+        }
 
         Send(IpcResponse.Success("SAVE_AND_PUSH_MY_BRANCH", new { message = "已保存并上传！" }));
+    }
+
+    private void HandleForcePush()
+    {
+        Send(IpcResponse.Progress("FORCE_PUSH", "正在覆盖云端..."));
+        _gitService.ForcePush();
+        Send(IpcResponse.Success("FORCE_PUSH", new { message = "已覆盖云端配置！" }));
+    }
+
+    private void HandleResetToRemote()
+    {
+        Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
+        _gitService.ResetToRemote();
+
+        var cfg = _configService.LoadConfig();
+        EnsureJunction(cfg.GameModPath);
+
+        Send(IpcResponse.Success("RESET_TO_REMOTE", new { message = "已同步为云端配置！" }));
     }
 
     private void HandleRestoreJunction()

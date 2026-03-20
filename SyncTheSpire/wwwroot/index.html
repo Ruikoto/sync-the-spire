@@ -79,6 +79,28 @@
         </div>
     </div>
 
+    <!-- conflict resolution dialog -->
+    <div id="conflict-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
+            <h3 class="text-sm font-medium mb-2">检测到冲突</h3>
+            <p id="conflict-message" class="text-xs text-spire-muted mb-5 leading-relaxed"></p>
+            <div class="flex flex-col gap-2">
+                <button id="conflict-use-local"
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors">
+                    使用本地版本（覆盖云端）
+                </button>
+                <button id="conflict-use-remote"
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors">
+                    使用云端版本（覆盖本地）
+                </button>
+                <button id="conflict-cancel"
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    取消
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- update available modal (with changelog) -->
     <div id="update-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">

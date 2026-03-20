@@ -33,6 +33,9 @@ public class IpcResponse
     public static IpcResponse Progress(string evt, string message) =>
         new() { Event = evt, Data = new { status = "progress", message } };
 
+    public static IpcResponse Conflict(string evt, object? data = null) =>
+        new() { Event = evt, Data = new { status = "conflict", payload = data } };
+
     // reflection-based serialization -- source-gen can't handle anonymous types in Data
     private static readonly JsonSerializerOptions SerializeOpts = new()
     {

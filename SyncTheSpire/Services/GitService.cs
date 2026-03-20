@@ -353,7 +353,13 @@ public class GitService
         PushCurrentBranch(repo);
     }
 
-    public void CommitAndPush()
+    public enum BranchDivergence { UpToDate, LocalAhead, Diverged }
+
+    /// <summary>
+    /// stage + commit + fetch + check divergence. returns true if push went through,
+    /// false if branches have diverged (caller should ask user what to do).
+    /// </summary>
+    public bool CommitAndPush()
     {
         using var repo = OpenRepo();
 
@@ -371,8 +377,47 @@ public class GitService
             repo.Commit("Auto-save", sig, sig);
         }
 
-        // always push — previous commits may be unpushed from a failed attempt
+        // fetch first so we can detect divergence before pushing
+        FetchAll(repo);
+
+        var divergence = CheckDivergence(repo);
+        if (divergence == BranchDivergence.Diverged)
+            return false;
+
+        // local is ahead or up-to-date — safe to push
         PushCurrentBranch(repo);
+        return true;
+    }
+
+    /// <summary>
+    /// force push local state to remote, overwriting whatever the remote has
+    /// </summary>
+    public void ForcePush()
+    {
+        using var repo = OpenRepo();
+
+        if (IsProtectedBranch(repo.Head.FriendlyName))
+            throw new InvalidOperationException($"不允许推送到受保护的分支：{repo.Head.FriendlyName}");
+
+        ForcePushCurrentBranch(repo);
+    }
+
+    /// <summary>
+    /// discard local state and reset to whatever the remote has
+    /// </summary>
+    public void ResetToRemote()
+    {
+        using var repo = OpenRepo();
+
+        var branchName = repo.Head.FriendlyName;
+        FetchAll(repo);
+
+        var remoteBranch = repo.Branches[$"origin/{branchName}"];
+        if (remoteBranch is null)
+            throw new InvalidOperationException($"远端分支 {branchName} 不存在");
+
+        repo.Reset(ResetMode.Hard, remoteBranch.Tip);
+        CleanUntracked(repo);
     }
 
     /// <summary>
@@ -392,6 +437,32 @@ public class GitService
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// compare local HEAD with origin tracking branch to see if they've diverged
+    /// </summary>
+    private static BranchDivergence CheckDivergence(Repository repo)
+    {
+        var branchName = repo.Head.FriendlyName;
+        var remoteBranch = repo.Branches[$"origin/{branchName}"];
+
+        // no remote branch yet — local is ahead (brand new branch)
+        if (remoteBranch is null)
+            return BranchDivergence.LocalAhead;
+
+        var localTip = repo.Head.Tip;
+        var remoteTip = remoteBranch.Tip;
+
+        if (localTip.Sha == remoteTip.Sha)
+            return BranchDivergence.UpToDate;
+
+        // is remote tip an ancestor of local? -> local is simply ahead
+        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
+        if (mergeBase?.Sha == remoteTip.Sha)
+            return BranchDivergence.LocalAhead;
+
+        return BranchDivergence.Diverged;
+    }
 
     public static bool IsProtectedBranch(string branchName) =>
         ProtectedBranches.Contains(branchName);
@@ -535,6 +606,26 @@ public class GitService
         if (!string.Equals(remoteSha, expectedSha, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(
                 $"推送验证失败：远端提交 ({remoteSha[..7]}) 与本地 ({expectedSha[..7]}) 不一致，推送可能未成功。");
+    }
+
+    /// <summary>
+    /// force push current branch, with remote URL validation and post-push verification
+    /// </summary>
+    private void ForcePushCurrentBranch(Repository repo)
+    {
+        var cfg = _config.LoadConfig();
+        var remote = repo.Network.Remotes["origin"];
+        if (remote is null)
+            throw new InvalidOperationException("Git 仓库未配置 origin 远端");
+        if (!string.Equals(remote.Url, cfg.RepoUrl, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"远端地址不一致，期望 \"{cfg.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
+
+        var localTip = repo.Head.Tip.Sha;
+        var branchName = repo.Head.FriendlyName;
+
+        RunGitCli("push --force-with-lease -u origin HEAD");
+        VerifyPushResult(branchName, localTip);
     }
 
     /// <summary>
