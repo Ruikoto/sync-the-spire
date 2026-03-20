@@ -30,7 +30,7 @@ jobs:
       - name: Get Version Name
         id: version
         run: |
-          $ver = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "dev-build" }
+          $ver = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "nightly-$(Get-Date -Format 'yyyyMMdd-HHmmss' -AsUTC)" }
           echo "VERSION_TAG=$ver" >> $env:GITHUB_OUTPUT
 
       - name: Get File Suffix

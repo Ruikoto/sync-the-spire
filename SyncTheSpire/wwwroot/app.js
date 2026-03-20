@@ -341,8 +341,8 @@ on('GET_VERSION', data => {
     appVersion = data.payload?.version || 'unknown';
     appArch = data.payload?.arch || 'x64';
     $('#about-version').textContent = appVersion;
-    if (appVersion.startsWith('nightly-')) {
-        toast('当前为 Nightly 构建版本，建议前往 About 页面下载最新正式版', 'info');
+    if (!/^v?\d+\.\d+/.test(appVersion)) {
+        toast('当前为非正式构建版本，建议前往 About 页面下载最新正式版', 'info');
     }
     checkForUpdates();
     checkAnnouncements();
@@ -1131,7 +1131,10 @@ function showUpdateModal(isForced) {
     const closeBtn = $('#update-modal-close');
     const cancelBtn = $('#update-cancel');
 
-    titleEl.textContent = `发现新版本 ${latestVersionInfo.latest_version}`;
+    titleEl.textContent = '发现新版本';
+
+    // show version comparison
+    $('#update-version-info').textContent = `${appVersion} → ${latestVersionInfo.latest_version}`;
 
     // render changelog
     const changelog = latestVersionInfo.changelog;
@@ -1181,8 +1184,8 @@ async function checkForUpdates(silent = true) {
         latestVersionInfo = await res.json();
         updateAboutVersionStatus();
 
-        // nightly users already got a toast, don't double-nag
-        if (appVersion.startsWith('nightly-') || appVersion === 'unknown') return;
+        // nightly / dev / unknown builds: skip update prompts entirely
+        if (!/^v?\d+\.\d+/.test(appVersion)) return;
 
         const hasUpdate = compareVersions(appVersion, latestVersionInfo.latest_version) > 0;
 
