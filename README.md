@@ -4,115 +4,129 @@
 
 <h1 align="center">Sync the Spire</h1>
 
-基于 Git 的极简 Mod 同步器，为《杀戮尖塔2》等缺乏官方创意工坊的游戏设计。
+<p align="center">
+  一键同步《杀戮尖塔2》Mod 配置，和朋友用同一套 Mod 联机。
+</p>
 
-面向完全不懂代码和 Git 的纯小白玩家 —— 底层用 Git 做版本控制和同步，UI 层完全隐藏 Git 概念，包装为"存档"、"同步"、"覆盖"等游戏术语。
+<p align="center">
+  <a href="https://github.com/Ruikoto/sync-the-spire/releases">下载最新版</a>
+</p>
 
-## ⚠️ 数据安全警告
+> **⚠️ 首次使用前请手动备份一次存档和 Mod 文件夹。** 本软件经过初步测试，但多一道保险总没错。非营利性开源项目，开发者不对数据损失负责。
 
-使用前请手动备份一次，虽然初步测试没任何问题，但此软件未经过广泛与全面的测试，**多一道保险总没错**。本仓库为非营利性开源项目，开发者不对任何数据损失负责。
+## 下载安装
 
-## 下载
+前往 [Releases](https://github.com/Ruikoto/sync-the-spire/releases) 下载，解压即用，无需安装。
 
-前往 [Releases](https://github.com/Ruikoto/sync-the-spire/releases) 下载最新版本。
+## 快速上手
 
-提供两种构建：
-- **自包含版（推荐）** — 无需安装 .NET 运行时，开箱即用
-- **框架依赖版** — 体积更小，需要系统已安装 .NET 10 运行时
+1. 运行 `SyncTheSpire.exe`
+2. 填写**远程仓库地址**（房主提供给你的链接），选择认证方式
+3. 填写**游戏安装路径**
+4. 点击「保存并初始化」，等待完成即可
 
-同时提供 x64 和 ARM64 架构，程序会自动识别并推荐对应版本。
+<details>
+<summary>💡 认证方式怎么选？</summary>
 
-## 快速开始
+| 方式 | 适用场景 |
+|------|----------|
+| **免密** | 公开仓库，或 Gitee 仓库（推送时系统会弹出登录窗口） |
+| **HTTPS** | GitHub 等平台的私有仓库，填用户名和 Token |
+| **SSH** | 已配置 SSH 密钥的用户 |
 
-1. 下载并解压，运行 `SyncTheSpire.exe`
-2. 填写远程仓库 URL，选择认证方式：
-   - **免密** — 公开仓库无需认证（推荐 Gitee 用户使用）
-   - **HTTPS** — 用户名 + 密码/Token
-   - **SSH** — 私钥路径 + 可选口令
-3. 填写游戏安装路径和存档路径（可选）
-4. 点击「保存并初始化」
+</details>
 
-> **游戏安装路径怎么找？** Steam 中右键游戏 → 管理 → 浏览本地文件。
->
-> **存档路径怎么找？** 启动游戏后按 `` ` `` 键打开控制台，输入 `open saves` 回车。
+<details>
+<summary>💡 游戏安装路径怎么找？</summary>
 
-如果系统上未安装 Git，程序会自动下载 MinGit 便携版，无需手动安装。
+Steam 中右键游戏 → 管理 → 浏览本地文件。
 
-## 功能介绍
+</details>
 
-### Mod 同步
+<details>
+<summary>💡 存档路径怎么找？</summary>
 
-核心功能。每个人通过「分支」管理自己的 Mod 配置，所有人共享同一个 Git 仓库。
+启动游戏后按 <code>`</code> 键打开控制台，输入 `open saves` 回车。
 
-**作为房主（分享 Mod 配置的人）：**
+</details>
 
-1. 在「做房主」区域输入分支名，点击「创建」
-2. 按自己的喜好安装、调整 Mods 文件夹里的内容
-3. 点击「保存改动并上传」，Mod 配置就会同步到云端
+## 使用方式
 
-上传时会自动检测冲突（例如其他设备也推送了更新）。冲突时弹出对话框，可以选择「使用本地版本（覆盖云端）」或「使用云端版本（覆盖本地）」。
+### 👑 做房主 — 分享你的 Mod 配置
 
-**作为跟随者（使用别人 Mod 配置的人）：**
+1. 输入一个分支名（比如你的昵称），点击「创建」
+2. 像平时一样安装、调整 Mods
+3. 搞定后点「保存改动并上传」
 
-1. 点击「浏览分支」，选择房主的分支
-2. 确认后自动拉取该分支的 Mod 配置，完成后直接启动游戏即可
+其他人就能同步到你的 Mod 配置了。
 
-### 纯净模式
+如果上传时发现云端有更新的内容（比如你在另一台电脑也改过），会弹窗让你选择保留哪边的版本。
 
-点击「清空 Mod」会断开 Mods 文件夹的链接，游戏恢复原版状态。Mod 数据不会删除，随时可通过「恢复 Mod」重新连接。
+### 🎮 跟随别人 — 使用房主的 Mod 配置
 
-### 存档重定向
+1. 点击「浏览分支」
+2. 选择房主的分支，确认
+3. 同步完成，直接开游戏
 
-杀戮尖塔2 的普通模式和 Mod 模式使用不同的存档文件夹。开启存档重定向后，Mod 模式会直接读取普通模式的存档，角色进度在两种模式间互通。
+### 🔌 Mod 开关
 
-- **开启** — Mod 模式使用普通模式的存档
-- **关闭** — 恢复为独立存档
+关闭 Mod 开关，游戏立刻恢复无 Mod 的原版状态。Mod 不会被删除，重新打开即可恢复。
 
-> 存档重定向通过内置辅助 Mod 实现（感谢 @皮一下就很凡），开启时会自动安装。
+### 🔀 存档重定向
 
-### 存档备份
+杀戮尖塔2 的普通模式和 Mod 模式各有一套独立存档。开启存档重定向后，Mod 模式会直接使用普通模式的存档，角色进度互通。随时可以关闭恢复独立存档。
 
-支持手动备份整个存档文件夹，需要时恢复到任意备份点。恢复前也会自动备份当前状态，防止误操作。创建 Mod 链接时也会自动备份原有 Mod 文件夹。
+### 💾 存档备份
 
-### 自动更新
+一键备份整个存档文件夹。需要恢复时选择历史备份点即可，恢复前会自动再备份一次当前状态，不怕选错。
 
-启动时自动检查新版本。根据版本差异采取不同策略：
+## 常见问题
 
-- **强制更新** — 版本过旧时弹出不可关闭的更新窗口
-- **弹窗提示** — 有新版本时弹窗提醒，可选择稍后更新
-- **静默提示** — 小版本更新仅在 About 页面显示小红点
+<details>
+<summary>没装过 Git 能用吗？</summary>
 
-也可在 About 页面手动检查和下载。
+能。软件会自动下载所需的 Git 组件，不需要你手动安装任何东西。
 
-### 应用内公告
+</details>
 
-支持推送公告到所有用户，显示为页面顶部的彩色横幅。支持不同级别（信息/警告/错误）、过期时间和用户关闭记忆。
+<details>
+<summary>会影响游戏本体文件吗？</summary>
 
-## 原理简述
+不会。软件只操作 Mods 文件夹和存档文件夹，不修改游戏本体。关闭 Mod 开关即可恢复原版状态。
 
-```
-游戏目录\Mods\  ──(NTFS Junction)──>  %LocalAppData%\SyncTheSpire\Repo\
-```
+</details>
 
-通过 NTFS Junction（目录联接）将游戏 Mods 文件夹指向 AppData 下的 Git 仓库。游戏读取 Mods 时直接穿透到仓库目录，`.git` 等文件不会被游戏扫到（`.git` 目录被分离存放）。所有 Git 操作在后台自动完成，用户无需了解 Git。
+<details>
+<summary>我的账号密码安全吗？</summary>
 
-认证凭据使用 Windows DPAPI 加密存储，仅当前用户可解密。
+认证信息使用 Windows 系统级加密存储，不上传到任何服务器，只有你本机当前用户能读取。
 
-## 从源码构建
+</details>
 
-需要 Windows 10/11 和 .NET 10 SDK。
+<details>
+<summary>支持 Gitee 吗？</summary>
+
+支持。Gitee 仓库推荐用「免密」方式。
+
+</details>
+
+---
+
+<details>
+<summary>开发者信息</summary>
+
+**技术栈：** .NET 10 · WinForms · WebView2 · LibGit2Sharp · Tailwind CSS · GitHub Actions
+
+**从源码构建：** 需要 Windows 10/11 + .NET 10 SDK
 
 ```bash
-# 开发运行
 dotnet run --project SyncTheSpire
 
-# 发布单文件 EXE（自包含，x64）
+# 发布（自包含 x64）
 dotnet publish SyncTheSpire -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true
 
-# 发布单文件 EXE（自包含，ARM64）
+# 发布（自包含 ARM64）
 dotnet publish SyncTheSpire -c Release -r win-arm64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true
 ```
 
-## 技术栈
-
-.NET 10 + WinForms + WebView2 | LibGit2Sharp | HTML/JS/TailwindCSS | GitHub Actions + GitHub Pages
+</details>
