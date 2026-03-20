@@ -171,11 +171,14 @@
                             class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                     </div>
                     <div>
-                        <label class="block text-sm mb-2">鉴权方式</label>
+                        <div class="flex items-center gap-1.5 mb-2">
+                            <label class="block text-sm">鉴权方式</label>
+                            <span class="help-tip" data-tip="Gitee 平台请使用免密认证方式">?</span>
+                        </div>
                         <div class="flex bg-spire-bg rounded-lg border border-spire-border p-0.5">
                             <label class="auth-tab active flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150">
                                 <input type="radio" name="authType" value="anonymous" checked class="hidden" />
-                                匿名
+                                免密
                             </label>
                             <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
                                 <input type="radio" name="authType" value="https" class="hidden" />

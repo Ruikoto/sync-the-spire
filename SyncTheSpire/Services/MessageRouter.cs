@@ -222,9 +222,9 @@ public class MessageRouter
             var msg = authType switch
             {
                 "anonymous" =>
-                    "该仓库需要认证，无法匿名访问。\n请切换到 HTTPS 或 SSH 认证方式。",
+                    "仓库认证失败，请重试或切换到其他认证方式。",
                 "https" =>
-                    "鉴权失败，请检查用户名和 Token 是否正确。",
+                    "仓库认证失败，请检查用户名和 Token 是否正确。",
                 _ => $"Git 认证失败：{ex.Message}"
             };
             Send(IpcResponse.Error(req.Action, msg));
