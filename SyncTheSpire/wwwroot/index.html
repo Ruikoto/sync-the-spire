@@ -201,7 +201,7 @@
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
                             <label for="cfg-save" class="block text-sm">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
-                            <span class="help-tip" data-tip="启动游戏后，按键盘数字 1 左侧的 ` 键打开控制台，输入 open saves 后按回车，打开的文件夹即是存档路径。">?</span>
+                            <span class="help-tip" data-tip="启动游戏后，按键盘数字 1 左侧的 ` 键打开控制台，输入 open saves 后按回车，打开的文件夹即是存档路径。不填写则无法使用存档备份与恢复功能，其他功能不受影响。">?</span>
                         </div>
                         <div class="flex gap-2">
                             <input id="cfg-save" type="text" placeholder="直接粘贴路径或点击右侧按钮选择"
@@ -237,8 +237,9 @@
                 <span id="header-quote" class="text-xs text-spire-muted"></span>
             </div>
             <div class="flex items-center gap-3">
-                <button id="btn-about" class="text-spire-muted hover:text-spire-text text-sm transition-colors">
+                <button id="btn-about" class="relative text-spire-muted hover:text-spire-text text-sm transition-colors">
                     About
+                    <span id="about-update-dot" class="hidden absolute -top-0.5 -right-2 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
                 </button>
                 <button id="btn-settings" class="text-spire-muted hover:text-spire-text text-sm transition-colors">
                     Settings
@@ -361,7 +362,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-sm font-medium">存档备份</h2>
-                    <p class="text-xs text-spire-muted mt-0.5">手动备份或恢复游戏存档</p>
+                    <p id="save-backup-desc" class="text-xs text-spire-muted mt-0.5">手动备份或恢复游戏存档</p>
                 </div>
                 <div class="flex gap-2">
                     <button id="btn-backup-saves"

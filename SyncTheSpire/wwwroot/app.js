@@ -66,6 +66,7 @@ let currentBranch = '';
 let needsBranchSelection = false;
 let appVersion = '';
 let appArch = 'x64';
+let savePathConfigured = false;
 
 function showPage(name) {
     $('#page-setup').classList.add('hidden');
@@ -329,6 +330,9 @@ on('GET_STATUS', data => {
         } else {
             showPage('main');
             updateStatusCard(payload);
+            // default to disabled until GET_SAVE_STATUS confirms save path
+            savePathConfigured = false;
+            updateSaveBackupCard();
             // pre-fetch branches so the modal opens instantly
             sendMessage('GET_BRANCHES');
             sendMessage('GET_SAVE_STATUS');
@@ -454,9 +458,29 @@ on('SET_REDIRECT', data => {
 
 // ── save management handlers ────────────────────────────────────────────────
 
+function updateSaveBackupCard() {
+    const btns = [$('#btn-backup-saves'), $('#btn-restore-saves')];
+    const desc = $('#save-backup-desc');
+    const openSaveBtn = $('#btn-open-save');
+
+    if (savePathConfigured) {
+        btns.forEach(b => { b.disabled = false; b.classList.remove('opacity-50', 'cursor-not-allowed'); });
+        if (desc) desc.textContent = '手动备份或恢复游戏存档';
+        openSaveBtn.disabled = false;
+        openSaveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+        btns.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
+        if (desc) desc.textContent = '未配置存档路径，请在 Settings 中设置后使用';
+        openSaveBtn.disabled = true;
+        openSaveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+}
+
 on('GET_SAVE_STATUS', data => {
     if (data.status !== 'success') return;
     const p = data.payload;
+    savePathConfigured = !!p.isConfigured;
+    updateSaveBackupCard();
     // if saves are in merged state, prompt user to unlink
     if (p.isConfigured && (p.mergeState === 'linked' || p.mergeState === 'partial')) {
         $('#save-unlink-modal').classList.remove('hidden');
@@ -728,7 +752,10 @@ document.querySelectorAll('input[name="authType"]').forEach(radio => {
 
 // quick-open folder buttons
 $('#btn-open-mod').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'mod' }));
-$('#btn-open-save').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'save' }));
+$('#btn-open-save').addEventListener('click', () => {
+    if ($('#btn-open-save').disabled) return;
+    sendMessage('OPEN_FOLDER', { folderType: 'save' });
+});
 $('#btn-open-config').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'config' }));
 
 
@@ -759,6 +786,7 @@ guardClick($('#btn-backup-saves'), async () => {
 });
 
 $('#btn-restore-saves').addEventListener('click', () => {
+    if ($('#btn-restore-saves').disabled) return;
     sendMessage('GET_BACKUP_LIST');
 });
 
@@ -958,6 +986,7 @@ $('#about-repo').addEventListener('click', e => { e.preventDefault(); openExtern
 $('#about-author').addEventListener('click', e => { e.preventDefault(); openExternal(AUTHOR_URL); });
 
 $('#btn-about').addEventListener('click', () => {
+    hideUpdateBadge();
     $('#about-modal').classList.remove('hidden');
 });
 $('#about-modal-close').addEventListener('click', () => {
@@ -981,6 +1010,33 @@ function compareVersions(current, latest) {
         if ((l[i] || 0) !== (c[i] || 0)) return (l[i] || 0) - (c[i] || 0);
     }
     return 0;
+}
+
+// decide which update tier the current client falls into
+function getUpdateBehavior() {
+    const info = latestVersionInfo;
+    const hasThresholds = info.force_update_below || info.popup_update_below;
+
+    if (hasThresholds) {
+        if (info.force_update_below && compareVersions(appVersion, info.force_update_below) >= 0)
+            return 'forced';
+        if (info.popup_update_below && compareVersions(appVersion, info.popup_update_below) >= 0)
+            return 'popup';
+        return 'silent';
+    }
+
+    // legacy fallback — old server without threshold fields
+    return info.force_update ? 'forced' : 'popup';
+}
+
+function showUpdateBadge() {
+    const dot = $('#about-update-dot');
+    if (dot) dot.classList.remove('hidden');
+}
+
+function hideUpdateBadge() {
+    const dot = $('#about-update-dot');
+    if (dot) dot.classList.add('hidden');
 }
 
 function updateAboutVersionStatus() {
@@ -1077,9 +1133,23 @@ async function checkForUpdates(silent = true) {
         // nightly users already got a toast, don't double-nag
         if (appVersion.startsWith('nightly-') || appVersion === 'unknown') return;
 
-        if (compareVersions(appVersion, latestVersionInfo.latest_version) > 0) {
-            const isForced = !!latestVersionInfo.force_update;
-            showUpdateModal(isForced);
+        const hasUpdate = compareVersions(appVersion, latestVersionInfo.latest_version) > 0;
+
+        if (hasUpdate) {
+            const behavior = getUpdateBehavior();
+
+            if (behavior === 'forced') {
+                showUpdateModal(true);
+            } else if (behavior === 'popup' || !silent) {
+                // popup tier: show dismissible modal on startup
+                // silent tier: only show when user manually checks
+                showUpdateModal(false);
+            }
+
+            // badge hint for silent-tier updates
+            if (behavior === 'silent') {
+                showUpdateBadge();
+            }
         } else if (!silent) {
             toast('当前已是最新版本', 'success');
         }

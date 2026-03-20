@@ -159,6 +159,8 @@ jobs:
           # read release metadata from repo
           CHANGELOG=$(jq -r '.changelog // ""' release-info.json)
           FORCE=$(jq -r '.force_update // false' release-info.json)
+          FORCE_BELOW=$(jq -r '.force_update_below // ""' release-info.json)
+          POPUP_BELOW=$(jq -r '.popup_update_below // ""' release-info.json)
 
           mkdir -p pages_output
 
@@ -170,6 +172,8 @@ jobs:
             --arg dl_arm "$PROXY/$NAME-$TAG-win-arm64.zip" \
             --arg changelog "$CHANGELOG" \
             --argjson force "$FORCE" \
+            --arg force_below "$FORCE_BELOW" \
+            --arg popup_below "$POPUP_BELOW" \
             '{
               latest_version: $ver,
               published_at: $date,
@@ -177,7 +181,9 @@ jobs:
               download_url_x64: $dl_x64,
               download_url_arm: $dl_arm,
               force_update: $force,
-              changelog: $changelog
+              changelog: $changelog,
+              force_update_below: (if $force_below == "" then null else $force_below end),
+              popup_update_below: (if $popup_below == "" then null else $popup_below end)
             }' > pages_output/version.json
 
           # copy announcements from repo
