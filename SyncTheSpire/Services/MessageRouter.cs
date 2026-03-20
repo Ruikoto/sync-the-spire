@@ -766,7 +766,9 @@ public class MessageRouter
 
     // ── save redirect handlers ────────────────────────────────────
 
-    private const string RedirectModId = "sts2-heybox-support";
+    private const string RedirectModId = "ModProfileBypass";
+    // only these files belong to the redirect mod — delete precisely, nothing else
+    private static readonly string[] RedirectModFiles = ["ModProfileBypass.dll", "ModProfileBypass.json"];
 
     private void HandleGetRedirectStatus()
     {
@@ -778,31 +780,18 @@ public class MessageRouter
             Send(IpcResponse.Success("GET_REDIRECT_STATUS", new
             {
                 isJunctionActive = false,
-                isModInstalled = false,
                 isEnabled = false
             }));
             return;
         }
 
-        var settingsPath = Path.Combine(cfg.GameModPath, RedirectModId, "settings.json");
-        var isInstalled = File.Exists(settingsPath);
-        var isEnabled = false;
-
-        if (isInstalled)
-        {
-            try
-            {
-                var json = JsonDocument.Parse(File.ReadAllText(settingsPath));
-                if (json.RootElement.TryGetProperty("EnableProfileSkip", out var prop))
-                    isEnabled = prop.GetBoolean();
-            }
-            catch { /* corrupted settings, treat as disabled */ }
-        }
+        // mod is "enabled" when both files exist in the game mods dir
+        var modDir = Path.Combine(cfg.GameModPath, RedirectModId);
+        var isEnabled = RedirectModFiles.All(f => File.Exists(Path.Combine(modDir, f)));
 
         Send(IpcResponse.Success("GET_REDIRECT_STATUS", new
         {
             isJunctionActive = true,
-            isModInstalled = isInstalled,
             isEnabled
         }));
     }
@@ -818,43 +807,34 @@ public class MessageRouter
 
         var enabled = payload?.GetProperty("enabled").GetBoolean() ?? true;
         var modDir = Path.Combine(cfg.GameModPath, RedirectModId);
-        var settingsPath = Path.Combine(modDir, "settings.json");
 
-        // auto-install the helper mod if not present
-        if (!File.Exists(settingsPath))
+        if (enabled)
         {
+            // deploy: copy mod files from bundled assets
             var assetsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", RedirectModId);
             if (!Directory.Exists(assetsDir))
             {
-                Send(IpcResponse.Error("SET_REDIRECT", "辅助 Mod 资源缺失，请重新安装软件"));
+                Send(IpcResponse.Error("SET_REDIRECT", "重定向 Mod 资源缺失，请重新安装软件"));
                 return;
             }
-            SaveBackupService.CopyDirectoryRecursive(assetsDir, modDir);
+            Directory.CreateDirectory(modDir);
+            foreach (var file in RedirectModFiles)
+                File.Copy(Path.Combine(assetsDir, file), Path.Combine(modDir, file), overwrite: true);
         }
-
-        // read, modify EnableProfileSkip, write back
-        var text = File.ReadAllText(settingsPath);
-        using var doc = JsonDocument.Parse(text);
-        var root = doc.RootElement;
-
-        using var ms = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
+        else
         {
-            writer.WriteStartObject();
-            foreach (var prop in root.EnumerateObject())
+            // remove: delete only the exact mod files, leave the folder if other stuff exists
+            foreach (var file in RedirectModFiles)
             {
-                if (prop.Name == "EnableProfileSkip")
-                    writer.WriteBoolean("EnableProfileSkip", enabled);
-                else
-                    prop.WriteTo(writer);
+                var path = Path.Combine(modDir, file);
+                if (File.Exists(path))
+                    File.Delete(path);
             }
-            // add the field if it didn't exist
-            if (!root.TryGetProperty("EnableProfileSkip", out _))
-                writer.WriteBoolean("EnableProfileSkip", enabled);
-            writer.WriteEndObject();
-        }
 
-        File.WriteAllBytes(settingsPath, ms.ToArray());
+            // clean up empty folder
+            if (Directory.Exists(modDir) && !Directory.EnumerateFileSystemEntries(modDir).Any())
+                Directory.Delete(modDir);
+        }
 
         Send(IpcResponse.Success("SET_REDIRECT", new
         {

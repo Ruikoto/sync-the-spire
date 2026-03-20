@@ -28,7 +28,7 @@
   <ItemGroup>
     <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="assets\sts2-heybox-support\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\ModProfileBypass\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

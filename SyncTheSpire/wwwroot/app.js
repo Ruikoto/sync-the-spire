@@ -489,11 +489,7 @@ function updateRedirectCard(data) {
 
     checkbox.disabled = false;
 
-    if (!data.isModInstalled) {
-        dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
-        label.textContent = '辅助 Mod 未安装（启用时自动安装）';
-        checkbox.checked = false;
-    } else if (data.isEnabled) {
+    if (data.isEnabled) {
         dot.className = 'w-2 h-2 rounded-full bg-spire-success';
         label.textContent = '已启用';
         checkbox.checked = true;

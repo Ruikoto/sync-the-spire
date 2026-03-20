@@ -1,0 +1,11 @@
+{
+  "id": "ModProfileBypass",
+  "name": "Profile Bypass",
+  "author": "Ruikoto",
+  "description": "Use unmodded profile directory for save data",
+  "version": "1.0.1",
+  "has_pck": false,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": false
+}
