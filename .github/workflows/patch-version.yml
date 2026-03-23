@@ -1,0 +1,91 @@
+name: Patch version.json
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  BINARY_NAME: "SyncTheSpire"
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Patch version.json on gh-pages
+        run: |
+          REPO="${{ github.repository }}"
+          NAME="${{ env.BINARY_NAME }}"
+          REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$REPO.git"
+
+          # read release metadata from main branch
+          CHANGELOG_FILE="changelog.md"
+          FORCE=$(jq -r '.force_update // false' release-info.json)
+          FORCE_BELOW=$(jq -r '.force_update_below // ""' release-info.json)
+          POPUP_BELOW=$(jq -r '.popup_update_below // ""' release-info.json)
+
+          # clone gh-pages — must already exist (created by publish workflow)
+          git clone --branch gh-pages --single-branch "$REMOTE" pages_output
+
+          cd pages_output
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ ! -f version.json ]; then
+            echo "::error::version.json not found on gh-pages. Run a full release first."
+            exit 1
+          fi
+
+          # read existing fields we don't want to change
+          TAG=$(jq -r '.latest_version' version.json)
+          DATE=$(jq -r '.published_at' version.json)
+          REL_URL=$(jq -r '.release_url' version.json)
+          DL_X64=$(jq -r '.download_url_x64' version.json)
+          DL_ARM=$(jq -r '.download_url_arm' version.json)
+
+          # rebuild version.json with updated metadata
+          jq -n \
+            --arg ver "$TAG" \
+            --arg date "$DATE" \
+            --arg rel_url "$REL_URL" \
+            --arg dl_x64 "$DL_X64" \
+            --arg dl_arm "$DL_ARM" \
+            --rawfile changelog "../$CHANGELOG_FILE" \
+            --argjson force "$FORCE" \
+            --arg force_below "$FORCE_BELOW" \
+            --arg popup_below "$POPUP_BELOW" \
+            '{
+              latest_version: $ver,
+              published_at: $date,
+              release_url: $rel_url,
+              download_url_x64: $dl_x64,
+              download_url_arm: $dl_arm,
+              force_update: $force,
+              changelog: ($changelog | rtrimstr("\n")),
+              force_update_below: (if $force_below == "" then null else $force_below end),
+              popup_update_below: (if $popup_below == "" then null else $popup_below end)
+            }' > version.json
+
+          # also sync announcements
+          cp ../announcements.json announcements.json
+
+          # CORS headers
+          cat <<EOF > _headers
+          /version.json
+            Access-Control-Allow-Origin: *
+          /announcements.json
+            Access-Control-Allow-Origin: *
+          EOF
+
+          git add version.json announcements.json _headers
+          git diff --cached --quiet && echo "No changes to deploy" && exit 0
+          git commit -m "chore: patch version.json metadata"
+          git push "$REMOTE" gh-pages
