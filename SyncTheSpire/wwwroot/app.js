@@ -1358,8 +1358,9 @@ async function checkForUpdates(silent = true) {
 
 $('#about-download').addEventListener('click', e => {
     e.preventDefault();
-    const url = getDownloadUrl();
-    if (url) openExternal(url);
+    // close about first, then show full update modal with changelog
+    $('#about-modal').classList.add('hidden');
+    showUpdateModal(false);
 });
 
 $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
