@@ -413,7 +413,7 @@ public class GitService
         if (status.IsDirty)
         {
             var cfg = _config.LoadConfig();
-            var sig = MakeSignature(cfg);
+            var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
             repo.Commit("Auto-save", sig, sig);
         }
 
@@ -472,7 +472,7 @@ public class GitService
         if (!status.IsDirty) return;
 
         var cfg = _config.LoadConfig();
-        var sig = MakeSignature(cfg);
+        var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
         repo.Commit("Auto-save (before switch)", sig, sig);
     }
 
@@ -536,11 +536,42 @@ public class GitService
             Directory.Delete(d, true);
     }
 
-    private static Signature MakeSignature(Models.AppConfig cfg)
+    private static Signature MakeSignature(Models.AppConfig cfg, string? gitEmail)
     {
-        // for SSH mode, username might be empty -- fall back to "player"
-        var name = string.IsNullOrWhiteSpace(cfg.Username) ? "player" : cfg.Username;
-        return new Signature(name, $"{name}@sync-the-spire", DateTimeOffset.Now);
+        // for SSH/anonymous mode, nickname is the canonical identity
+        var name = string.IsNullOrWhiteSpace(cfg.Nickname) ? "player" : cfg.Nickname;
+        var email = gitEmail ?? $"{name}@sync-the-spire";
+        return new Signature(name, email, DateTimeOffset.Now);
+    }
+
+    /// <summary>
+    /// read a value from git global config, returns null if not found or git unavailable
+    /// </summary>
+    public string? ReadGitGlobalConfig(string key)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = _resolver.GetGitPath(),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            psi.ArgumentList.Add("config");
+            psi.ArgumentList.Add("--global");
+            psi.ArgumentList.Add(key);
+
+            using var proc = Process.Start(psi)!;
+            var output = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit(5000);
+            return proc.ExitCode == 0 && !string.IsNullOrWhiteSpace(output) ? output : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>

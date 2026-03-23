@@ -66,6 +66,7 @@ public class ConfigService
         var toSerialize = new AppConfig
         {
             RepoUrl = config.RepoUrl,
+            Nickname = config.Nickname,
             Username = config.Username,
             Token = DpapiEncrypt(config.Token),
             AuthType = config.AuthType,

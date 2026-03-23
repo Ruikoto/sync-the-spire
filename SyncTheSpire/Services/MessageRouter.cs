@@ -327,14 +327,17 @@ public class MessageRouter
     private void HandleGetConfig()
     {
         var cfg = _configService.LoadConfig();
+        var gitUserName = _gitService.ReadGitGlobalConfig("user.name");
         Send(IpcResponse.Success("GET_CONFIG", new
         {
+            nickname = cfg.Nickname,
             repoUrl = cfg.RepoUrl,
             authType = cfg.AuthType,
             username = cfg.Username,
             sshKeyPath = cfg.SshKeyPath,
             gameInstallPath = cfg.GameInstallPath,
             saveFolderPath = cfg.SaveFolderPath,
+            gitUserName,
             // don't return token or sshPassphrase
         }));
     }

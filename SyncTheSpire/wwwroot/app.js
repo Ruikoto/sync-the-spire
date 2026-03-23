@@ -398,6 +398,12 @@ function prefillConfigForm(cfg) {
 
     if (!cfg) return;
     if (cfg.repoUrl) $('#cfg-repo').value = cfg.repoUrl;
+    // auto-fill nickname: saved value first, then git global user.name as hint
+    if (cfg.nickname) {
+        $('#cfg-nickname').value = cfg.nickname;
+    } else if (cfg.gitUserName) {
+        $('#cfg-nickname').value = cfg.gitUserName;
+    }
     if (cfg.username) $('#cfg-user').value = cfg.username;
     if (cfg.sshKeyPath) $('#cfg-ssh-key').value = cfg.sshKeyPath;
     if (cfg.gameInstallPath) $('#cfg-path').value = cfg.gameInstallPath;
@@ -688,7 +694,16 @@ let pendingPickTarget = null;
 $('#setup-form').addEventListener('submit', e => {
     e.preventDefault();
     const authType = document.querySelector('input[name="authType"]:checked').value;
+    const nickname = $('#cfg-nickname').value.trim();
+
+    if (!nickname) {
+        toast('请填写昵称', 'error');
+        $('#cfg-nickname').focus();
+        return;
+    }
+
     const payload = {
+        nickname,
         repoUrl: $('#cfg-repo').value.trim(),
         authType,
         gameInstallPath: $('#cfg-path').value.trim(),

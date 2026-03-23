@@ -7,6 +7,9 @@ public class AppConfig
     [JsonPropertyName("repoUrl")]
     public string RepoUrl { get; set; } = string.Empty;
 
+    [JsonPropertyName("nickname")]
+    public string Nickname { get; set; } = string.Empty;
+
     [JsonPropertyName("username")]
     public string Username { get; set; } = string.Empty;
 
@@ -47,6 +50,7 @@ public class AppConfig
 
     [JsonIgnore]
     public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(Nickname) &&
         !string.IsNullOrWhiteSpace(RepoUrl) &&
         !string.IsNullOrWhiteSpace(GameModPath) &&
         AuthType switch
