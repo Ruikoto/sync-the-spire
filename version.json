@@ -5,7 +5,7 @@
   "download_url_x64": "https://sts-dl.rkto.cc/Ruikoto/sync-the-spire/releases/download/v1.2.1/SyncTheSpire-v1.2.1-win-x64.zip",
   "download_url_arm": "https://sts-dl.rkto.cc/Ruikoto/sync-the-spire/releases/download/v1.2.1/SyncTheSpire-v1.2.1-win-arm64.zip",
   "force_update": true,
-  "changelog": "【重要更新】新增存档重定向，代替了存在BUG的存档合并功能；优化同步机制，支持上传过程中的冲突检测与解决；修复了上传假成功问题；修复了Gitee平台支持。",
+  "changelog": "# 更新日志\n\n## v1.2.2 - 2026-03-23\n\n- **重构 UI 界面**，提供更简洁易用的视觉与交互体验。\n- **重做刷新逻辑**，点击刷新即可一键检测本地未提交的改动及云端未拉取的更新。\n- **新增昵称设置**，用于 MOD 上传至远程仓库时的作者署名（更新后首次启动将自动引导完成设置）。\n- **优化日志显示**，全面支持多行文本展示与 Markdown 格式渲染。\n\n## v1.2.1 - 2026-03-20\n\n- **重构重定向模块**，改用内置的轻量级辅助 MOD 来实现重定向功能。\n\n## v1.2.0 - 2026-03-20\n\n- **新增存档重定向**，彻底替代此前存在缺陷的存档合并功能。\n- **优化同步机制**，新增并完善了上传过程中的冲突检测与解决流程。\n- **内置 MinGit 环境**，修复并完善对 Gitee 平台的支持。\n- **修复异常提示**，解决了实际上传失败但错误提示为成功的问题。",
   "force_update_below": "v1.0.3",
   "popup_update_below": "v1.1.0"
 }
