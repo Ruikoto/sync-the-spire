@@ -180,11 +180,38 @@ button, select {
 
 /* update modal changelog area */
 .update-changelog {
-    white-space: pre-line;
     border: 1px solid #2a2d3a;
     border-radius: 8px;
     padding: 10px 12px;
     background: #0f1117;
+}
+.update-changelog h1,
+.update-changelog h2,
+.update-changelog h3 {
+    font-weight: 600;
+    margin: 0.6em 0 0.3em;
+}
+.update-changelog h1 { font-size: 1em; }
+.update-changelog h2 { font-size: 0.95em; }
+.update-changelog h3 { font-size: 0.9em; }
+.update-changelog p { margin: 0.3em 0; }
+.update-changelog ul,
+.update-changelog ol {
+    padding-left: 1.4em;
+    margin: 0.3em 0;
+}
+.update-changelog ul { list-style: disc; }
+.update-changelog ol { list-style: decimal; }
+.update-changelog li { margin: 0.15em 0; }
+.update-changelog code {
+    background: #1a1d2e;
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+.update-changelog a {
+    color: #7c8aff;
+    text-decoration: underline;
 }
 
 /* update modal above toasts */

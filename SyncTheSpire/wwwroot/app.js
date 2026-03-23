@@ -1278,10 +1278,10 @@ function showUpdateModal(isForced) {
     // show version comparison
     $('#update-version-info').textContent = `${appVersion} → ${latestVersionInfo.latest_version}`;
 
-    // render changelog
+    // render changelog as markdown
     const changelog = latestVersionInfo.changelog;
     if (changelog) {
-        changelogEl.textContent = changelog;
+        changelogEl.innerHTML = marked.parse(changelog);
         changelogEl.classList.remove('hidden');
     } else {
         changelogEl.classList.add('hidden');

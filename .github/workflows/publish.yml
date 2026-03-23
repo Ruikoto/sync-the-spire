@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PROJECT_PATH: "SyncTheSpire/SyncTheSpire.csproj"
   BINARY_NAME: "SyncTheSpire"
 
@@ -155,22 +156,37 @@ jobs:
           REPO="${{ github.repository }}"
           NAME="${{ env.BINARY_NAME }}"
           PROXY="https://sts-dl.rkto.cc/$REPO/releases/download/$TAG"
+          REMOTE="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$REPO.git"
 
-          # read release metadata from repo
-          CHANGELOG=$(jq -r '.changelog // ""' release-info.json)
+          # read release metadata
+          CHANGELOG=$(cat changelog.md 2>/dev/null || echo "")
           FORCE=$(jq -r '.force_update // false' release-info.json)
           FORCE_BELOW=$(jq -r '.force_update_below // ""' release-info.json)
           POPUP_BELOW=$(jq -r '.popup_update_below // ""' release-info.json)
 
-          mkdir -p pages_output
+          # clone existing gh-pages to preserve announcements etc.
+          git clone --branch gh-pages --single-branch "$REMOTE" pages_output || {
+            mkdir -p pages_output
+            cd pages_output
+            git init
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b gh-pages
+            cd ..
+          }
 
+          cd pages_output
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # build version.json — use --rawfile so multi-line changelog is preserved as-is
           jq -n \
             --arg ver "$TAG" \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg rel_url "https://github.com/$REPO/releases/tag/$TAG" \
             --arg dl_x64 "$PROXY/$NAME-$TAG-win-x64.zip" \
             --arg dl_arm "$PROXY/$NAME-$TAG-win-arm64.zip" \
-            --arg changelog "$CHANGELOG" \
+            --rawfile changelog ../changelog.md \
             --argjson force "$FORCE" \
             --arg force_below "$FORCE_BELOW" \
             --arg popup_below "$POPUP_BELOW" \
@@ -181,27 +197,23 @@ jobs:
               download_url_x64: $dl_x64,
               download_url_arm: $dl_arm,
               force_update: $force,
-              changelog: $changelog,
+              changelog: ($changelog | rtrimstr("\n")),
               force_update_below: (if $force_below == "" then null else $force_below end),
               popup_update_below: (if $popup_below == "" then null else $popup_below end)
-            }' > pages_output/version.json
+            }' > version.json
 
-          # copy announcements from repo
-          cp announcements.json pages_output/announcements.json
+          # also sync announcements from repo
+          cp ../announcements.json announcements.json
 
-          # CORS headers for both JSON files
-          cat <<EOF > pages_output/_headers
+          # CORS headers
+          cat <<EOF > _headers
           /version.json
             Access-Control-Allow-Origin: *
           /announcements.json
             Access-Control-Allow-Origin: *
           EOF
 
-          cd pages_output
-          git init
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b gh-pages
           git add version.json announcements.json _headers
+          git diff --cached --quiet && echo "No changes to deploy" && exit 0
           git commit -m "chore: update version.json for $TAG"
-          git push -f https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$REPO.git gh-pages
+          git push "$REMOTE" gh-pages
