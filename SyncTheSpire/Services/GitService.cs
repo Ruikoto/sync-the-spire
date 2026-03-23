@@ -357,6 +357,44 @@ public class GitService
 
     public enum BranchDivergence { UpToDate, LocalAhead, Diverged }
 
+    public record SyncStatus(int Ahead, int Behind, bool HasRemoteBranch);
+
+    /// <summary>
+    /// fetch remote and return how many commits local is ahead/behind the remote tip.
+    /// used by the refresh button -- involves network I/O so it's slow.
+    /// </summary>
+    public SyncStatus FetchAndGetSyncStatus()
+    {
+        using var repo = OpenRepo();
+        FetchAll(repo);
+
+        var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
+        if (remoteBranch is null)
+            return new SyncStatus(0, 0, HasRemoteBranch: false);
+
+        var localTip = repo.Head.Tip;
+        var remoteTip = remoteBranch.Tip;
+        if (localTip.Sha == remoteTip.Sha)
+            return new SyncStatus(0, 0, true);
+
+        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
+        int ahead = 0, behind = 0;
+        if (mergeBase is not null)
+        {
+            ahead = repo.Commits.QueryBy(new CommitFilter
+            {
+                IncludeReachableFrom = localTip,
+                ExcludeReachableFrom = mergeBase
+            }).Count();
+            behind = repo.Commits.QueryBy(new CommitFilter
+            {
+                IncludeReachableFrom = remoteTip,
+                ExcludeReachableFrom = mergeBase
+            }).Count();
+        }
+        return new SyncStatus(ahead, behind, true);
+    }
+
     /// <summary>
     /// stage + commit + fetch + check divergence. returns true if push went through,
     /// false if branches have diverged (caller should ask user what to do).

@@ -67,6 +67,8 @@ let needsBranchSelection = false;
 let appVersion = '';
 let appArch = 'x64';
 let savePathConfigured = false;
+let lastSyncStatus = null;
+let lastHasLocalChanges = false;
 
 function showPage(name) {
     $('#page-setup').classList.add('hidden');
@@ -245,18 +247,20 @@ document.addEventListener('keydown', e => {
     }
 });
 
-function updatePushButton() {
-    const btn = $('#btn-push');
+function updateActionButtons() {
+    const pushBtn = $('#btn-push');
+    const pullBtn = $('#btn-pull');
+
     if (needsBranchSelection) {
-        btn.textContent = '请先选择或创建分支';
-        btn.disabled = true;
-        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        pushBtn.disabled = true;
+        pullBtn.disabled = true;
+        pushBtn.classList.add('opacity-40', 'cursor-not-allowed');
+        pullBtn.classList.add('opacity-40', 'cursor-not-allowed');
     } else {
-        btn.textContent = currentBranch
-            ? `保存改动并上传到 ${currentBranch}`
-            : '保存改动并上传';
-        btn.disabled = false;
-        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        pushBtn.disabled = false;
+        pullBtn.disabled = false;
+        pushBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+        pullBtn.classList.remove('opacity-40', 'cursor-not-allowed');
     }
 }
 
@@ -297,7 +301,63 @@ function updateStatusCard(data) {
         }
     }
 
-    updatePushButton();
+    // track sync-related state
+    lastHasLocalChanges = !!data.hasLocalChanges;
+    if (data.ahead !== undefined) {
+        lastSyncStatus = { ahead: data.ahead, behind: data.behind, hasRemoteBranch: data.hasRemoteBranch };
+    }
+    updateSyncStatusLine();
+    updateActionButtons();
+}
+
+let syncFadeTimer = null;
+
+function updateSyncStatusLine() {
+    const container = $('#sync-status-line');
+    const text = $('#sync-status-text');
+
+    // clear any pending fade timer and reset transition state
+    if (syncFadeTimer) { clearTimeout(syncFadeTimer); syncFadeTimer = null; }
+    container.style.transition = 'none';
+    container.style.opacity = '1';
+
+    if (needsBranchSelection || !currentBranch || !lastSyncStatus) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+    const s = lastSyncStatus;
+
+    if (!s.hasRemoteBranch) {
+        text.textContent = '新分支，尚未推送到远端';
+        text.className = 'text-xs text-spire-warn';
+        return;
+    }
+
+    // combine uncommitted local changes + unpushed commits into a single "local" concept
+    const hasLocal = lastHasLocalChanges || s.ahead > 0;
+    const hasRemote = s.behind > 0;
+
+    if (!hasLocal && !hasRemote) {
+        text.textContent = '✓ 已是最新';
+        text.className = 'text-xs text-spire-success';
+        // fade out after 3s, then collapse
+        syncFadeTimer = setTimeout(() => {
+            container.style.transition = 'opacity 0.6s ease';
+            container.style.opacity = '0';
+            syncFadeTimer = setTimeout(() => {
+                container.classList.add('hidden');
+            }, 600);
+        }, 3000);
+        return;
+    }
+
+    const parts = [];
+    if (hasRemote) parts.push(`↓ 远端有 ${s.behind} 处新改动`);
+    if (hasLocal) parts.push('↑ 有本地改动未上传');
+    text.textContent = parts.join('，');
+    text.className = hasRemote ? 'text-xs text-spire-warn' : 'text-xs text-spire-accentHover';
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -380,7 +440,26 @@ on('GET_STATUS', data => {
             sendMessage('GET_BRANCHES');
             sendMessage('GET_SAVE_STATUS');
             sendMessage('GET_REDIRECT_STATUS');
+            // auto-refresh on startup if a branch is active
+            if (!needsBranchSelection && currentBranch) {
+                $('#refresh-icon').style.animation = 'spin 0.7s linear infinite';
+                $('#refresh-label').textContent = '刷新中...';
+                sendMessage('REFRESH_SYNC');
+            }
         }
+    }
+});
+
+on('REFRESH_SYNC', data => {
+    // always stop spinner regardless of status
+    $('#refresh-icon').style.animation = '';
+    $('#refresh-label').textContent = '刷新';
+    if (data.status === 'success') {
+        updateStatusCard(data.payload);
+        // don't re-fetch branches here -- REFRESH_SYNC already fetched,
+        // and GET_BRANCHES has a progress message that triggers the loading overlay
+        sendMessage('GET_SAVE_STATUS');
+        sendMessage('GET_REDIRECT_STATUS');
     }
 });
 
@@ -424,6 +503,7 @@ on('SWITCH_TO_VANILLA', data => {
 
 on('SYNC_OTHER_BRANCH', data => {
     if (data.status === 'success') {
+        lastSyncStatus = null;
         toast(data.payload?.message || 'Synced!', 'success');
         sendMessage('GET_STATUS');
     }
@@ -431,6 +511,7 @@ on('SYNC_OTHER_BRANCH', data => {
 
 on('CREATE_MY_BRANCH', data => {
     if (data.status === 'success') {
+        lastSyncStatus = null;
         toast(data.payload?.message || 'Branch created!', 'success');
         $('#inp-branch').value = '';
         sendMessage('GET_STATUS');
@@ -439,6 +520,7 @@ on('CREATE_MY_BRANCH', data => {
 
 on('SAVE_AND_PUSH_MY_BRANCH', async data => {
     if (data.status === 'success') {
+        lastSyncStatus = null;
         toast(data.payload?.message || 'Pushed!', 'success');
         sendMessage('GET_STATUS');
     }
@@ -521,18 +603,13 @@ on('SET_REDIRECT', data => {
 function updateSaveBackupCard() {
     const btns = [$('#btn-backup-saves'), $('#btn-restore-saves')];
     const desc = $('#save-backup-desc');
-    const openSaveBtn = $('#btn-open-save');
 
     if (savePathConfigured) {
         btns.forEach(b => { b.disabled = false; b.classList.remove('opacity-50', 'cursor-not-allowed'); });
         if (desc) desc.textContent = '手动备份或恢复游戏存档';
-        openSaveBtn.disabled = false;
-        openSaveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
     } else {
         btns.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
         if (desc) desc.textContent = '未配置存档路径，请在 Settings 中设置后使用';
-        openSaveBtn.disabled = true;
-        openSaveBtn.classList.add('opacity-50', 'cursor-not-allowed');
     }
 }
 
@@ -640,8 +717,45 @@ $('#btn-pick-save').addEventListener('click', () => {
     sendMessage('PICK_FOLDER');
 });
 
-// refresh
-guardClick($('#btn-refresh'), () => sendMessage('GET_STATUS'));
+// refresh -- fetch remote and show sync status
+guardClick($('#btn-refresh'), () => {
+    $('#refresh-icon').style.animation = 'spin 0.7s linear infinite';
+    $('#refresh-label').textContent = '刷新中...';
+    sendMessage('REFRESH_SYNC');
+});
+
+// click sync status to dismiss it
+$('#sync-status-line').addEventListener('click', () => {
+    const el = $('#sync-status-line');
+    el.style.transition = 'opacity 0.15s';
+    el.style.opacity = '0';
+    setTimeout(() => { el.classList.add('hidden'); el.style.transition = 'none'; el.style.opacity = '1'; }, 150);
+});
+
+// folder dropdown
+$('#btn-open-folder').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = $('#folder-dropdown');
+    const isHidden = dd.classList.contains('hidden');
+    dd.classList.toggle('hidden', !isHidden);
+
+    if (isHidden) {
+        // conditionally show/hide items
+        const modItem = $('#folder-item-mod');
+        const saveItem = $('#folder-item-save');
+        modItem.classList.toggle('hidden', !$('#mod-checkbox').checked);
+        saveItem.classList.toggle('hidden', !savePathConfigured);
+    }
+});
+document.addEventListener('click', () => {
+    $('#folder-dropdown').classList.add('hidden');
+});
+$('#folder-dropdown').addEventListener('click', (e) => {
+    const item = e.target.closest('.folder-item');
+    if (!item) return;
+    sendMessage('OPEN_FOLDER', { folderType: item.dataset.folder });
+    $('#folder-dropdown').classList.add('hidden');
+});
 
 // mod toggle
 $('#mod-checkbox').addEventListener('change', (e) => {
@@ -777,14 +891,23 @@ guardClick($('#btn-create'), () => {
     sendMessage('CREATE_MY_BRANCH', { branchName: name });
 });
 
-// save & push (with themed confirmation dialog showing target branch)
+// push -- save local changes and upload to current branch
 guardClick($('#btn-push'), async () => {
-    const branch = currentBranch || '当前分支';
-    const ok = await showConfirm(
-        `此操作会将本地 Mod 文件夹的当前状态保存并上传到分支「${branch}」，覆盖云端配置，是否继续？`,
-        '保存并上传'
-    );
-    if (ok) sendMessage('SAVE_AND_PUSH_MY_BRANCH');
+    if (!currentBranch) return;
+    sendMessage('SAVE_AND_PUSH_MY_BRANCH');
+});
+
+// pull -- fetch latest from remote, overwrite local
+guardClick($('#btn-pull'), async () => {
+    if (!currentBranch) return;
+    if (lastHasLocalChanges || (lastSyncStatus && lastSyncStatus.ahead > 0)) {
+        const ok = await showConfirm(
+            '本地有未上传的改动，拉取会覆盖这些改动。确定继续？',
+            '拉取远端内容'
+        );
+        if (!ok) return;
+    }
+    sendMessage('SYNC_OTHER_BRANCH', { branchName: currentBranch });
 });
 
 // settings: go to setup page with config pre-filled
@@ -810,13 +933,6 @@ document.querySelectorAll('input[name="authType"]').forEach(radio => {
     });
 });
 
-// quick-open folder buttons
-$('#btn-open-mod').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'mod' }));
-$('#btn-open-save').addEventListener('click', () => {
-    if ($('#btn-open-save').disabled) return;
-    sendMessage('OPEN_FOLDER', { folderType: 'save' });
-});
-$('#btn-open-config').addEventListener('click', () => sendMessage('OPEN_FOLDER', { folderType: 'config' }));
 
 
 // ── save redirect toggle ────────────────────────────────────────────────────

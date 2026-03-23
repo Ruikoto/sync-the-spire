@@ -117,6 +117,10 @@ public class MessageRouter
                     HandleGetStatus();
                     break;
 
+                case "REFRESH_SYNC":
+                    HandleRefreshSync();
+                    break;
+
                 case "GET_VERSION":
                     HandleGetVersion();
                     break;
@@ -286,6 +290,34 @@ public class MessageRouter
         }
 
         Send(IpcResponse.Success("GET_STATUS", data));
+    }
+
+    /// <summary>
+    /// fetch from remote and return ahead/behind counts -- used by the refresh button
+    /// </summary>
+    private void HandleRefreshSync()
+    {
+        var cfg = _configService.LoadConfig();
+        if (!cfg.IsConfigured || !_gitService.IsRepoValid || _gitService.IsOnInitBranch)
+        {
+            // nothing useful to fetch, just return basic status
+            HandleGetStatus();
+            return;
+        }
+
+        var sync = _gitService.FetchAndGetSyncStatus();
+        var isJunction = _junctionService.IsJunction(cfg.GameModPath);
+        var branch = _gitService.GetCurrentBranch();
+
+        Send(IpcResponse.Success("REFRESH_SYNC", new
+        {
+            currentBranch = branch,
+            isJunctionActive = isJunction,
+            hasLocalChanges = _gitService.HasLocalChanges(),
+            ahead = sync.Ahead,
+            behind = sync.Behind,
+            hasRemoteBranch = sync.HasRemoteBranch
+        }));
     }
 
     /// <summary>
@@ -539,6 +571,7 @@ public class MessageRouter
 
         var path = folderType switch
         {
+            "game" => cfg.GameInstallPath,
             "mod" => cfg.GameModPath,
             "save" => cfg.SaveFolderPath,
             "config" => ConfigService.AppDataDirPath,

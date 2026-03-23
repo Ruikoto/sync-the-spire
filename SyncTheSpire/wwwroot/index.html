@@ -268,58 +268,99 @@
                 <h1 class="text-lg font-bold">Sync the Spire</h1>
                 <span id="header-quote" class="text-xs text-spire-muted"></span>
             </div>
-            <div class="flex items-center gap-3">
-                <button id="btn-about" class="relative text-spire-muted hover:text-spire-text text-sm transition-colors">
-                    About
-                    <span id="about-update-dot" class="hidden absolute -top-0.5 -right-2 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
+            <div class="flex items-center gap-1.5">
+                <button id="btn-about" class="relative w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="关于">
+                    <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="8" cy="8" r="6.5"/>
+                        <path d="M8 11V7M8 5.5V5"/>
+                    </svg>
+                    <span id="about-update-dot" class="hidden absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
                 </button>
-                <button id="btn-settings" class="text-spire-muted hover:text-spire-text text-sm transition-colors">
-                    Settings
+                <button id="btn-settings" class="w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="设置">
+                    <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+                    </svg>
                 </button>
             </div>
         </div>
 
-        <!-- announcement banners (dynamically populated) -->
-        <div id="announcement-container" class="flex flex-col gap-2"></div>
+        <!-- announcement banners (dynamically populated, hidden when empty to avoid gap) -->
+        <div id="announcement-container" class="flex flex-col gap-2 empty:hidden"></div>
 
         <!-- status card -->
-        <div class="bg-spire-card rounded-xl border border-spire-border p-4 flex items-center gap-4">
-            <div class="flex-1">
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="text-sm text-spire-muted">当前分支</span>
-                    <span id="status-branch" class="text-sm font-mono font-medium text-spire-accent">—</span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                    <span id="status-label" class="text-xs text-spire-muted">未知</span>
-                </div>
+        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm text-spire-muted">当前分支</span>
+                <span id="status-branch" class="text-sm font-mono font-medium text-spire-accent">—</span>
             </div>
-            <button id="btn-refresh" class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-1.5 transition-colors">
-                刷新
-            </button>
-        </div>
-
-        <!-- quick-open buttons -->
-        <div class="flex gap-2">
-            <button id="btn-open-mod"
-                class="flex-1 text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors">
-                打开 Mod 文件夹
-            </button>
-            <button id="btn-open-save"
-                class="flex-1 text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors">
-                打开存档文件夹
-            </button>
-            <button id="btn-open-config"
-                class="flex-1 text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors">
-                打开配置文件夹
-            </button>
+            <div class="flex items-center gap-2">
+                <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+                <span id="status-label" class="text-xs text-spire-muted">未知</span>
+            </div>
+            <div id="sync-status-line" class="hidden mt-1 cursor-pointer select-none">
+                <span id="sync-status-text" class="text-xs text-spire-muted"></span>
+            </div>
+            <!-- action buttons -->
+            <div class="flex gap-2 mt-3">
+                <button id="btn-push"
+                    class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-accent/15 text-spire-accentHover hover:bg-spire-accent/25">
+                    <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 12V4M4 7l4-4 4 4"/>
+                    </svg>
+                    上传
+                </button>
+                <button id="btn-pull"
+                    class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-success/10 text-spire-success hover:bg-spire-success/20">
+                    <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 4v8M4 9l4 4 4-4"/>
+                    </svg>
+                    拉取
+                </button>
+                <div class="relative flex-1 flex">
+                    <button id="btn-open-folder"
+                        class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-amber-500/[.07] text-amber-500/80 hover:bg-amber-500/[.12] hover:text-amber-500">
+                        <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M1 4a2 2 0 012-2h3.5l2 2H13a2 2 0 012 2v6a2 2 0 01-2 2H3a2 2 0 01-2-2V4z"/>
+                        </svg>
+                        打开
+                    </button>
+                    <!-- folder dropdown -->
+                    <div id="folder-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden">
+                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="game">
+                            游戏文件夹
+                        </button>
+                        <button id="folder-item-mod" class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="mod">
+                            Mod 文件夹
+                        </button>
+                        <button id="folder-item-save" class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="save">
+                            存档文件夹
+                        </button>
+                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="config">
+                            配置文件夹
+                        </button>
+                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="backup">
+                            备份文件夹
+                        </button>
+                    </div>
+                </div>
+                <button id="btn-refresh"
+                    class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 border border-spire-border text-spire-muted hover:text-spire-text">
+                    <svg id="refresh-icon" class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 8A6 6 0 1 1 8 2M14 2v4h-4"/>
+                    </svg>
+                    <span id="refresh-label">刷新</span>
+                </button>
+            </div>
         </div>
 
         <!-- mod toggle -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-sm font-medium">Mod 开关</h2>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-medium">Mod 开关</h2>
+                        <span class="help-tip" data-tip="开启后将仓库中的 Mod 文件连接到游戏目录，关闭则恢复无 Mod 的纯净状态。">?</span>
+                    </div>
                     <div class="flex items-center gap-2 mt-1">
                         <span id="mod-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
                         <span id="mod-label" class="text-xs text-spire-muted">检查中...</span>
@@ -352,32 +393,24 @@
             </div>
         </div>
 
-        <!-- mode 2: follow others -->
+        <!-- follow others -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-sm font-medium">联机跟随</h2>
-                    <p class="text-xs text-spire-muted mt-0.5">选择朋友的分支，强制同步他们的 Mod 配置</p>
+                    <p class="text-xs text-spire-muted mt-0.5">切换到朋友的分支来同步他们的 Mod</p>
                 </div>
                 <button id="btn-browse-branches"
                     class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors">
-                    浏览分支
+                    切换分支
                 </button>
             </div>
         </div>
 
-        <!-- mode 3: my branch -->
+        <!-- create branch -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
-            <h2 class="text-sm font-medium mb-2">做房主</h2>
-            <p class="text-xs text-spire-muted mb-3">管理和分享你的 Mod 配置</p>
-            <button id="btn-push" class="w-full text-xs bg-spire-success/20 text-spire-success hover:bg-spire-success/30 rounded-lg py-2 transition-colors">
-                保存改动并上传
-            </button>
-            <div class="flex items-center gap-2 my-3">
-                <div class="flex-1 h-px bg-spire-border"></div>
-                <span class="text-[10px] text-spire-muted shrink-0">或创建新分支</span>
-                <div class="flex-1 h-px bg-spire-border"></div>
-            </div>
+            <h2 class="text-sm font-medium mb-2">创建分支</h2>
+            <p class="text-xs text-spire-muted mb-3">创建自己的分支来管理和分享 Mod 配置</p>
             <div class="flex gap-2">
                 <input id="inp-branch" type="text" placeholder="输入新分支名..."
                     class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent" />
