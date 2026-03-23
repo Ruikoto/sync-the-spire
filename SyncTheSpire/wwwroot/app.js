@@ -64,6 +64,7 @@ function escAttr(str) {
 
 let currentBranch = '';
 let needsBranchSelection = false;
+let isModEnabled = false;
 let appVersion = '';
 let appArch = 'x64';
 let savePathConfigured = false;
@@ -251,7 +252,7 @@ function updateActionButtons() {
     const pushBtn = $('#btn-push');
     const pullBtn = $('#btn-pull');
 
-    if (needsBranchSelection) {
+    if (needsBranchSelection || !isModEnabled) {
         pushBtn.disabled = true;
         pullBtn.disabled = true;
         pushBtn.classList.add('opacity-40', 'cursor-not-allowed');
@@ -306,6 +307,7 @@ function updateStatusCard(data) {
     if (data.ahead !== undefined) {
         lastSyncStatus = { ahead: data.ahead, behind: data.behind, hasRemoteBranch: data.hasRemoteBranch };
     }
+    isModEnabled = !needsBranchSelection && !!data.isJunctionActive;
     updateSyncStatusLine();
     updateActionButtons();
 }
