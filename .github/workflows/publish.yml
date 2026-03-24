@@ -2,6 +2,16 @@ name: Publish Windows (Single EXE)
 
 on:
   workflow_dispatch:
+    inputs:
+      build_target:
+        description: '构建目标'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - zip
+          - msix
   push:
     tags:
       - 'v*'
@@ -17,6 +27,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'zip'
     name: Build ${{ matrix.rid }} (${{ matrix.self_contained == true && 'Full' || 'Lite' }})
     runs-on: windows-latest
     strategy:
@@ -85,6 +96,7 @@ jobs:
           path: ./*.zip
 
   build-msix:
+    if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'msix'
     name: Build MSIX ${{ matrix.rid }}
     runs-on: windows-latest
     strategy:
