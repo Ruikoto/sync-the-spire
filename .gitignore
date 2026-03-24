@@ -20,6 +20,12 @@ desktop.ini
 
 ## Build artifacts
 publish/
+*.msix
+*.appx
+
+## Certificates
+*.pfx
+*.cer
 
 ## Secrets
 .env

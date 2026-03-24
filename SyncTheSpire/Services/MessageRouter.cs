@@ -255,7 +255,8 @@ public class MessageRouter
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
         var arch = RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant(); // x64, arm64, etc.
-        Send(IpcResponse.Success("GET_VERSION", new { version, arch }));
+        var distribution = DistributionHelper.IsMsixPackaged ? "store" : "direct";
+        Send(IpcResponse.Success("GET_VERSION", new { version, arch, distribution }));
     }
 
     private void HandleGetStatus()

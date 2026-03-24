@@ -122,9 +122,9 @@ public class MainForm : Form
         _webView.CoreWebView2.NewWindowRequested += (_, e) =>
         {
             e.Handled = true;
-            // only allow http(s) links to prevent file:// or other dangerous schemes
+            // only allow http(s) and ms-windows-store:// links
             if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) &&
-                (uri.Scheme == "http" || uri.Scheme == "https"))
+                (uri.Scheme == "http" || uri.Scheme == "https" || uri.Scheme == "ms-windows-store"))
             {
                 Process.Start(new ProcessStartInfo(e.Uri) { UseShellExecute = true });
             }

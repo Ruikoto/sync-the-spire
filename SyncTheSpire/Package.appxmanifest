@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <!--
+    Identity: Publisher must match the certificate used for signing.
+    For Store submission, Partner Center will override Publisher with your actual publisher ID.
+    Version is injected by CI — use 0.0.0.0 as placeholder for local builds.
+  -->
+  <Identity
+    Name="RktStudio.Syncthespire"
+    Publisher="CN=F45D1877-5964-4B06-80B4-E70C08144279"
+    Version="0.0.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Sync the Spire</DisplayName>
+    <PublisherDisplayName>Rkt Studio</PublisherDisplayName>
+    <Logo>assets\store\StoreLogo.png</Logo>
+    <Description>Git-based mod synchronizer for Slay the Spire 2</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="zh-CN" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application Id="SyncTheSpire"
+      Executable="SyncTheSpire.exe"
+      EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Sync the Spire"
+        Description="Git-based mod synchronizer for Slay the Spire 2"
+        BackgroundColor="#0F1117"
+        Square150x150Logo="assets\store\Square150x150Logo.png"
+        Square44x44Logo="assets\store\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="assets\store\Wide310x150Logo.png"
+          Square310x310Logo="assets\store\Square310x310Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+</Package>

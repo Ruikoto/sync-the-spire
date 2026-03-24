@@ -84,9 +84,109 @@ jobs:
           name: build-${{ matrix.rid }}${{ steps.suffix.outputs.FILE_SUFFIX }}
           path: ./*.zip
 
+  build-msix:
+    name: Build MSIX ${{ matrix.rid }}
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Get Version
+        id: version
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $tag = "${{ github.ref_name }}"
+            # strip leading 'v' and convert to 4-part MSIX version (e.g. v1.2.3 -> 1.2.3.0)
+            $semver = $tag -replace '^v', ''
+            $parts = $semver.Split('.')
+            while ($parts.Length -lt 3) { $parts += '0' }
+            $msixVer = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+            echo "VERSION_TAG=$tag" >> $env:GITHUB_OUTPUT
+            echo "MSIX_VERSION=$msixVer" >> $env:GITHUB_OUTPUT
+          } else {
+            # nightly: use a date-based version so the msix is installable for local testing
+            $ts = Get-Date -AsUTC
+            $msixVer = "0.$($ts.ToString('yy')).$($ts.ToString('MMdd')).$($ts.ToString('HHmm'))"
+            echo "VERSION_TAG=nightly-$($ts.ToString('yyyyMMdd-HHmmss'))" >> $env:GITHUB_OUTPUT
+            echo "MSIX_VERSION=$msixVer" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download MinGit
+        run: |
+          # MinGit is x64-only; ARM64 Windows runs it via x86-64 emulation
+          $url = "https://github.com/git-for-windows/git/releases/download/v2.49.0.windows.1/MinGit-2.49.0-64-bit.zip"
+          Invoke-WebRequest -Uri $url -OutFile mingit.zip
+          Expand-Archive -Path mingit.zip -DestinationPath ./mingit-extracted -Force
+
+      - name: Publish (non-SingleFile for MSIX)
+        run: |
+          dotnet publish ${{ env.PROJECT_PATH }} `
+            -c Release `
+            -r ${{ matrix.rid }} `
+            --self-contained true `
+            -p:PublishSingleFile=false `
+            -p:PublishReadyToRun=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -p:AssemblyName=${{ env.BINARY_NAME }} `
+            -p:InformationalVersion=${{ steps.version.outputs.VERSION_TAG }} `
+            -o ./publish_output
+
+      - name: Stage MSIX Layout
+        run: |
+          $layout = "./msix_layout"
+          New-Item -ItemType Directory -Force -Path $layout
+
+          # app binaries
+          Copy-Item -Recurse -Path "./publish_output/*" -Destination "$layout/"
+
+          # bundled MinGit
+          New-Item -ItemType Directory -Force -Path "$layout/tools/mingit"
+          Copy-Item -Recurse -Path "./mingit-extracted/*" -Destination "$layout/tools/mingit/"
+
+          # inject version and architecture into manifest
+          $arch = if ("${{ matrix.rid }}" -eq "win-x64") { "x64" } else { "arm64" }
+          $manifest = Get-Content "SyncTheSpire/Package.appxmanifest" -Raw
+          $manifest = $manifest -replace 'Version="0\.0\.0\.0"', "Version=`"${{ steps.version.outputs.MSIX_VERSION }}`""
+          $manifest = $manifest -replace 'ProcessorArchitecture="x64"', "ProcessorArchitecture=`"$arch`""
+          $manifest | Out-File "$layout/AppxManifest.xml" -Encoding utf8
+
+          # store tile assets
+          New-Item -ItemType Directory -Force -Path "$layout/assets/store"
+          if (Test-Path "SyncTheSpire/assets/store/*.png") {
+            Copy-Item -Path "SyncTheSpire/assets/store/*.png" -Destination "$layout/assets/store/"
+          }
+
+      - name: Find Windows SDK tools
+        id: sdk
+        run: |
+          $sdkBin = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          echo "SDK_BIN=$($sdkBin.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Create MSIX Package
+        run: |
+          $msixName = "${{ env.BINARY_NAME }}-${{ steps.version.outputs.VERSION_TAG }}-${{ matrix.rid }}.msix"
+          & "${{ steps.sdk.outputs.SDK_BIN }}\makeappx.exe" pack /d ./msix_layout /p "./$msixName" /o
+          echo "MSIX_FILE=$msixName" >> $env:GITHUB_ENV
+
+      - name: Upload MSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix-${{ matrix.rid }}
+          path: ./*.msix
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, build-msix]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -146,7 +246,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./artifacts/**/*.zip
+          files: |
+            ./artifacts/**/*.zip
+            ./artifacts/**/*.msix
           body_path: release_note.md
           generate_release_notes: true
 

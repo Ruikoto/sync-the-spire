@@ -4,11 +4,15 @@ using System.IO.Compression;
 namespace SyncTheSpire.Services;
 
 /// <summary>
-/// resolves a working git.exe path: system PATH → cached MinGit → download MinGit on demand.
+/// resolves a working git.exe path: system PATH → bundled MinGit → cached MinGit → download on demand.
 /// version pinned to v2.49.0, no auto-upgrade.
 /// </summary>
 public class GitResolver
 {
+    // bundled MinGit shipped alongside the exe (MSIX package or portable layout)
+    private static readonly string BundledMinGitExePath =
+        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "mingit", "cmd", "git.exe");
+
     private static readonly string MinGitDir =
         Path.Combine(ConfigService.AppDataDirPath, "MinGit");
     private static readonly string MinGitExePath =
@@ -32,7 +36,7 @@ public class GitResolver
 
     /// <summary>
     /// get path to a working git.exe.
-    /// checks: system PATH -> local MinGit cache -> downloads MinGit.
+    /// checks: system PATH -> bundled MinGit -> cached MinGit -> downloads MinGit.
     /// blocks until resolved (always called from background threads).
     /// </summary>
     public string GetGitPath()
@@ -43,6 +47,13 @@ public class GitResolver
         if (IsSystemGitAvailable())
         {
             _resolvedPath = "git";
+            return _resolvedPath;
+        }
+
+        // bundled MinGit (MSIX / portable distribution)
+        if (File.Exists(BundledMinGitExePath))
+        {
+            _resolvedPath = BundledMinGitExePath;
             return _resolvedPath;
         }
 
@@ -58,6 +69,11 @@ public class GitResolver
         {
             // double-check: another thread may have finished while we waited
             if (_resolvedPath != null) return _resolvedPath;
+            if (File.Exists(BundledMinGitExePath))
+            {
+                _resolvedPath = BundledMinGitExePath;
+                return _resolvedPath;
+            }
             if (File.Exists(MinGitExePath))
             {
                 _resolvedPath = MinGitExePath;

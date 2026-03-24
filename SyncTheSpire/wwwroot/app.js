@@ -67,6 +67,7 @@ let needsBranchSelection = false;
 let isModEnabled = false;
 let appVersion = '';
 let appArch = 'x64';
+let appDistribution = 'direct'; // 'store' (MSIX) or 'direct' (loose exe)
 let savePathConfigured = false;
 let lastSyncStatus = null;
 let lastHasLocalChanges = false;
@@ -421,6 +422,7 @@ on('GET_VERSION', data => {
     if (data.status !== 'success') return;
     appVersion = data.payload?.version || 'unknown';
     appArch = data.payload?.arch || 'x64';
+    appDistribution = data.payload?.distribution || 'direct';
     $('#about-version').textContent = appVersion;
     if (!/^v?\d+\.\d+/.test(appVersion)) {
         toast('当前为非正式构建版本，建议前往 About 页面下载最新正式版', 'info');
@@ -1305,8 +1307,12 @@ function closeUpdateModal() {
 
 // update modal event bindings
 $('#update-download').addEventListener('click', () => {
-    const url = getDownloadUrl();
-    if (url) openExternal(url);
+    if (appDistribution === 'store') {
+        openExternal('ms-windows-store://pdp/?ProductId=9PC112T0C074');
+    } else {
+        const url = getDownloadUrl();
+        if (url) openExternal(url);
+    }
 });
 $('#update-cancel').addEventListener('click', closeUpdateModal);
 $('#update-modal-close').addEventListener('click', closeUpdateModal);
@@ -1358,9 +1364,13 @@ async function checkForUpdates(silent = true) {
 
 $('#about-download').addEventListener('click', e => {
     e.preventDefault();
-    // close about first, then show full update modal with changelog
-    $('#about-modal').classList.add('hidden');
-    showUpdateModal(false);
+    if (appDistribution === 'store') {
+        openExternal('ms-windows-store://pdp/?ProductId=9PC112T0C074');
+    } else {
+        // close about first, then show full update modal with changelog
+        $('#about-modal').classList.add('hidden');
+        showUpdateModal(false);
+    }
 });
 
 $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
