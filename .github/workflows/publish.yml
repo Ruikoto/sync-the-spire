@@ -166,17 +166,18 @@ jobs:
             Copy-Item -Path "SyncTheSpire/assets/store/*.png" -Destination "$layout/assets/store/"
           }
 
-      - name: Find Windows SDK tools
-        id: sdk
-        run: |
-          $sdkBin = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64" -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          echo "SDK_BIN=$($sdkBin.FullName)" >> $env:GITHUB_OUTPUT
-
       - name: Create MSIX Package
         run: |
+          # find makeappx.exe directly — old SDK versions (e.g. 14393) don't ship it
+          $makeappx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe" -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $makeappx) {
+            $dirs = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\" -Directory).Name -join ', '
+            throw "makeappx.exe not found. Available SDK dirs: $dirs"
+          }
           $msixName = "${{ env.BINARY_NAME }}-${{ steps.version.outputs.VERSION_TAG }}-${{ matrix.rid }}.msix"
-          & "${{ steps.sdk.outputs.SDK_BIN }}\makeappx.exe" pack /d ./msix_layout /p "./$msixName" /o
-          echo "MSIX_FILE=$msixName" >> $env:GITHUB_ENV
+          & $makeappx.FullName pack /d ./msix_layout /p "./$msixName" /o
 
       - name: Upload MSIX Artifact
         uses: actions/upload-artifact@v4
