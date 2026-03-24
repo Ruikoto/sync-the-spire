@@ -108,9 +108,9 @@ jobs:
             echo "VERSION_TAG=$tag" >> $env:GITHUB_OUTPUT
             echo "MSIX_VERSION=$msixVer" >> $env:GITHUB_OUTPUT
           } else {
-            # nightly: use a date-based version so the msix is installable for local testing
+            # nightly: date-based version for local testing — no leading zeros allowed in MSIX
             $ts = Get-Date -AsUTC
-            $msixVer = "0.$($ts.ToString('yy')).$($ts.ToString('MMdd')).$($ts.ToString('HHmm'))"
+            $msixVer = "0.$($ts.Year % 100).$($ts.Month * 100 + $ts.Day).$($ts.Hour * 100 + $ts.Minute)"
             echo "VERSION_TAG=nightly-$($ts.ToString('yyyyMMdd-HHmmss'))" >> $env:GITHUB_OUTPUT
             echo "MSIX_VERSION=$msixVer" >> $env:GITHUB_OUTPUT
           }
