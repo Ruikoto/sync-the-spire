@@ -8,8 +8,7 @@ namespace SyncTheSpire.Services;
 public static class DistributionHelper
 {
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = false)]
-    private static extern int GetCurrentPackageFullName(ref uint length,
-        [MarshalAs(UnmanagedType.LPWStr)] char[]? fullName);
+    private static extern int GetCurrentPackageFullName(ref uint length, IntPtr fullName);
 
     private const int AppmodelErrorNoPackage = 15700;
 
@@ -21,7 +20,7 @@ public static class DistributionHelper
         {
             if (_isMsixPackaged.HasValue) return _isMsixPackaged.Value;
             uint length = 0;
-            _isMsixPackaged = GetCurrentPackageFullName(ref length, null) != AppmodelErrorNoPackage;
+            _isMsixPackaged = GetCurrentPackageFullName(ref length, IntPtr.Zero) != AppmodelErrorNoPackage;
             return _isMsixPackaged.Value;
         }
     }
