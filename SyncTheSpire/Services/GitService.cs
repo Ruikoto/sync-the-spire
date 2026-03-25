@@ -742,6 +742,24 @@ public class GitService
         {
             // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
             LogService.Warn($"LibGit2Sharp fetch failed, falling back to git.exe: {ex.Message}");
+            RunGitCliFetch();
+        }
+    }
+
+    /// <summary>
+    /// run git.exe fetch with one retry on auth failure — credential helpers
+    /// (e.g. GCM) may need a warm-up round on first invocation after app start.
+    /// </summary>
+    private void RunGitCliFetch()
+    {
+        try
+        {
+            RunGitCli("fetch --all --prune");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Authentication failed"))
+        {
+            LogService.Warn("git.exe fetch auth failed, retrying after credential helper warm-up...");
+            Thread.Sleep(1000);
             RunGitCli("fetch --all --prune");
         }
     }
