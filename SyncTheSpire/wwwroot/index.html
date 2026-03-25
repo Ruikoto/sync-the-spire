@@ -48,9 +48,7 @@
     <div id="save-unlink-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
             <div class="flex items-center gap-2 mb-3">
-                <svg width="20" height="20" class="text-spire-danger shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
-                </svg>
+                <i data-lucide="triangle-alert" class="w-5 h-5 text-spire-danger shrink-0"></i>
                 <h3 class="text-sm font-medium">存档合并功能已下线</h3>
             </div>
             <p class="text-xs text-spire-muted mb-2 leading-relaxed">
@@ -183,9 +181,7 @@
                 <div class="flex items-center gap-3 px-4 py-3 border-b border-spire-border shrink-0">
                     <button id="branch-preview-back"
                         class="text-spire-muted hover:text-spire-text transition-colors shrink-0" aria-label="返回">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 12L6 8l4-4"/>
-                        </svg>
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i>
                     </button>
                     <h2 id="branch-preview-name" class="text-sm font-medium font-mono truncate flex-1"></h2>
                     <button id="branch-preview-close"
@@ -342,16 +338,11 @@
             </div>
             <div class="flex items-center gap-1.5">
                 <button id="btn-about" class="relative w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="关于">
-                    <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="8" cy="8" r="6.5"/>
-                        <path d="M8 11V7M8 5.5V5"/>
-                    </svg>
+                    <i data-lucide="info" class="w-4 h-4"></i>
                     <span id="about-update-dot" class="hidden absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
                 </button>
                 <button id="btn-settings" class="w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="设置">
-                    <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
-                    </svg>
+                    <i data-lucide="settings" class="w-4 h-4"></i>
                 </button>
             </div>
         </div>
@@ -373,27 +364,21 @@
                 <span id="sync-status-text" class="text-xs text-spire-muted"></span>
             </div>
             <!-- action buttons -->
-            <div class="flex gap-2 mt-3">
+            <div class="flex items-center gap-2 mt-3">
                 <button id="btn-push"
                     class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-accent/15 text-spire-accentHover hover:bg-spire-accent/25">
-                    <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M8 12V4M4 7l4-4 4 4"/>
-                    </svg>
+                    <i data-lucide="upload" class="w-3 h-3"></i>
                     上传
                 </button>
                 <button id="btn-pull"
                     class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-success/10 text-spire-success hover:bg-spire-success/20">
-                    <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M8 4v8M4 9l4 4 4-4"/>
-                    </svg>
+                    <i data-lucide="download" class="w-3 h-3"></i>
                     拉取
                 </button>
                 <div class="relative flex-1 flex">
                     <button id="btn-open-folder"
                         class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-amber-500/[.07] text-amber-500/80 hover:bg-amber-500/[.12] hover:text-amber-500">
-                        <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M1 4a2 2 0 012-2h3.5l2 2H13a2 2 0 012 2v6a2 2 0 01-2 2H3a2 2 0 01-2-2V4z"/>
-                        </svg>
+                        <i data-lucide="folder-open" class="w-3 h-3"></i>
                         打开
                     </button>
                     <!-- folder dropdown -->
@@ -417,9 +402,7 @@
                 </div>
                 <button id="btn-refresh"
                     class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 border border-spire-border text-spire-muted hover:text-spire-text">
-                    <svg id="refresh-icon" class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 8A6 6 0 1 1 8 2M14 2v4h-4"/>
-                    </svg>
+                    <i data-lucide="refresh-cw" id="refresh-icon" class="w-3 h-3"></i>
                     <span id="refresh-label">刷新</span>
                 </button>
             </div>
@@ -511,7 +494,7 @@
                     <button id="btn-open-backup"
                         class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
                         title="打开备份文件夹">
-                        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+                        <i data-lucide="folder-open" class="w-3 h-3"></i>
                     </button>
                 </div>
             </div>
@@ -581,7 +564,9 @@
         </div>
     </div>
 
+    <script src="lib/lucide.min.js"></script>
     <script src="lib/marked.min.js"></script>
     <script src="app.js"></script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>
