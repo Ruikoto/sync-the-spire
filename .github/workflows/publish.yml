@@ -371,6 +371,9 @@ jobs:
       # 3. 提交整个目录下的所有架构包提审
       - name: Submit to Microsoft Store
         run: |
+          # remove package.json so msstore CLI won't misdetect as Electron project
+          Remove-Item package.json, package-lock.json -ErrorAction SilentlyContinue
+
           # 检查是否下载成功
           $files = Get-ChildItem -Path ./msix -Filter *.msix -Recurse
           if ($files.Count -eq 0) {
