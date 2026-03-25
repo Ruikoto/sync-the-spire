@@ -345,6 +345,9 @@ jobs:
     needs: [build-msix]
     runs-on: windows-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Download MSIX artifacts
         uses: actions/download-artifact@v4
         with:
