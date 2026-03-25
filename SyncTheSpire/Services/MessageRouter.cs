@@ -16,6 +16,7 @@ public class MessageRouter
     private readonly SaveBackupService _backupService;
     private readonly SaveMergeService _mergeService;
     private readonly StoreUpdateService _storeUpdateService;
+    private readonly SteamFinderService _steamFinder = new();
     private readonly MainForm _form;
     private readonly SynchronizationContext _uiContext;
     // only one IPC operation at a time to prevent concurrent access to git/config/filesystem
@@ -123,6 +124,13 @@ public class MessageRouter
             // mod preview reads immutable git objects — safe outside the gate
             case "GET_BRANCH_MODS":
                 HandleGetBranchMods(req.Payload);
+                return;
+            // steam auto-find — read-only filesystem/registry, no need for the gate
+            case "FIND_GAME_PATH":
+                HandleFindGamePath();
+                return;
+            case "FIND_SAVE_PATH":
+                HandleFindSavePath();
                 return;
         }
 
@@ -972,6 +980,40 @@ public class MessageRouter
         var id = idEl.GetString();
         if (!string.IsNullOrEmpty(id))
             _configService.DismissAnnouncement(id);
+    }
+
+    // ── steam auto-find handlers ──────────────────────────────────
+
+    private void HandleFindGamePath()
+    {
+        var result = _steamFinder.FindGamePath();
+        if (result.Path is not null)
+            Send(IpcResponse.Success("FIND_GAME_PATH", new { path = result.Path }));
+        else
+            Send(IpcResponse.Error("FIND_GAME_PATH", result.Error ?? "未找到游戏安装路径"));
+    }
+
+    private void HandleFindSavePath()
+    {
+        var result = _steamFinder.FindSaveAccounts();
+        if (result.Accounts is not null)
+        {
+            Send(IpcResponse.Success("FIND_SAVE_PATH", new
+            {
+                basePath = result.BasePath,
+                accounts = result.Accounts.Select(a => new
+                {
+                    steamId = a.SteamId64,
+                    personaName = a.PersonaName,
+                    mostRecent = a.MostRecent,
+                    hasSave = a.HasSaveFolder
+                })
+            }));
+        }
+        else
+        {
+            Send(IpcResponse.Error("FIND_SAVE_PATH", result.Error ?? "未找到存档目录"));
+        }
     }
 
     // ── store update handlers ─────────────────────────────────────
