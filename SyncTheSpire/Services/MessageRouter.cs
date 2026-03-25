@@ -370,28 +370,33 @@ public class MessageRouter
         }
 
         // validate game install path: must contain SlayTheSpire2.exe
+        // if the user picked a subdirectory, walk up to find the correct root
         if (!string.IsNullOrWhiteSpace(cfg.GameInstallPath))
         {
-            var exePath = Path.Combine(cfg.GameInstallPath, "SlayTheSpire2.exe");
-            if (!File.Exists(exePath))
+            var resolved = FindAncestorContaining(cfg.GameInstallPath, "SlayTheSpire2.exe", isFile: true);
+            if (resolved is null)
             {
                 Send(IpcResponse.Error("INIT_CONFIG",
                     $"游戏安装路径无效：未找到 SlayTheSpire2.exe\n请确认路径是否正确：{cfg.GameInstallPath}"));
                 return;
             }
+            cfg.GameInstallPath = resolved;
         }
 
         // validate save folder: must contain profile1/ dir and profile.save file
+        // walk up if necessary so the user can pick e.g. saves/profile1 and we still find saves/
         if (!string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
         {
-            var profileDir = Path.Combine(cfg.SaveFolderPath, "profile1");
-            var profileSave = Path.Combine(cfg.SaveFolderPath, "profile.save");
-            if (!Directory.Exists(profileDir) || !File.Exists(profileSave))
+            var resolved = FindAncestorContaining(cfg.SaveFolderPath,
+                dir => Directory.Exists(Path.Combine(dir, "profile1"))
+                    && File.Exists(Path.Combine(dir, "profile.save")));
+            if (resolved is null)
             {
                 Send(IpcResponse.Error("INIT_CONFIG",
                     $"存档路径无效：未找到 profile1 文件夹或 profile.save 文件\n请确认路径是否正确：{cfg.SaveFolderPath}"));
                 return;
             }
+            cfg.SaveFolderPath = resolved;
         }
 
         // merge sensitive fields from existing config if user left them blank
@@ -929,6 +934,37 @@ public class MessageRouter
     /// git marks object files as read-only, so Directory.Delete chokes on Windows.
     /// strip the flag first, then nuke the whole tree.
     /// </summary>
+    // walk up from startPath looking for a file/dir by name
+    private static string? FindAncestorContaining(string startPath, string childName, bool isFile)
+    {
+        var dir = startPath;
+        while (!string.IsNullOrEmpty(dir))
+        {
+            var candidate = Path.Combine(dir, childName);
+            if (isFile ? File.Exists(candidate) : Directory.Exists(candidate))
+                return dir;
+            var parent = Directory.GetParent(dir)?.FullName;
+            if (parent == dir) break;
+            dir = parent;
+        }
+        return null;
+    }
+
+    // walk up from startPath using a custom predicate
+    private static string? FindAncestorContaining(string startPath, Func<string, bool> predicate)
+    {
+        var dir = startPath;
+        while (!string.IsNullOrEmpty(dir))
+        {
+            if (predicate(dir))
+                return dir;
+            var parent = Directory.GetParent(dir)?.FullName;
+            if (parent == dir) break;
+            dir = parent;
+        }
+        return null;
+    }
+
     private static void ForceDeleteDirectory(string path)
     {
         if (!Directory.Exists(path)) return;

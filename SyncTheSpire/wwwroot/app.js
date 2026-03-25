@@ -123,7 +123,10 @@ function toast(message, type = 'info') {
         success: 'bg-spire-card border-spire-success',
     };
 
-    el.className = `toast border rounded-lg px-4 py-2 text-sm max-w-xs cursor-pointer ${bgMap[type] || bgMap.info}`;
+    el.className = `toast border rounded-lg px-4 py-2 text-sm max-w-sm cursor-pointer overflow-y-auto ${bgMap[type] || bgMap.info}`;
+    el.style.maxHeight = '50vh';
+    el.style.whiteSpace = 'pre-wrap';
+    el.style.wordBreak = 'break-word';
     el.textContent = message;
     container.appendChild(el);
 
@@ -139,8 +142,9 @@ function toast(message, type = 'info') {
 
     el.addEventListener('click', dismiss);
 
-    // auto-dismiss
-    const timer = setTimeout(dismiss, 4000);
+    // longer messages stay longer
+    const duration = Math.max(4000, message.length * 60);
+    const timer = setTimeout(dismiss, duration);
 }
 
 // themed confirm dialog — returns a Promise<boolean>
