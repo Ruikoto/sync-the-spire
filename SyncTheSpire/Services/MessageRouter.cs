@@ -71,6 +71,7 @@ public class MessageRouter
         }
         catch
         {
+            LogService.Warn($"Invalid IPC message: {rawJson}");
             Send(IpcResponse.Error("UNKNOWN", "Invalid JSON"));
             return;
         }
@@ -80,6 +81,9 @@ public class MessageRouter
             Send(IpcResponse.Error("UNKNOWN", "Empty request"));
             return;
         }
+
+        if (req.Action != "WINDOW_DRAG")
+            LogService.Info($"IPC <- {req.Action}");
 
         // run everything off the UI thread so we don't freeze the window
         Task.Run(() => Route(req));
@@ -221,10 +225,12 @@ public class MessageRouter
         catch (IOException ex)
         {
             // most likely file-in-use by game process
+            LogService.Error($"[{req.Action}] IO error", ex);
             Send(IpcResponse.Error(req.Action, $"文件被占用，请先关闭游戏再操作！\n{ex.Message}"));
         }
         catch (LibGit2Sharp.LibGit2SharpException ex)
         {
+            LogService.Error($"[{req.Action}] LibGit2Sharp error", ex);
             Send(IpcResponse.Error(req.Action, $"Git 操作失败：{ex.Message}"));
         }
         catch (InvalidOperationException ex) when (
@@ -232,6 +238,7 @@ public class MessageRouter
             ex.Message.Contains("could not read Username", StringComparison.OrdinalIgnoreCase) ||
             ex.Message.Contains("401") || ex.Message.Contains("403"))
         {
+            LogService.Error($"[{req.Action}] Auth failure", ex);
             var authType = _configService.LoadConfig().AuthType;
             var msg = authType switch
             {
@@ -246,10 +253,12 @@ public class MessageRouter
         catch (InvalidOperationException ex) when (
             ex.Message.Contains("git") && ex.Message.Contains("failed"))
         {
+            LogService.Error($"[{req.Action}] Git CLI failure", ex);
             Send(IpcResponse.Error(req.Action, $"Git 操作失败：{ex.Message}"));
         }
         catch (Exception ex)
         {
+            LogService.Error($"[{req.Action}] Unexpected error", ex);
             Send(IpcResponse.Error(req.Action, $"操作失败：{ex.Message}"));
         }
         finally
@@ -906,6 +915,7 @@ public class MessageRouter
         }
         catch (Exception ex)
         {
+            LogService.Error("CHECK_STORE_UPDATE failed", ex);
             Send(IpcResponse.Error("CHECK_STORE_UPDATE", ex.Message));
         }
     }
@@ -919,6 +929,7 @@ public class MessageRouter
         }
         catch (Exception ex)
         {
+            LogService.Error("INSTALL_STORE_UPDATE failed", ex);
             Send(IpcResponse.Error("INSTALL_STORE_UPDATE", ex.Message));
         }
     }

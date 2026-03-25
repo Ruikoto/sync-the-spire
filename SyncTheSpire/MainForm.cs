@@ -89,6 +89,7 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
+            LogService.Error("WebView2 init failed", ex);
             MessageBox.Show(
                 $"无法初始化 WebView2，请确认已安装 WebView2 Runtime。\n\n{ex.Message}",
                 "Sync the Spire", MessageBoxButtons.OK, MessageBoxIcon.Error);

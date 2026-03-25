@@ -10,8 +10,10 @@ public class SaveBackupService
     {
         var name = $"Save_backup_{DateTime.Now:yyyyMMdd_HHmmss}";
         var dest = Path.Combine(BackupDir, name);
+        LogService.Info($"Backing up save folder: {name}");
         Directory.CreateDirectory(BackupDir);
         CopyDirectoryRecursive(saveFolderPath, dest);
+        LogService.Info($"Save backup completed: {name}");
         return dest;
     }
 
@@ -20,6 +22,7 @@ public class SaveBackupService
     {
         var name = $"Mods_backup_{DateTime.Now:yyyyMMdd_HHmmss}";
         var dest = Path.Combine(BackupDir, name);
+        LogService.Info($"Backing up mod folder: {name}");
         Directory.CreateDirectory(BackupDir);
         CopyDirectoryRecursive(gameModPath, dest);
         return dest;
@@ -53,6 +56,7 @@ public class SaveBackupService
     // caller is responsible for backing up current state first.
     public void RestoreSaveBackup(string backupPath, string saveFolderPath, JunctionService junctionService)
     {
+        LogService.Info($"Restoring save backup: {Path.GetFileName(backupPath)}");
         // nuke any active junctions in modded/ before deleting
         var moddedDir = Path.Combine(saveFolderPath, "modded");
         if (Directory.Exists(moddedDir))
@@ -80,6 +84,7 @@ public class SaveBackupService
         if (backupName.Contains("..") || backupName.Contains('/') || backupName.Contains('\\'))
             return;
 
+        LogService.Info($"Deleting backup: {backupName}");
         var path = Path.Combine(BackupDir, backupName);
         if (Directory.Exists(path))
             Directory.Delete(path, true);

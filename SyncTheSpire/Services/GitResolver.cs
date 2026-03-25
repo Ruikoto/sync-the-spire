@@ -47,6 +47,7 @@ public class GitResolver
         if (IsSystemGitAvailable())
         {
             _resolvedPath = "git";
+            LogService.Info("Git resolved: system PATH");
             return _resolvedPath;
         }
 
@@ -54,12 +55,14 @@ public class GitResolver
         if (File.Exists(BundledMinGitExePath))
         {
             _resolvedPath = BundledMinGitExePath;
+            LogService.Info($"Git resolved: bundled MinGit at {_resolvedPath}");
             return _resolvedPath;
         }
 
         if (File.Exists(MinGitExePath))
         {
             _resolvedPath = MinGitExePath;
+            LogService.Info($"Git resolved: cached MinGit at {_resolvedPath}");
             return _resolvedPath;
         }
 
@@ -117,6 +120,7 @@ public class GitResolver
 
     private void DownloadAndExtract()
     {
+        LogService.Info("No git found, downloading MinGit...");
         var tempZip = Path.Combine(
             Path.GetTempPath(), $"SyncTheSpire_MinGit_{Guid.NewGuid():N}.zip");
 
@@ -205,13 +209,15 @@ public class GitResolver
 
             return true;
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            LogService.Warn($"MinGit download failed from {url}: {ex.Message}");
             try { File.Delete(destPath); } catch { }
             return false;
         }
         catch (TaskCanceledException)
         {
+            LogService.Warn($"MinGit download timed out from {url}");
             try { File.Delete(destPath); } catch { }
             return false;
         }

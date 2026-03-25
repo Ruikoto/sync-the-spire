@@ -45,9 +45,10 @@ public class ConfigService
             var json = File.ReadAllText(ConfigFilePath);
             _cached = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
         }
-        catch
+        catch (Exception ex)
         {
             // corrupted config file — fall back to defaults so the app doesn't crash
+            LogService.Warn($"Config file corrupted, using defaults: {ex.Message}");
             _cached = new AppConfig();
         }
 
@@ -79,6 +80,7 @@ public class ConfigService
 
         var json = JsonSerializer.Serialize(toSerialize, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(ConfigFilePath, json);
+        LogService.Info("Config saved");
     }
 
     /// <summary>
@@ -109,9 +111,10 @@ public class ConfigService
                 var bytes = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
                 return Encoding.UTF8.GetString(bytes);
             }
-            catch
+            catch (Exception ex)
             {
                 // corrupted — treat as empty
+                LogService.Warn($"DPAPI decrypt failed: {ex.Message}");
                 return string.Empty;
             }
         }

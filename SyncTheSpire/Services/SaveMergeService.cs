@@ -43,6 +43,7 @@ public class SaveMergeService
     // unlink: remove junctions, copy normal profiles into modded as real dirs
     public string Unlink(string saveFolderPath)
     {
+        LogService.Info($"Unlinking merged saves: {saveFolderPath}");
         var backupPath = _backupService.BackupSaveFolder(saveFolderPath);
 
         var moddedDir = Path.Combine(saveFolderPath, "modded");

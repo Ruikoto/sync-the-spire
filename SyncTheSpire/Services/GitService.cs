@@ -113,6 +113,7 @@ public class GitService
     /// </summary>
     private string RunGitCli(string args, string? workDir = null, int timeout = 120_000)
     {
+        LogService.Info($"git.exe {args}");
         var psi = new ProcessStartInfo
         {
             FileName = _resolver.GetGitPath(),
@@ -157,6 +158,7 @@ public class GitService
     public void CloneRepo()
     {
         var cfg = _config.LoadConfig();
+        LogService.Info($"Cloning repo: {cfg.RepoUrl}");
 
         if (IsSshMode)
         {
@@ -175,9 +177,10 @@ public class GitService
                     opts.FetchOptions.CredentialsProvider = creds;
                 Repository.Clone(cfg.RepoUrl, RepoPath, opts);
             }
-            catch (LibGit2SharpException)
+            catch (LibGit2SharpException ex)
             {
                 // clean up partial clone before retrying
+                LogService.Warn($"LibGit2Sharp clone failed, falling back to git.exe: {ex.Message}");
                 if (Directory.Exists(RepoPath))
                     Directory.Delete(RepoPath, true);
                 CloneViaGitCli(cfg);
@@ -186,6 +189,7 @@ public class GitService
 
         // separate .git dir from working tree so junction stays clean
         SeparateGitDir();
+        LogService.Info("Clone completed, git dir separated");
 
         // use info/exclude instead of .gitignore (keeps working tree pristine)
         EnsureExcludeRules();
@@ -293,6 +297,7 @@ public class GitService
 
     public void ForceCheckoutBranch(string branchName)
     {
+        LogService.Info($"Force checkout branch: {branchName}");
         if (IsProtectedBranch(branchName))
             throw new InvalidOperationException($"不允许检出受保护的分支：{branchName}");
 
@@ -330,6 +335,7 @@ public class GitService
 
     public void CreateBranch(string branchName)
     {
+        LogService.Info($"Creating branch: {branchName}");
         if (IsProtectedBranch(branchName))
             throw new InvalidOperationException($"不允许创建受保护的分支名：{branchName}");
 
@@ -415,6 +421,7 @@ public class GitService
             var cfg = _config.LoadConfig();
             var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
             repo.Commit("Auto-save", sig, sig);
+            LogService.Info("Auto-committed local changes");
         }
 
         // fetch first so we can detect divergence before pushing
@@ -422,7 +429,10 @@ public class GitService
 
         var divergence = CheckDivergence(repo);
         if (divergence == BranchDivergence.Diverged)
+        {
+            LogService.Warn("Branch diverged, push aborted — awaiting user resolution");
             return false;
+        }
 
         // local is ahead or up-to-date — safe to push
         PushCurrentBranch(repo);
@@ -450,6 +460,7 @@ public class GitService
         using var repo = OpenRepo();
 
         var branchName = repo.Head.FriendlyName;
+        LogService.Info($"Resetting to remote: origin/{branchName}");
         FetchAll(repo);
 
         var remoteBranch = repo.Branches[$"origin/{branchName}"];
@@ -474,6 +485,7 @@ public class GitService
         var cfg = _config.LoadConfig();
         var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
         repo.Commit("Auto-save (before switch)", sig, sig);
+        LogService.Info("Silent auto-commit before branch switch");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
@@ -568,8 +580,9 @@ public class GitService
             proc.WaitForExit(5000);
             return proc.ExitCode == 0 && !string.IsNullOrWhiteSpace(output) ? output : null;
         }
-        catch
+        catch (Exception ex)
         {
+            LogService.Warn($"Failed to read git global config '{key}': {ex.Message}");
             return null;
         }
     }
@@ -598,9 +611,10 @@ public class GitService
                 fetchOpts.CredentialsProvider = creds;
             Commands.Fetch(repo, remote.Name, refSpecs, fetchOpts, null);
         }
-        catch (LibGit2SharpException)
+        catch (LibGit2SharpException ex)
         {
             // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
+            LogService.Warn($"LibGit2Sharp fetch failed, falling back to git.exe: {ex.Message}");
             RunGitCli("fetch --all --prune");
         }
     }
@@ -623,6 +637,7 @@ public class GitService
 
         var localTip = repo.Head.Tip.Sha;
         var branchName = repo.Head.FriendlyName;
+        LogService.Info($"Pushing branch {branchName} to origin");
 
         if (IsSshMode)
         {
@@ -650,9 +665,10 @@ public class GitService
                 if (pushError != null)
                     throw new LibGit2SharpException(pushError);
             }
-            catch (LibGit2SharpException)
+            catch (LibGit2SharpException ex)
             {
                 // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
+                LogService.Warn($"LibGit2Sharp push failed, falling back to git.exe: {ex.Message}");
                 RunGitCli("push -u origin HEAD");
             }
         }
@@ -694,6 +710,7 @@ public class GitService
 
         var localTip = repo.Head.Tip.Sha;
         var branchName = repo.Head.FriendlyName;
+        LogService.Info($"Force pushing branch {branchName} (--force-with-lease)");
 
         RunGitCli("push --force-with-lease -u origin HEAD");
         VerifyPushResult(branchName, localTip);

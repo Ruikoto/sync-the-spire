@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using LibGit2Sharp;
+using SyncTheSpire.Services;
 
 namespace SyncTheSpire;
 
@@ -55,6 +56,20 @@ class Program
 
         // repo lives in AppData which may trigger ownership check (CVE-2022-24765)
         GlobalSettings.SetOwnerValidation(false);
+
+        LogService.Info("App starting");
+        LogService.CleanupOldLogs();
+
+        // catch everything that escapes normal error handling
+        Application.ThreadException += (_, e) =>
+            LogService.Error("Unhandled UI thread exception", e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            LogService.Error("Unhandled domain exception", (Exception)e.ExceptionObject);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            LogService.Error("Unobserved task exception", e.Exception);
+            e.SetObserved();
+        };
 
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();

@@ -51,7 +51,7 @@ public class StoreUpdateService
         catch (Exception ex)
         {
             // Store service unavailable, user not signed in, network down, etc.
-            System.Diagnostics.Debug.WriteLine($"Store update check failed: {ex.Message}");
+            LogService.Error("Store update check failed", ex);
             _pendingUpdates = null;
             return (false, false);
         }
@@ -88,7 +88,7 @@ public class StoreUpdateService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Store update install failed: {ex.Message}");
+            LogService.Error("Store update install failed", ex);
             return "error";
         }
     }

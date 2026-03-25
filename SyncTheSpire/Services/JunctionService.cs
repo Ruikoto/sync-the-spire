@@ -12,6 +12,7 @@ public class JunctionService
     /// </summary>
     public bool CreateJunction(string junctionPath, string targetPath)
     {
+        LogService.Info($"Creating junction: {junctionPath} -> {targetPath}");
         // if something already exists at junctionPath, bail out
         if (Directory.Exists(junctionPath) || File.Exists(junctionPath))
             throw new InvalidOperationException($"Path already exists: {junctionPath}");
@@ -37,10 +38,16 @@ public class JunctionService
             proc.StandardOutput.ReadToEnd();
             proc.StandardError.ReadToEnd();
             proc.WaitForExit(10_000);
-            return proc.ExitCode == 0;
+            var success = proc.ExitCode == 0;
+            if (success)
+                LogService.Info($"Junction created successfully: {junctionPath}");
+            else
+                LogService.Warn($"mklink /J exited with code {proc.ExitCode}");
+            return success;
         }
-        catch
+        catch (Exception ex)
         {
+            LogService.Error($"Junction creation failed: {junctionPath} -> {targetPath}", ex);
             return false;
         }
     }
@@ -55,6 +62,7 @@ public class JunctionService
 
         if (IsJunction(junctionPath))
         {
+            LogService.Info($"Removing junction: {junctionPath}");
             // this only removes the reparse point, not the target
             Directory.Delete(junctionPath, false);
         }
