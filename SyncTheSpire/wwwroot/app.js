@@ -1274,6 +1274,8 @@ function showUpdateModal(isForced) {
     const changelogEl = $('#update-changelog');
     const closeBtn = $('#update-modal-close');
     const cancelBtn = $('#update-cancel');
+    const storeBtn = $('#update-store');
+    const downloadBtn = $('#update-download');
 
     titleEl.textContent = '发现新版本';
 
@@ -1298,6 +1300,20 @@ function showUpdateModal(isForced) {
         cancelBtn.classList.remove('hidden');
     }
 
+    // adjust buttons based on distribution channel
+    if (appDistribution === 'store') {
+        // store: use the primary store button for in-app update, hide zip download
+        storeBtn.textContent = '立即更新';
+        storeBtn.classList.remove('hidden');
+        downloadBtn.classList.add('hidden');
+    } else {
+        // direct exe: show both — zip download (secondary) + store link (primary)
+        storeBtn.textContent = '从应用商店获取';
+        storeBtn.classList.remove('hidden');
+        downloadBtn.textContent = '立即下载';
+        downloadBtn.classList.remove('hidden');
+    }
+
     modal.classList.remove('hidden');
 }
 
@@ -1307,11 +1323,17 @@ function closeUpdateModal() {
 
 // update modal event bindings
 $('#update-download').addEventListener('click', () => {
+    // zip download — only visible for EXE users
+    const url = getDownloadUrl();
+    if (url) openExternal(url);
+});
+$('#update-store').addEventListener('click', () => {
     if (appDistribution === 'store') {
-        openExternal('ms-windows-store://pdp/?ProductId=9PC112T0C074');
+        // trigger Store in-app update
+        sendMessage('INSTALL_STORE_UPDATE');
     } else {
-        const url = getDownloadUrl();
-        if (url) openExternal(url);
+        // EXE users: open the Store page
+        openExternal('ms-windows-store://pdp/?ProductId=9PC112T0C074');
     }
 });
 $('#update-cancel').addEventListener('click', closeUpdateModal);
@@ -1334,6 +1356,12 @@ async function checkForUpdates(silent = true) {
 
         // nightly / dev / unknown builds: skip update prompts entirely
         if (!/^v?\d+\.\d+/.test(appVersion)) return;
+
+        // store version: delegate update detection to Store API, use version.json only for changelog/display
+        if (appDistribution === 'store') {
+            await checkForStoreUpdates(silent);
+            return;
+        }
 
         const hasUpdate = compareVersions(appVersion, latestVersionInfo.latest_version) > 0;
 
@@ -1362,15 +1390,73 @@ async function checkForUpdates(silent = true) {
     }
 }
 
-$('#about-download').addEventListener('click', e => {
-    e.preventDefault();
-    if (appDistribution === 'store') {
-        openExternal('ms-windows-store://pdp/?ProductId=9PC112T0C074');
-    } else {
-        // close about first, then show full update modal with changelog
-        $('#about-modal').classList.add('hidden');
+// store-specific update check via IPC — version.json already fetched at this point
+let storeUpdateResolve = null;
+async function checkForStoreUpdates(silent) {
+    sendMessage('CHECK_STORE_UPDATE');
+    // wait for the IPC response with a timeout
+    const result = await Promise.race([
+        new Promise(resolve => { storeUpdateResolve = resolve; }),
+        new Promise(resolve => setTimeout(() => resolve(null), 15000))
+    ]);
+    storeUpdateResolve = null;
+
+    if (!result || !result.available) {
+        // Store says no update — fallback to version.json comparison
+        const hasUpdate = compareVersions(appVersion, latestVersionInfo.latest_version) > 0;
+        if (hasUpdate) {
+            // Store hasn't propagated yet, but our server knows — show badge
+            showUpdateBadge();
+        } else if (!silent) {
+            toast('当前已是最新版本', 'success');
+        }
+        return;
+    }
+
+    // Store confirms update available
+    const behavior = result.mandatory ? 'forced' : getUpdateBehavior();
+    if (behavior === 'forced') {
+        showUpdateModal(true);
+    } else if (behavior === 'popup' || !silent) {
         showUpdateModal(false);
     }
+    if (behavior === 'silent') {
+        showUpdateBadge();
+    }
+}
+
+on('CHECK_STORE_UPDATE', data => {
+    if (storeUpdateResolve) {
+        storeUpdateResolve(data.status === 'success' ? data.payload : null);
+    }
+});
+
+on('INSTALL_STORE_UPDATE', data => {
+    if (data.status !== 'success') {
+        // Store install failed — fallback to opening store page
+        openExternal('ms-windows-store://pdp/?ProductId=9PC112T0C074');
+        return;
+    }
+    const result = data.payload?.result;
+    if (result === 'completed') {
+        toast('更新已完成，重启应用后生效', 'success');
+        closeUpdateModal();
+    } else if (result === 'canceled') {
+        toast('更新已取消', 'info');
+    } else if (result === 'no_updates') {
+        toast('当前已是最新版本', 'success');
+        closeUpdateModal();
+    } else {
+        // error — fallback to store page
+        openExternal('ms-windows-store://pdp/?ProductId=9PC112T0C074');
+    }
+});
+
+$('#about-download').addEventListener('click', e => {
+    e.preventDefault();
+    // close about first, then show full update modal with changelog
+    $('#about-modal').classList.add('hidden');
+    showUpdateModal(false);
 });
 
 $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
@@ -1433,7 +1519,7 @@ async function checkAnnouncements() {
             }
             const body = document.createElement('div');
             body.className = 'text-xs text-spire-muted leading-relaxed announcement-body';
-            body.textContent = a.content;
+            body.innerHTML = marked.parse(a.content);
             content.appendChild(body);
             banner.appendChild(content);
 

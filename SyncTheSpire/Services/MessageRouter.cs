@@ -15,6 +15,7 @@ public class MessageRouter
     private readonly JunctionService _junctionService;
     private readonly SaveBackupService _backupService;
     private readonly SaveMergeService _mergeService;
+    private readonly StoreUpdateService _storeUpdateService;
     private readonly MainForm _form;
     private readonly SynchronizationContext _uiContext;
     // only one IPC operation at a time to prevent concurrent access to git/config/filesystem
@@ -28,6 +29,7 @@ public class MessageRouter
         JunctionService junctionService,
         SaveBackupService backupService,
         SaveMergeService mergeService,
+        StoreUpdateService storeUpdateService,
         MainForm form)
     {
         _webView = webView;
@@ -36,6 +38,7 @@ public class MessageRouter
         _junctionService = junctionService;
         _backupService = backupService;
         _mergeService = mergeService;
+        _storeUpdateService = storeUpdateService;
         _form = form;
         // capture the UI SynchronizationContext so background threads can post back
         _uiContext = SynchronizationContext.Current
@@ -105,6 +108,13 @@ public class MessageRouter
             // PICK_FOLDER needs UI dialog — handle outside the gate to avoid blocking other IPC
             case "PICK_FOLDER":
                 HandlePickFolder();
+                return;
+            // Store update actions use system UI / network calls — don't hold the gate
+            case "CHECK_STORE_UPDATE":
+                _ = HandleCheckStoreUpdate();
+                return;
+            case "INSTALL_STORE_UPDATE":
+                _ = HandleInstallStoreUpdate();
                 return;
         }
 
@@ -878,6 +888,34 @@ public class MessageRouter
             isEnabled = enabled,
             message = enabled ? "存档重定向已启用" : "存档重定向已关闭"
         }));
+    }
+
+    // ── store update handlers ─────────────────────────────────────
+
+    private async Task HandleCheckStoreUpdate()
+    {
+        try
+        {
+            var (hasUpdate, isMandatory) = await _storeUpdateService.CheckForUpdatesAsync();
+            Send(IpcResponse.Success("CHECK_STORE_UPDATE", new { available = hasUpdate, mandatory = isMandatory }));
+        }
+        catch (Exception ex)
+        {
+            Send(IpcResponse.Error("CHECK_STORE_UPDATE", ex.Message));
+        }
+    }
+
+    private async Task HandleInstallStoreUpdate()
+    {
+        try
+        {
+            var result = await _storeUpdateService.DownloadAndInstallAsync();
+            Send(IpcResponse.Success("INSTALL_STORE_UPDATE", new { result }));
+        }
+        catch (Exception ex)
+        {
+            Send(IpcResponse.Error("INSTALL_STORE_UPDATE", ex.Message));
+        }
     }
 
     private void Send(IpcResponse response)

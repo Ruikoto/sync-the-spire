@@ -229,7 +229,26 @@ button, select {
     animation: fadeIn 0.2s ease-out;
 }
 .announcement-body {
-    white-space: pre-line;
+    /* no white-space: pre-line — markdown handles line breaks via <br>/<p> */
+}
+.announcement-body p { margin: 0.2em 0; }
+.announcement-body p:last-child { margin-bottom: 0; }
+.announcement-body a {
+    color: #7c8aff;
+    text-decoration: underline;
+}
+.announcement-body ul,
+.announcement-body ol {
+    padding-left: 1.4em;
+    margin: 0.2em 0;
+}
+.announcement-body ul { list-style: disc; }
+.announcement-body ol { list-style: decimal; }
+.announcement-body code {
+    background: #1a1d2e;
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    font-size: 0.9em;
 }
 
 @keyframes fadeIn {

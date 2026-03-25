@@ -109,9 +109,11 @@ public class MainForm : Form
         var gitService = new GitService(configService, gitResolver);
         var backupService = new SaveBackupService();
         var mergeService = new SaveMergeService(junctionService, backupService);
+        var storeUpdateService = new StoreUpdateService();
+        storeUpdateService.Initialize(this.Handle);
         _router = new MessageRouter(
             _webView.CoreWebView2, configService, gitService, gitResolver,
-            junctionService, backupService, mergeService, this);
+            junctionService, backupService, mergeService, storeUpdateService, this);
 
         _webView.CoreWebView2.WebMessageReceived += (_, e) =>
         {
