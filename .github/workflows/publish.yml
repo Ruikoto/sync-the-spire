@@ -368,19 +368,17 @@ jobs:
           --clientId ${{ secrets.PARTNER_CENTER_CLIENT_ID }} 
           --clientSecret ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
 
-      # 3. 提交整个目录下的所有架构包提审
+      # 3. run from project dir so msstore CLI detects .csproj instead of root package.json (Tailwind)
       - name: Submit to Microsoft Store
+        working-directory: SyncTheSpire
         run: |
-          # remove package.json so msstore CLI won't misdetect as Electron project
-          Remove-Item package.json, package-lock.json -ErrorAction SilentlyContinue
-
           # 检查是否下载成功
-          $files = Get-ChildItem -Path ./msix -Filter *.msix -Recurse
+          $files = Get-ChildItem -Path ../msix -Filter *.msix -Recurse
           if ($files.Count -eq 0) {
               Write-Error "Error: No MSIX files found in the downloaded artifacts!"
               exit 1
           }
-          
+
           Write-Host "Ready to submit $($files.Count) package(s) for multiple architectures."
-          
-          msstore publish -i ./msix -id 9PC112T0C074
+
+          msstore publish -i ../msix -id 9PC112T0C074
