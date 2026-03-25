@@ -257,6 +257,11 @@ jobs:
             -e "s|%%ARM64_FULL%%|$FILE_ARM64_FULL|g" \
             -e "s|%%ARM64_LITE%%|$FILE_ARM64_LITE|g" \
             release_note.md
+          # changelog appended after the download guide
+          if [ -f changelog.md ]; then
+            printf '\n' >> release_note.md
+            cat changelog.md >> release_note.md
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
