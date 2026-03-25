@@ -1,8 +1,17 @@
 {
   "announcements": [
+      {
+      "id": "260315-085046",
+      "enabled": true,
+      "title": "🎉上架Microsoft Store！",
+      "content": "Sync the spire现已上架Windows应用商店，前往应用商店搜索“Sync the spire”即可下载（现在排名比较靠后，也许得往后翻翻），获得更方便的更新和使用体验。",
+      "type": "info",
+      "expires_at": null,
+      "dismissible": true
+    },
     {
       "id": "260319-235000",
-      "enabled": true,
+      "enabled": false,
       "title": "存档合并功能更新",
       "content": "由于存档合并和游戏存档同步机制冲突，会导致游戏启动时云存档覆盖本地存档，进而导致无限回档，最新版本使用存档重定向功能代替了存档合并，开启后游戏会在启用MOD的情况下依然读取原版存档，推荐开启。",
       "type": "info",
