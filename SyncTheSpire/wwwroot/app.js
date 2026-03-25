@@ -45,6 +45,22 @@ window.chrome.webview.addEventListener('message', e => {
     }
 });
 
+// one-shot IPC call — returns a Promise that resolves with the response data
+function ipcCall(action, payload) {
+    return new Promise(resolve => {
+        const handler = (data) => {
+            const list = handlers[action];
+            if (list) {
+                const idx = list.indexOf(handler);
+                if (idx !== -1) list.splice(idx, 1);
+            }
+            resolve(data);
+        };
+        on(action, handler);
+        sendMessage(action, payload);
+    });
+}
+
 
 // ── UI helpers ───────────────────────────────────────────────────────────────
 
@@ -1645,31 +1661,21 @@ $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
 
 // ── announcements ─────────────────────────────────────────────────────────────
 
-function getDismissedAnnouncements() {
-    try {
-        return JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
-    } catch { return []; }
-}
-
-function dismissAnnouncement(id) {
-    const dismissed = getDismissedAnnouncements();
-    if (!dismissed.includes(id)) {
-        dismissed.push(id);
-        localStorage.setItem('dismissed_announcements', JSON.stringify(dismissed));
-    }
-}
-
 async function checkAnnouncements() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-        const res = await fetch(ANNOUNCEMENTS_URL, { cache: 'no-cache', signal: controller.signal });
+        // fetch remote announcements and dismissed IDs from C# in parallel
+        const [res, dismissedResult] = await Promise.all([
+            fetch(ANNOUNCEMENTS_URL, { cache: 'no-cache', signal: controller.signal }),
+            ipcCall('GET_DISMISSED_ANNOUNCEMENTS'),
+        ]);
         if (!res.ok) return;
         const data = await res.json();
         const announcements = data.announcements || [];
         if (announcements.length === 0) return;
 
-        const dismissed = getDismissedAnnouncements();
+        const dismissed = dismissedResult.payload?.ids || [];
         const now = Date.now();
         const container = $('#announcement-container');
         container.innerHTML = '';
@@ -1709,7 +1715,7 @@ async function checkAnnouncements() {
                 btn.className = 'dismiss-btn text-spire-muted hover:text-spire-text text-lg leading-none transition-colors shrink-0 px-1';
                 btn.innerHTML = '&times;';
                 btn.addEventListener('click', () => {
-                    dismissAnnouncement(a.id);
+                    sendMessage('DISMISS_ANNOUNCEMENT', { id: a.id });
                     banner.style.opacity = '0';
                     banner.style.transition = 'opacity 0.3s';
                     setTimeout(() => banner.remove(), 300);

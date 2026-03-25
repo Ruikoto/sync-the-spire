@@ -221,6 +221,14 @@ public class MessageRouter
                     HandleSetRedirect(req.Payload);
                     break;
 
+                case "GET_DISMISSED_ANNOUNCEMENTS":
+                    HandleGetDismissedAnnouncements();
+                    break;
+
+                case "DISMISS_ANNOUNCEMENT":
+                    HandleDismissAnnouncement(req.Payload);
+                    break;
+
                 default:
                     Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
                     break;
@@ -947,6 +955,23 @@ public class MessageRouter
             isEnabled = enabled,
             message = enabled ? "存档重定向已启用" : "存档重定向已关闭"
         }));
+    }
+
+    // ── dismissed announcements ─────────────────────────────────────
+
+    private void HandleGetDismissedAnnouncements()
+    {
+        var ids = _configService.GetDismissedAnnouncements();
+        Send(IpcResponse.Success("GET_DISMISSED_ANNOUNCEMENTS", new { ids }));
+    }
+
+    private void HandleDismissAnnouncement(JsonElement? payload)
+    {
+        if (payload is null) return;
+        if (!payload.Value.TryGetProperty("id", out var idEl)) return;
+        var id = idEl.GetString();
+        if (!string.IsNullOrEmpty(id))
+            _configService.DismissAnnouncement(id);
     }
 
     // ── store update handlers ─────────────────────────────────────

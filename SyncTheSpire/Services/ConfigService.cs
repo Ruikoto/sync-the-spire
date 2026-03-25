@@ -11,6 +11,7 @@ public class ConfigService
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SyncTheSpire");
 
     private static readonly string ConfigFilePath = Path.Combine(AppDataDirPath, "config.json");
+    private static readonly string DismissalsFilePath = Path.Combine(AppDataDirPath, "dismissals.json");
 
     // prefix to distinguish DPAPI-encrypted values from plaintext in the JSON
     private const string EncPrefix = "dpapi:";
@@ -87,6 +88,27 @@ public class ConfigService
     /// blow away cached config so next LoadConfig re-reads from disk
     /// </summary>
     public void InvalidateCache() => _cached = null;
+
+    // ── dismissed announcements ────────────────────────────────────────
+
+    public List<string> GetDismissedAnnouncements()
+    {
+        try
+        {
+            if (!File.Exists(DismissalsFilePath)) return [];
+            var json = File.ReadAllText(DismissalsFilePath);
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch { return []; }
+    }
+
+    public void DismissAnnouncement(string id)
+    {
+        var list = GetDismissedAnnouncements();
+        if (list.Contains(id)) return;
+        list.Add(id);
+        File.WriteAllText(DismissalsFilePath, JsonSerializer.Serialize(list));
+    }
 
     // ── DPAPI helpers ────────────────────────────────────────────────
 
