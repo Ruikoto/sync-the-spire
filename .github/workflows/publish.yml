@@ -374,11 +374,11 @@ jobs:
 
           # acquire Azure AD token for Partner Center API
           Write-Host “Acquiring access token...”
-          $tokenResp = Invoke-RestMethod -Uri “https://login.microsoftonline.com/$env:TENANT_ID/oauth2/v2.0/token” -Method Post -Body @{
+          $tokenResp = Invoke-RestMethod -Uri “https://login.microsoftonline.com/$env:TENANT_ID/oauth2/token” -Method Post -Body @{
               grant_type    = “client_credentials”
               client_id     = $env:CLIENT_ID
               client_secret = $env:CLIENT_SECRET
-              scope         = “https://manage.devcenter.microsoft.com/.default”
+              resource      = “https://manage.devcenter.microsoft.com”
           }
           $headers = @{ Authorization = “Bearer $($tokenResp.access_token)” }
 
