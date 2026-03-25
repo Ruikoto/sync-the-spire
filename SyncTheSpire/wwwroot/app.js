@@ -238,7 +238,17 @@ function showConflictDialog(message) {
 // close any closeable modal on Escape
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    const modals = ['#branch-modal', '#backup-list-modal', '#about-modal', '#conflict-modal'];
+    // branch modal: if preview is showing, go back to list first
+    const bm = $('#branch-modal');
+    if (bm && !bm.classList.contains('hidden')) {
+        if (!$('#branch-preview-view').classList.contains('hidden')) {
+            showBranchListView();
+        } else {
+            closeBranchModal();
+        }
+        return;
+    }
+    const modals = ['#backup-list-modal', '#about-modal', '#conflict-modal'];
     for (const sel of modals) {
         const m = $(sel);
         if (m && !m.classList.contains('hidden')) {
@@ -795,8 +805,25 @@ let branchData = [];
 let branchCurrentName = '';
 let branchSortKey = 'lastModified';
 let branchSortAsc = false; // newest first by default
+let branchPreviewName = '';
+const branchModsCache = {};
+
+function showBranchListView() {
+    $('#branch-list-view').classList.remove('hidden');
+    $('#branch-preview-view').classList.add('hidden');
+}
+
+function showBranchPreviewView(branchName) {
+    branchPreviewName = branchName;
+    $('#branch-preview-name').textContent = branchName;
+    $('#branch-list-view').classList.add('hidden');
+    $('#branch-preview-view').classList.remove('hidden');
+}
 
 function openBranchModal() {
+    // clear cache -- GET_BRANCHES does a fresh fetch, cached mod data may be stale
+    for (const k in branchModsCache) delete branchModsCache[k];
+    showBranchListView();
     sendMessage('GET_BRANCHES');
     renderBranchTable();
     $('#branch-modal').classList.remove('hidden');
@@ -804,6 +831,7 @@ function openBranchModal() {
 
 function closeBranchModal() {
     $('#branch-modal').classList.add('hidden');
+    showBranchListView();
 }
 
 function formatRelativeTime(ms) {
@@ -817,6 +845,11 @@ function formatRelativeTime(ms) {
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days} 天前`;
     return new Date(ms).toLocaleDateString('zh-CN');
+}
+
+function nsfwTooltip(reasons) {
+    const lines = ['此分支的 MOD 可能包含 NSFW 内容。', '原因：', ...(reasons || []).map(r => '• ' + r)];
+    return lines.map(l => escAttr(l)).join('&#10;');
 }
 
 function renderBranchTable() {
@@ -843,25 +876,18 @@ function renderBranchTable() {
         const isCurrent = b.name === branchCurrentName;
         const rowHighlight = isCurrent ? 'bg-spire-accent/10' : 'hover:bg-spire-bg/50';
         const tag = isCurrent ? ' <span class="text-spire-accent text-[10px] ml-1">(当前)</span>' : '';
+        const nsfwBadge = b.isNsfw ? `<span class="nsfw-badge" title="${nsfwTooltip(b.nsfwReasons)}">NSFW</span>` : '';
         return `<tr class="branch-row border-b border-spire-border/50 cursor-pointer transition-colors ${rowHighlight}" data-branch="${escAttr(b.name)}">
-            <td class="px-4 py-2.5 font-mono text-xs">${esc(b.name)}${tag}</td>
+            <td class="px-4 py-2.5 font-mono text-xs">${nsfwBadge}${esc(b.name)}${tag}</td>
             <td class="px-4 py-2.5 text-xs text-spire-muted">${esc(b.author)}</td>
             <td class="px-4 py-2.5 text-xs text-spire-muted">${formatRelativeTime(b.lastModified)}</td>
         </tr>`;
     }).join('');
 
-    // bind row click
+    // bind row click -> open mod preview
     tbody.querySelectorAll('.branch-row').forEach(row => {
-        row.addEventListener('click', async () => {
-            const name = row.dataset.branch;
-            const ok = await showConfirm(
-                `确定要强制同步到「${name}」？本地改动将被覆盖。`,
-                '同步分支'
-            );
-            if (ok) {
-                closeBranchModal();
-                sendMessage('SYNC_OTHER_BRANCH', { branchName: name });
-            }
+        row.addEventListener('click', () => {
+            openBranchPreview(row.dataset.branch);
         });
     });
 }
@@ -893,6 +919,161 @@ $('#branch-modal-close').addEventListener('click', closeBranchModal);
 // close modal when clicking backdrop
 $('#branch-modal').addEventListener('click', e => {
     if (e.target === $('#branch-modal')) closeBranchModal();
+});
+
+// ── branch mod preview ──────────────────────────────────────────────────────
+
+let modSearchCaseSensitive = false;
+let modSearchWholeWord = false;
+let currentPreviewMods = [];
+
+function openBranchPreview(branchName) {
+    showBranchPreviewView(branchName);
+    // reset search state
+    $('#mod-search-input').value = '';
+    currentPreviewMods = [];
+
+    if (branchModsCache[branchName]) {
+        currentPreviewMods = branchModsCache[branchName];
+        renderModCards();
+        return;
+    }
+
+    // inline loading state
+    $('#branch-preview-body').innerHTML = `
+        <div class="flex flex-col items-center justify-center py-8">
+            <div class="spinner"></div>
+            <p class="text-xs text-spire-muted mt-3">正在读取 Mod 列表...</p>
+        </div>`;
+
+    sendMessage('GET_BRANCH_MODS', { branchName });
+}
+
+on('GET_BRANCH_MODS', data => {
+    if (data.status === 'success') {
+        const branchName = data.payload?.branchName;
+        const mods = data.payload?.mods || [];
+        if (branchName) branchModsCache[branchName] = mods;
+        // only render if still viewing this branch
+        if (branchPreviewName === branchName) {
+            currentPreviewMods = mods;
+            renderModCards();
+        }
+    } else if (data.status === 'error') {
+        $('#branch-preview-body').innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-xs text-spire-danger">读取失败，请返回重试</p>
+            </div>`;
+    }
+});
+
+// highlight matching parts in text, returns HTML-safe string
+function highlightMatch(text, regex) {
+    if (!text || !regex) return esc(text || '');
+    const escaped = esc(text);
+    // rebuild regex against the escaped string (match positions may shift due to &amp; etc.)
+    // instead, find spans in original text, map to escaped output
+    const parts = [];
+    let lastIdx = 0;
+    for (const m of text.matchAll(regex)) {
+        if (m.index > lastIdx) parts.push(esc(text.slice(lastIdx, m.index)));
+        parts.push(`<mark class="mod-highlight">${esc(m[0])}</mark>`);
+        lastIdx = m.index + m[0].length;
+    }
+    if (lastIdx < text.length) parts.push(esc(text.slice(lastIdx)));
+    return parts.length ? parts.join('') : escaped;
+}
+
+function buildSearchRegex(query) {
+    if (!query) return null;
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = modSearchWholeWord ? `\\b${escaped}\\b` : escaped;
+    const flags = modSearchCaseSensitive ? 'g' : 'gi';
+    try { return new RegExp(pattern, flags); }
+    catch { return null; }
+}
+
+function renderModCards() {
+    const body = $('#branch-preview-body');
+    const mods = currentPreviewMods;
+
+    if (mods.length === 0) {
+        body.innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-xs text-spire-muted">该分支没有检测到 Mod</p>
+            </div>`;
+        return;
+    }
+
+    const query = $('#mod-search-input').value.trim();
+    const regex = buildSearchRegex(query);
+
+    // filter: keep mods where any visible field matches
+    const filtered = regex
+        ? mods.filter(m =>
+            [m.name, m.id, m.author, m.version, m.description]
+                .some(f => f && regex.test(f)))
+        : mods;
+
+    if (filtered.length === 0) {
+        body.innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-xs text-spire-muted">没有匹配的 Mod</p>
+            </div>`;
+        return;
+    }
+
+    const hl = (text) => regex ? highlightMatch(text, new RegExp(regex.source, regex.flags)) : esc(text || '');
+
+    const card = m => `
+        <div class="mod-card bg-spire-bg rounded-lg border border-spire-border/50 p-3 break-inside-avoid mb-2">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-medium text-spire-text">${hl(m.name || m.id)}</span>
+                <span class="text-[10px] text-spire-muted font-mono">${hl(m.version || '')}</span>
+            </div>
+            ${m.author ? `<div class="text-[11px] text-spire-muted mb-1">${hl(m.author)}</div>` : ''}
+            ${m.description ? `<div class="text-[11px] text-spire-muted/70 leading-relaxed">${hl(m.description)}</div>` : ''}
+        </div>`;
+
+    const countText = regex
+        ? `${filtered.length} / ${mods.length} 个 Mod`
+        : `${mods.length} 个 Mod`;
+
+    body.innerHTML = `
+        <div class="text-xs text-spire-muted mb-3">${countText}</div>
+        <div class="columns-2 gap-2">
+            ${filtered.map(card).join('')}
+        </div>`;
+}
+
+// search input — live filter
+$('#mod-search-input').addEventListener('input', renderModCards);
+
+// toggle buttons
+$('#mod-search-case').addEventListener('click', () => {
+    modSearchCaseSensitive = !modSearchCaseSensitive;
+    $('#mod-search-case').classList.toggle('mod-search-active', modSearchCaseSensitive);
+    renderModCards();
+});
+$('#mod-search-word').addEventListener('click', () => {
+    modSearchWholeWord = !modSearchWholeWord;
+    $('#mod-search-word').classList.toggle('mod-search-active', modSearchWholeWord);
+    renderModCards();
+});
+
+$('#branch-preview-back').addEventListener('click', showBranchListView);
+$('#branch-preview-close').addEventListener('click', closeBranchModal);
+
+$('#branch-preview-sync').addEventListener('click', async () => {
+    const name = branchPreviewName;
+    const ok = await showConfirm(
+        `确定要强制同步到「${name}」？本地改动将被覆盖。`,
+        '同步分支'
+    );
+    if (ok) {
+        closeBranchModal();
+        sendMessage('SYNC_OTHER_BRANCH', { branchName: name });
+    }
 });
 
 // basic git branch name validation

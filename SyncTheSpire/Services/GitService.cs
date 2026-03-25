@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using LibGit2Sharp;
 using LibGit2Sharp.Handlers;
+using SyncTheSpire.Models;
 
 namespace SyncTheSpire.Services;
 
@@ -291,6 +293,131 @@ public class GitService
         using var repo = OpenRepo();
         var status = repo.RetrieveStatus(new StatusOptions());
         return status.IsDirty;
+    }
+
+    // ── branch mod preview ──────────────────────────────────────────────
+
+    private static readonly JsonSerializerOptions ModJsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    /// <summary>
+    /// read all mod definitions from a remote branch's file tree without checkout.
+    /// walks the commit tree recursively, tries to deserialize every .json blob,
+    /// and keeps entries that have a valid "id" field.
+    /// </summary>
+    public List<ModInfo> GetBranchMods(string branchName)
+    {
+        using var repo = OpenRepo();
+        var branch = repo.Branches[$"origin/{branchName}"];
+        if (branch is null) return [];
+
+        var mods = new List<ModInfo>();
+        ScanTreeForMods(branch.Tip.Tree, mods);
+        return mods;
+    }
+
+    private static void ScanTreeForMods(Tree tree, List<ModInfo> mods)
+    {
+        foreach (var entry in tree)
+        {
+            if (entry.TargetType == TreeEntryTargetType.Tree)
+            {
+                ScanTreeForMods((Tree)entry.Target, mods);
+            }
+            else if (entry.TargetType == TreeEntryTargetType.Blob &&
+                     entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var blob = (Blob)entry.Target;
+                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
+                    if (!string.IsNullOrEmpty(mod?.Id))
+                        mods.Add(mod);
+                }
+                catch
+                {
+                    // not a mod definition or malformed json, skip
+                }
+            }
+        }
+    }
+
+    // ── NSFW detection ──────────────────────────────────────────────────
+
+    // ordered longest-first so "R18G" matches before "R18"
+    private static readonly string[] NsfwKeywords = ["r18-g", "r18g", "nsfw", "r18"];
+
+    public record NsfwResult(bool IsNsfw, List<string> Reasons);
+
+    /// <summary>
+    /// scan each branch for NSFW signals: branch name, folder names, and mod names.
+    /// pure object-db read, no checkout involved.
+    /// </summary>
+    public Dictionary<string, NsfwResult> CheckBranchesNsfw(IEnumerable<string> branchNames)
+    {
+        using var repo = OpenRepo();
+        var result = new Dictionary<string, NsfwResult>();
+
+        foreach (var name in branchNames)
+        {
+            var reasons = new List<string>();
+
+            var kw = MatchNsfwKeyword(name);
+            if (kw != null)
+                reasons.Add($"分支名称包含「{kw}」");
+
+            var branch = repo.Branches[$"origin/{name}"];
+            if (branch != null)
+                ScanTreeForNsfw(branch.Tip.Tree, reasons);
+
+            result[name] = new NsfwResult(reasons.Count > 0, reasons);
+        }
+
+        return result;
+    }
+
+    private static string? MatchNsfwKeyword(string text)
+    {
+        foreach (var keyword in NsfwKeywords)
+            if (text.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                return keyword.ToUpper();
+        return null;
+    }
+
+    private static void ScanTreeForNsfw(Tree tree, List<string> reasons)
+    {
+        foreach (var entry in tree)
+        {
+            if (entry.TargetType == TreeEntryTargetType.Tree)
+            {
+                var kw = MatchNsfwKeyword(entry.Name);
+                if (kw != null)
+                    reasons.Add($"文件夹「{entry.Name}」包含「{kw}」");
+
+                ScanTreeForNsfw((Tree)entry.Target, reasons);
+            }
+            else if (entry.TargetType == TreeEntryTargetType.Blob &&
+                     entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var blob = (Blob)entry.Target;
+                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
+                    if (!string.IsNullOrEmpty(mod?.Id) && !string.IsNullOrEmpty(mod?.Name))
+                    {
+                        var kw = MatchNsfwKeyword(mod.Name);
+                        if (kw != null)
+                            reasons.Add($"Mod「{mod.Name}」名称包含「{kw}」");
+                    }
+                }
+                catch
+                {
+                    // skip non-mod or malformed json
+                }
+            }
+        }
     }
 
     // ── sync (mode 2 - force checkout remote branch) ────────────────────

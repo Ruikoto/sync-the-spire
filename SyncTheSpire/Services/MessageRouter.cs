@@ -120,6 +120,10 @@ public class MessageRouter
             case "INSTALL_STORE_UPDATE":
                 _ = HandleInstallStoreUpdate();
                 return;
+            // mod preview reads immutable git objects — safe outside the gate
+            case "GET_BRANCH_MODS":
+                HandleGetBranchMods(req.Payload);
+                return;
         }
 
         _gate.Wait();
@@ -474,15 +478,56 @@ public class MessageRouter
         var branches = _gitService.GetRemoteBranches();
         var current = _gitService.GetCurrentBranch();
 
+        // scan all branches for NSFW signals (folder names, mod names, etc.)
+        var nsfwMap = _gitService.CheckBranchesNsfw(branches.Select(b => b.Name));
+
         // flatten BranchInfo to plain objects so JSON stays predictable
-        var list = branches.Select(b => new
+        var list = branches.Select(b =>
         {
-            name = b.Name,
-            author = b.Author,
-            lastModified = b.LastModified.ToUnixTimeMilliseconds()
+            var nsfw = nsfwMap.GetValueOrDefault(b.Name);
+            return new
+            {
+                name = b.Name,
+                author = b.Author,
+                lastModified = b.LastModified.ToUnixTimeMilliseconds(),
+                isNsfw = nsfw?.IsNsfw ?? false,
+                nsfwReasons = nsfw?.Reasons ?? []
+            };
         });
 
         Send(IpcResponse.Success("GET_BRANCHES", new { branches = list, currentBranch = current }));
+    }
+
+    private void HandleGetBranchMods(JsonElement? payload)
+    {
+        var branchName = payload?.GetProperty("branchName").GetString();
+        if (string.IsNullOrWhiteSpace(branchName))
+        {
+            Send(IpcResponse.Error("GET_BRANCH_MODS", "Missing branch name"));
+            return;
+        }
+
+        try
+        {
+            var mods = _gitService.GetBranchMods(branchName);
+            var sorted = mods
+                .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(m => new
+                {
+                    id = m.Id,
+                    name = m.Name,
+                    author = m.Author,
+                    description = m.Description,
+                    version = m.Version
+                });
+
+            Send(IpcResponse.Success("GET_BRANCH_MODS", new { branchName, mods = sorted }));
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[GET_BRANCH_MODS] Failed to scan branch {branchName}", ex);
+            Send(IpcResponse.Error("GET_BRANCH_MODS", $"读取 Mod 列表失败：{ex.Message}"));
+        }
     }
 
     private void HandleSwitchToVanilla()

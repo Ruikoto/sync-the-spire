@@ -79,6 +79,48 @@ button, select {
     background: rgba(99, 102, 241, 0.08);
 }
 
+/* mod preview card */
+.mod-card {
+    transition: border-color 0.15s;
+}
+.mod-card:hover {
+    border-color: #3a3d4a;
+}
+
+/* NSFW badge */
+.nsfw-badge {
+    display: inline-block;
+    background: #dc2626;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    line-height: 1.4;
+    vertical-align: middle;
+    margin-right: 5px;
+    cursor: default;
+}
+
+.mod-search-toggle {
+    min-width: 28px;
+    text-align: center;
+    transition: all 0.15s;
+}
+.mod-search-active {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: #6366f1;
+    color: #e2e8f0;
+}
+.mod-highlight {
+    background: rgba(250, 204, 21, 0.3);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
 /* help tooltip bubble */
 .help-tip {
     display: inline-flex;

@@ -136,28 +136,65 @@
 
     <!-- branch selector modal -->
     <div id="branch-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
-        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 max-h-[70vh] flex flex-col">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
-                <h2 class="text-sm font-medium">选择分支</h2>
-                <button id="branch-modal-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+
+            <!-- LIST VIEW (branch table) -->
+            <div id="branch-list-view" class="flex flex-col flex-1 min-h-0">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border shrink-0">
+                    <h2 class="text-sm font-medium">选择分支</h2>
+                    <button id="branch-modal-close"
+                        class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+                </div>
+                <div class="overflow-auto flex-1">
+                    <table class="w-full text-sm">
+                        <thead class="sticky top-0 bg-spire-card z-10">
+                            <tr class="border-b border-spire-border text-spire-muted text-xs">
+                                <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
+                                    data-key="name">分支名称</th>
+                                <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
+                                    data-key="author">修改人</th>
+                                <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors active-sort"
+                                    data-key="lastModified">最近修改 <span class="sort-arrow">▼</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="branch-table-body"></tbody>
+                    </table>
+                    <p id="branch-empty" class="hidden text-center text-spire-muted text-xs py-8">暂无可用分支</p>
+                </div>
             </div>
-            <div class="overflow-auto flex-1">
-                <table class="w-full text-sm">
-                    <thead class="sticky top-0 bg-spire-card z-10">
-                        <tr class="border-b border-spire-border text-spire-muted text-xs">
-                            <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
-                                data-key="name">分支名称</th>
-                            <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
-                                data-key="author">修改人</th>
-                            <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors active-sort"
-                                data-key="lastModified">最近修改 <span class="sort-arrow">▼</span></th>
-                        </tr>
-                    </thead>
-                    <tbody id="branch-table-body"></tbody>
-                </table>
-                <p id="branch-empty" class="hidden text-center text-spire-muted text-xs py-8">暂无可用分支</p>
+
+            <!-- PREVIEW VIEW (mod list for selected branch) -->
+            <div id="branch-preview-view" class="hidden flex flex-col flex-1 min-h-0">
+                <div class="flex items-center gap-3 px-4 py-3 border-b border-spire-border shrink-0">
+                    <button id="branch-preview-back"
+                        class="text-spire-muted hover:text-spire-text transition-colors shrink-0" aria-label="返回">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 12L6 8l4-4"/>
+                        </svg>
+                    </button>
+                    <h2 id="branch-preview-name" class="text-sm font-medium font-mono truncate flex-1"></h2>
+                    <button id="branch-preview-close"
+                        class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1 shrink-0" aria-label="关闭">&times;</button>
+                </div>
+                <div class="px-4 py-2 border-b border-spire-border shrink-0">
+                    <div class="flex items-center gap-2">
+                        <input id="mod-search-input" type="text" placeholder="搜索 Mod..."
+                            class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-spire-accent" />
+                        <button id="mod-search-case" class="mod-search-toggle text-[10px] border border-spire-border rounded px-1.5 py-1 text-spire-muted hover:text-spire-text transition-colors" title="区分大小写">Aa</button>
+                        <button id="mod-search-word" class="mod-search-toggle text-[10px] border border-spire-border rounded px-1.5 py-1 text-spire-muted hover:text-spire-text transition-colors" title="全字匹配">W</button>
+                    </div>
+                </div>
+                <div id="branch-preview-body" class="overflow-auto flex-1 p-4">
+                    <!-- dynamically rendered: loading spinner / mod cards / empty state -->
+                </div>
+                <div class="px-4 py-3 border-t border-spire-border shrink-0">
+                    <button id="branch-preview-sync"
+                        class="w-full text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors font-medium">
+                        同步此分支
+                    </button>
+                </div>
             </div>
+
         </div>
     </div>
 
