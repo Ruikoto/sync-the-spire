@@ -1405,20 +1405,16 @@ async function checkForStoreUpdates(silent) {
     ]);
     storeUpdateResolve = null;
 
+    // store has no update available (or API failed / timed out) — do nothing.
+    // we intentionally skip any version.json fallback here to avoid confusing users
+    // who'd see an update prompt but find nothing in the Store.
     if (!result || !result.available) {
-        // Store says no update — fallback to version.json comparison
-        const hasUpdate = compareVersions(appVersion, latestVersionInfo.latest_version) > 0;
-        if (hasUpdate) {
-            // Store hasn't propagated yet, but our server knows — show badge
-            showUpdateBadge();
-        } else if (!silent) {
-            toast('当前已是最新版本', 'success');
-        }
+        if (!silent) toast('当前已是最新版本', 'success');
         return;
     }
 
-    // Store confirms update available
-    const behavior = result.mandatory ? 'forced' : getUpdateBehavior();
+    // Store confirms update available — use version.json thresholds to decide behavior
+    const behavior = getUpdateBehavior();
     if (behavior === 'forced') {
         showUpdateModal(true);
     } else if (behavior === 'popup' || !silent) {
