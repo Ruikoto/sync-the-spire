@@ -12,6 +12,20 @@ on:
           - all
           - zip
           - msix
+      version:
+        description: '版本号（留空则用 nightly 时间戳，例如 v1.5.0）'
+        required: false
+        type: string
+      create_release:
+        description: '创建 GitHub Release'
+        required: false
+        default: false
+        type: boolean
+      submit_to_store:
+        description: '提交到 Microsoft Store'
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - 'v*'
@@ -42,7 +56,13 @@ jobs:
       - name: Get Version Name
         id: version
         run: |
-          $ver = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "nightly-$(Get-Date -Format 'yyyyMMdd-HHmmss' -AsUTC)" }
+          $ver = if ("${{ github.ref_type }}" -eq "tag") {
+            "${{ github.ref_name }}"
+          } elseif ("${{ inputs.version }}" -ne "") {
+            "${{ inputs.version }}"
+          } else {
+            "nightly-$(Get-Date -Format 'yyyyMMdd-HHmmss' -AsUTC)"
+          }
           echo "VERSION_TAG=$ver" >> $env:GITHUB_OUTPUT
 
       - name: Get File Suffix
@@ -97,7 +117,8 @@ jobs:
           retention-days: 1
 
   build-msix:
-    if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'msix'
+    # also triggered when submit_to_store is true, regardless of build_target
+    if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'msix' || inputs.submit_to_store == true
     name: Build MSIX ${{ matrix.rid }}
     runs-on: windows-latest
     strategy:
@@ -114,6 +135,14 @@ jobs:
           if ("${{ github.ref_type }}" -eq "tag") {
             $tag = "${{ github.ref_name }}"
             # strip leading 'v' and convert to 4-part MSIX version (e.g. v1.2.3 -> 1.2.3.0)
+            $semver = $tag -replace '^v', ''
+            $parts = $semver.Split('.')
+            while ($parts.Length -lt 3) { $parts += '0' }
+            $msixVer = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+            echo "VERSION_TAG=$tag" >> $env:GITHUB_OUTPUT
+            echo "MSIX_VERSION=$msixVer" >> $env:GITHUB_OUTPUT
+          } elseif ("${{ inputs.version }}" -ne "") {
+            $tag = "${{ inputs.version }}"
             $semver = $tag -replace '^v', ''
             $parts = $semver.Split('.')
             while ($parts.Length -lt 3) { $parts += '0' }
@@ -200,7 +229,12 @@ jobs:
           retention-days: 1
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    # run on tag push, or manual dispatch with create_release=true
+    # !failure() && !cancelled() allows skipped deps (e.g. build skipped when build_target=msix)
+    if: |
+      !failure() && !cancelled() &&
+      (startsWith(github.ref, 'refs/tags/') ||
+       (github.event_name == 'workflow_dispatch' && inputs.create_release == true))
     needs: [build, build-msix]
     runs-on: ubuntu-latest
     permissions:
@@ -214,10 +248,19 @@ jobs:
         with:
           path: ./artifacts
 
+      - name: Resolve Version Tag
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "VERSION_TAG=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION_TAG=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Generate Release Notes
         run: |
           REPO="${{ github.repository }}"
-          TAG="${{ github.ref_name }}"
+          TAG="${{ steps.version.outputs.VERSION_TAG }}"
           BASE_URL="https://github.com/$REPO/releases/download/$TAG"
           PROXY_URL="https://sts-dl.rkto.cc/$REPO/releases/download/$TAG"
           NAME="${{ env.BINARY_NAME }}"
@@ -266,6 +309,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.VERSION_TAG }}
           files: |
             ./artifacts/**/*.zip
             ./artifacts/**/*.msix
@@ -273,8 +317,10 @@ jobs:
           generate_release_notes: true
 
       - name: Deploy version info to gh-pages
+        # only update version.json when it's a real versioned release (tag push or manual with explicit version)
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="${{ steps.version.outputs.VERSION_TAG }}"
           REPO="${{ github.repository }}"
           NAME="${{ env.BINARY_NAME }}"
           PROXY="https://sts-dl.rkto.cc/$REPO/releases/download/$TAG"
@@ -341,7 +387,12 @@ jobs:
           git push "$REMOTE" gh-pages
 
   store-submit:
-    if: startsWith(github.ref, 'refs/tags/')
+    # run on tag push, or manual dispatch with submit_to_store=true
+    # !failure() && !cancelled() keeps it alive even if build (zip) job was skipped
+    if: |
+      !failure() && !cancelled() &&
+      (startsWith(github.ref, 'refs/tags/') ||
+       (github.event_name == 'workflow_dispatch' && inputs.submit_to_store == true))
     needs: [build-msix]
     runs-on: windows-latest
     steps:
@@ -360,106 +411,106 @@ jobs:
           TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
           CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-          APP_ID: “9PC112T0C074”
+          APP_ID: "9PC112T0C074"
         run: |
-          $ErrorActionPreference = “Stop”
-          $msixDir = “./msix”
+          $ErrorActionPreference = "Stop"
+          $msixDir = "./msix"
 
           $msixFiles = Get-ChildItem -Path $msixDir -Filter *.msix
           if ($msixFiles.Count -eq 0) {
-              Write-Error “No MSIX files found in downloaded artifacts!”
+              Write-Error "No MSIX files found in downloaded artifacts!"
               exit 1
           }
-          Write-Host “Found $($msixFiles.Count) package(s): $($msixFiles.Name -join ', ')”
+          Write-Host "Found $($msixFiles.Count) package(s): $($msixFiles.Name -join ', ')"
 
           # acquire Azure AD token for Partner Center API
-          Write-Host “Acquiring access token...”
-          $tokenResp = Invoke-RestMethod -Uri “https://login.microsoftonline.com/$env:TENANT_ID/oauth2/token” -Method Post -Body @{
-              grant_type    = “client_credentials”
+          Write-Host "Acquiring access token..."
+          $tokenResp = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$env:TENANT_ID/oauth2/token" -Method Post -Body @{
+              grant_type    = "client_credentials"
               client_id     = $env:CLIENT_ID
               client_secret = $env:CLIENT_SECRET
-              resource      = “https://manage.devcenter.microsoft.com”
+              resource      = "https://manage.devcenter.microsoft.com"
           }
-          $headers = @{ Authorization = “Bearer $($tokenResp.access_token)” }
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
 
           # delete pending submission if one exists (only one in-flight allowed)
-          Write-Host “Checking for pending submissions...”
-          $appInfo = Invoke-RestMethod -Uri “https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID” -Headers $headers
+          Write-Host "Checking for pending submissions..."
+          $appInfo = Invoke-RestMethod -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID" -Headers $headers
           if ($appInfo.pendingApplicationSubmission) {
               $pendingId = $appInfo.pendingApplicationSubmission.id
-              Write-Host “Deleting stale pending submission $pendingId...”
-              Invoke-RestMethod -Uri “https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$pendingId” -Headers $headers -Method Delete
+              Write-Host "Deleting stale pending submission $pendingId..."
+              Invoke-RestMethod -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$pendingId" -Headers $headers -Method Delete
           }
 
           # create new submission (cloned from last published)
-          Write-Host “Creating new submission...”
-          $submission = Invoke-RestMethod -Uri “https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions” -Headers $headers -Method Post
+          Write-Host "Creating new submission..."
+          $submission = Invoke-RestMethod -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions" -Headers $headers -Method Post
           $submissionId = $submission.id
           $uploadUrl = $submission.fileUploadUrl
-          Write-Host “Submission $submissionId created.”
+          Write-Host "Submission $submissionId created."
 
           # mark old packages PendingDelete, add new ones as PendingUpload
           $packages = [System.Collections.ArrayList]::new()
           if ($submission.applicationPackages) {
               foreach ($pkg in $submission.applicationPackages) {
-                  $pkg.fileStatus = “PendingDelete”
+                  $pkg.fileStatus = "PendingDelete"
                   $packages.Add($pkg) | Out-Null
               }
-              Write-Host “Marked $($packages.Count) old package(s) for deletion.”
+              Write-Host "Marked $($packages.Count) old package(s) for deletion."
           }
           foreach ($file in $msixFiles) {
               $packages.Add([ordered]@{
                   fileName   = $file.Name
-                  fileStatus = “PendingUpload”
+                  fileStatus = "PendingUpload"
               }) | Out-Null
           }
           $submission.applicationPackages = @($packages)
 
           # update submission metadata
-          Write-Host “Updating submission metadata...”
+          Write-Host "Updating submission metadata..."
           $body = $submission | ConvertTo-Json -Depth 20 -Compress
           Invoke-RestMethod `
-              -Uri “https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId” `
-              -Headers ($headers + @{ “Content-Type” = “application/json; charset=utf-8” }) `
+              -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId" `
+              -Headers ($headers + @{ "Content-Type" = "application/json; charset=utf-8" }) `
               -Method Put -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 
           # upload package zip
-          Write-Host “Uploading package zip...”
-          $zipPath = “$env:TEMP\packages.zip”
-          Compress-Archive -Path “$msixDir\*.msix” -DestinationPath $zipPath -Force
+          Write-Host "Uploading package zip..."
+          $zipPath = "$env:TEMP\packages.zip"
+          Compress-Archive -Path "$msixDir\*.msix" -DestinationPath $zipPath -Force
           $zipBytes = [System.IO.File]::ReadAllBytes($zipPath)
           Invoke-WebRequest -Uri $uploadUrl -Method Put -Body $zipBytes `
-              -ContentType “application/zip” `
-              -Headers @{ “x-ms-blob-type” = “BlockBlob” }
+              -ContentType "application/zip" `
+              -Headers @{ "x-ms-blob-type" = "BlockBlob" }
 
           # commit
-          Write-Host “Committing submission...”
+          Write-Host "Committing submission..."
           Invoke-RestMethod `
-              -Uri “https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId/commit” `
+              -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId/commit" `
               -Headers $headers -Method Post
 
           # poll until processing completes
-          Write-Host “Waiting for submission processing...”
-          $terminalStates = @(“CommitFailed”, “Certification”, “Published”, “Failed”, “Release”)
+          Write-Host "Waiting for submission processing..."
+          $terminalStates = @("CommitFailed", "Certification", "Published", "Failed", "Release")
           do {
               Start-Sleep -Seconds 30
               $status = Invoke-RestMethod `
-                  -Uri “https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId/status” `
+                  -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId/status" `
                   -Headers $headers
-              Write-Host “Submission Status - $($status.status)”
+              Write-Host "Submission Status - $($status.status)"
           } while ($status.status -notin $terminalStates)
 
-          if ($status.status -in @(“CommitFailed”, “Failed”)) {
-              Write-Host “Submission failed!”
+          if ($status.status -in @("CommitFailed", "Failed")) {
+              Write-Host "Submission failed!"
               $status | ConvertTo-Json -Depth 5
               exit 1
           }
 
           # show final package list for verification
           $finalSub = Invoke-RestMethod `
-              -Uri “https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId” `
+              -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId" `
               -Headers $headers
-          Write-Host “Submitted packages:”
-          $finalSub.applicationPackages | Where-Object { $_.fileStatus -ne “PendingDelete” } | ForEach-Object {
-              Write-Host “  $($_.fileName) ($($_.fileStatus))”
+          Write-Host "Submitted packages:"
+          $finalSub.applicationPackages | Where-Object { $_.fileStatus -ne "PendingDelete" } | ForEach-Object {
+              Write-Host "  $($_.fileName) ($($_.fileStatus))"
           }
