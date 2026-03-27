@@ -9,14 +9,26 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ruikoto/sync-the-spire/releases">下载最新版</a>
+  <a href="https://apps.microsoft.com/detail/9PC112T0C074">
+    <img src="https://get.microsoft.com/images/zh-CN%20dark.svg" alt="Get it from Microsoft Store" width="200" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Ruikoto/sync-the-spire/releases">GitHub Releases</a>
 </p>
 
 > **⚠️ 首次使用前请手动备份一次存档和 Mod 文件夹。** 本软件经过初步测试，但多一道保险总没错。非营利性开源项目，开发者不对数据损失负责。
 
 ## 下载安装
 
-前往 [Releases](https://github.com/Ruikoto/sync-the-spire/releases) 下载，解压即用，无需安装。
+从 **Microsoft Store** 安装（推荐，支持自动更新）：
+
+<a href="https://apps.microsoft.com/detail/9PC112T0C074">
+  <img src="https://get.microsoft.com/images/zh-CN%20dark.svg" alt="Get it from Microsoft Store" width="200" />
+</a>
+
+或前往 [GitHub Releases](https://github.com/Ruikoto/sync-the-spire/releases) 手动下载，解压即用。
 
 ## 快速上手
 

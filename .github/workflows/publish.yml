@@ -271,6 +271,12 @@ jobs:
           FILE_ARM64_LITE="$NAME-$TAG-win-arm64-dependent.zip"
 
           cat <<'NOTES' > release_note.md
+          ### 🏪 Microsoft Store
+
+          [![从 Microsoft Store 获取](https://get.microsoft.com/images/zh-CN%20dark.svg)](https://apps.microsoft.com/detail/9PC112T0C074)
+
+          从 Microsoft Store 安装可获得自动更新，推荐使用。
+
           ### 📥 下载指南 / Download Guide
 
           请选择你需要的版本。如果你不知道要下载哪个，请下载 👉 **[推荐版本 (Recommended)](%%PROXY%%/%%X64_FULL%%)** 👈。
