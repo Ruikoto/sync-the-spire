@@ -1,129 +1,76 @@
 <p align="center">
-  <img src="SyncTheSpire/assets/icon_origin.png" alt="Sync the Spire" width="128" />
+  <img src="SyncTheSpire/assets/icon_origin.png" alt="Sync the Spire" width="100" />
 </p>
 
-<h1 align="center">Sync the Spire</h1>
+<h2 align="center">Sync the Spire</h2>
 
 <p align="center">
-  一键同步《杀戮尖塔2》Mod 配置，和朋友用同一套 Mod 联机。
+  一键同步《杀戮尖塔 2》Mod 配置，和朋友用同一套 Mod 联机。
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Windows%2010%2F11-0078D4?logo=windows&logoColor=white&style=flat" alt="Windows" />
+  <img src="https://img.shields.io/badge/license-MIT-22c55e?style=flat" alt="MIT" />
 </p>
 
 <p align="center">
   <a href="https://apps.microsoft.com/detail/9PC112T0C074">
-    <img src="https://get.microsoft.com/images/zh-CN%20dark.svg" alt="Get it from Microsoft Store" width="200" />
+    <img src="https://sts.rkto.cc/ms-store-badge.svg" alt="从 Microsoft Store 获取" width="200" />
   </a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Ruikoto/sync-the-spire/releases">GitHub Releases</a>
+  &nbsp;·&nbsp;
+  <a href="https://sts.rkto.cc">📖 完整文档</a>
 </p>
 
-> **⚠️ 首次使用前请手动备份一次存档和 Mod 文件夹。** 本软件经过初步测试，但多一道保险总没错。非营利性开源项目，开发者不对数据损失负责。
+<br />
 
-## 下载安装
+<p align="center">
+  <img src="https://sts.rkto.cc/Screenshot1.png" alt="主界面" width="520" />
+</p>
 
-从 **Microsoft Store** 安装（推荐，支持自动更新）：
+---
 
-<a href="https://apps.microsoft.com/detail/9PC112T0C074">
-  <img src="https://get.microsoft.com/images/zh-CN%20dark.svg" alt="Get it from Microsoft Store" width="200" />
-</a>
+> **⚠️ 首次使用前，请手动备份一次存档和 Mod 文件夹。** 非营利性开源项目，开发者不对任何数据损失负责。
 
-或前往 [GitHub Releases](https://github.com/Ruikoto/sync-the-spire/releases) 手动下载，解压即用。
+## 功能
+
+- 🔄 **一键同步** — 房主上传 Mod 配置，队友一键拉取，无需手动拷贝
+- 📋 **同步前预览** — 浏览分支时可查看该分支包含的所有 Mod 及版本
+- 🔞 **NSFW 提示** — 分支列表中自动标注包含 NSFW 内容的配置
+- 🔌 **Mod 开关** — 一键切回无 Mod 原版状态，Mod 不会被删除
+- 🔀 **存档重定向** — Mod 模式与原版模式进度互通，随时可关闭
+- 💾 **存档备份** — 一键备份/恢复，恢复前自动再备一次，不怕选错
+- 🔒 **安全** — 认证信息使用 Windows 系统级加密，不上传任何服务器
+- ⚡ **开箱即用** — 内置 Git 组件，支持 GitHub / Gitee / SSH 多种认证
 
 ## 快速上手
 
-1. 运行 `SyncTheSpire.exe`
-2. 填写**远程仓库地址**（房主提供给你的链接），选择认证方式
-3. 填写**游戏安装路径**
-4. 点击「保存并初始化」，等待完成即可
+**作为队友，跟随房主的 Mod：**
 
-<details>
-<summary>💡 认证方式怎么选？</summary>
+1. 运行程序，填写房主给你的**仓库地址**，选择认证方式
+2. 填写**游戏安装路径**，点击「保存并初始化」
+3. 初始化完成后，点击「切换分支」→ 选择房主的分支 → 「同步此分支」
 
-| 方式 | 适用场景 |
-|------|----------|
-| **免密** | 公开仓库，或 Gitee 仓库（推送时系统会弹出登录窗口） |
-| **HTTPS** | GitHub 等平台的私有仓库，填用户名和 Token |
-| **SSH** | 已配置 SSH 密钥的用户 |
+**作为房主，分享你的 Mod：**
 
-</details>
+1. 输入一个分支名（比如你的昵称），点击「创建」
+2. 安装、调整好你的 Mods
+3. 点击「上传」
 
-<details>
-<summary>💡 游戏安装路径怎么找？</summary>
+<br />
 
-Steam 中右键游戏 → 管理 → 浏览本地文件。
+<p align="center">
+  <img src="https://sts.rkto.cc/Screenshot2.png" alt="分支列表" width="330" />
+  &nbsp;&nbsp;
+  <img src="https://sts.rkto.cc/Screenshot3.png" alt="Mod 预览" width="330" />
+</p>
 
-</details>
+<p align="center"><sub>分支列表 · 同步前 Mod 预览</sub></p>
 
-<details>
-<summary>💡 存档路径怎么找？</summary>
-
-1. 启动游戏后按 **`~`** 键（波浪号键，通常在 Esc 下方）打开控制台。
-2. 输入命令 `open saves` 并按回车。
-3. 系统将直接打开存档所在的文件夹。
-
-</details>
-
-## 使用方式
-
-### 👑 做房主 — 分享你的 Mod 配置
-
-1. 输入一个分支名（比如你的昵称），点击「创建」。
-2. 像平时一样安装、调整 Mods。
-3. 搞定后点「上传」。
-
-其他人就能同步到你的 Mod 配置了。
-
-> 如果上传时发现云端有更新的内容（比如你在另一台电脑也改过），会弹窗让你选择保留哪边的版本。
-
-### 🎮 跟随别人 — 使用房主的 Mod 配置
-
-1. 点击「浏览分支」。
-2. 选择房主的分支，确认。
-3. 同步完成，直接开游戏。
-4. 之后点击「拉取」可以获取房主的最新 Mod 配置。
-
-### 🔌 Mod 开关
-
-关闭 Mod 开关，游戏立刻恢复无 Mod 的原版状态。Mod 不会被删除，重新打开即可恢复。
-
-### 🔀 存档重定向
-
-杀戮尖塔 2 的普通模式和 Mod 模式各有一套独立存档。开启存档重定向后，Mod 模式会直接使用普通模式的存档，角色进度互通。随时可以关闭恢复独立存档。
-
-### 💾 存档备份
-
-一键备份整个存档文件夹。需要恢复时选择历史备份点即可，恢复前会自动再备份一次当前状态，不怕选错。
-
-## 常见问题
-
-<details>
-<summary>没装过 Git 能用吗？</summary>
-
-能。软件会自动下载所需的 Git 组件，不需要你手动安装任何东西。
-
-</details>
-
-<details>
-<summary>会影响游戏本体文件吗？</summary>
-
-不会。软件只操作 Mods 文件夹和存档文件夹，不修改游戏本体。关闭 Mod 开关即可恢复原版状态。
-
-</details>
-
-<details>
-<summary>我的账号密码安全吗？</summary>
-
-认证信息使用 Windows 系统级加密存储，不上传到任何服务器，只有你本机当前用户能读取。
-
-</details>
-
-<details>
-<summary>支持 Gitee 吗？</summary>
-
-支持。Gitee 仓库推荐用「免密」方式。
-
-</details>
+更多说明（认证方式、存档路径查找、常见问题等）请查阅 **[完整文档 →](https://sts.rkto.cc)**
 
 ---
 
@@ -142,3 +89,6 @@ dotnet publish SyncTheSpire -c Release -r win-x64 --self-contained -p:PublishSin
 
 # 发布（自包含 ARM64）
 dotnet publish SyncTheSpire -c Release -r win-arm64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true
+```
+
+</details>
