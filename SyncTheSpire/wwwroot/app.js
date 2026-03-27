@@ -1639,6 +1639,7 @@ $('#update-download').addEventListener('click', () => {
     if (url) openExternal(url);
 });
 $('#update-store').addEventListener('click', () => {
+    closeUpdateModal();
     if (appDistribution === 'store') {
         // trigger Store in-app update
         sendMessage('INSTALL_STORE_UPDATE');
