@@ -273,7 +273,7 @@ jobs:
           cat <<'NOTES' > release_note.md
           ### 🏪 Microsoft Store
 
-          [![从 Microsoft Store 获取](https://get.microsoft.com/images/zh-CN%20dark.svg)](https://apps.microsoft.com/detail/9PC112T0C074)
+          [![从 Microsoft Store 获取](https://get.microsoft.com/images/zh-CN%20dark.svg)](https://get.microsoft.com/installer/download/9pc112t0c074?referrer=appbadge)
 
           从 Microsoft Store 安装可获得自动更新，推荐使用。
 

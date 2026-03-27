@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://apps.microsoft.com/detail/9PC112T0C074">
+  <a href="https://get.microsoft.com/installer/download/9pc112t0c074?referrer=appbadge">
     <img src="https://sts.rkto.cc/ms-store-badge.svg" alt="从 Microsoft Store 获取" width="200" />
   </a>
 </p>
