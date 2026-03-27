@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://get.microsoft.com/installer/download/9pc112t0c074?referrer=appbadge">
-    <img src="https://sts.rkto.cc/ms-store-badge.svg" alt="从 Microsoft Store 获取" width="200" />
+    <img src="https://sts.rkto.cc/ms-store-badge-dark.svg" alt="从 Microsoft Store 获取" width="200" />
   </a>
 </p>
 
@@ -28,7 +28,7 @@
 <br />
 
 <p align="center">
-  <img src="https://sts.rkto.cc/Screenshot1.png" alt="主界面" width="520" />
+  <img src="https://sts.rkto.cc/images/Screenshot1.png" alt="主界面" width="520" />
 </p>
 
 ---
@@ -63,9 +63,9 @@
 <br />
 
 <p align="center">
-  <img src="https://sts.rkto.cc/Screenshot2.png" alt="分支列表" width="330" />
+  <img src="https://sts.rkto.cc/images/Screenshot2.png" alt="分支列表" width="330" />
   &nbsp;&nbsp;
-  <img src="https://sts.rkto.cc/Screenshot3.png" alt="Mod 预览" width="330" />
+  <img src="https://sts.rkto.cc/images/Screenshot3.png" alt="Mod 预览" width="330" />
 </p>
 
 <p align="center"><sub>分支列表 · 同步前 Mod 预览</sub></p>
