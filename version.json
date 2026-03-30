@@ -1,11 +1,11 @@
 {
-  "latest_version": "v1.4.0",
-  "published_at": "2026-03-25T17:38:18Z",
-  "release_url": "https://github.com/Ruikoto/sync-the-spire/releases/tag/v1.4.0",
-  "download_url_x64": "https://sts-dl.rkto.cc/Ruikoto/sync-the-spire/releases/download/v1.4.0/SyncTheSpire-v1.4.0-win-x64.zip",
-  "download_url_arm": "https://sts-dl.rkto.cc/Ruikoto/sync-the-spire/releases/download/v1.4.0/SyncTheSpire-v1.4.0-win-arm64.zip",
+  "latest_version": "v1.4.1",
+  "published_at": "2026-03-30T03:03:04Z",
+  "release_url": "https://github.com/Ruikoto/sync-the-spire/releases/tag/v1.4.1",
+  "download_url_x64": "https://sts-dl.rkto.cc/Ruikoto/sync-the-spire/releases/download/v1.4.1/SyncTheSpire-v1.4.1-win-x64.zip",
+  "download_url_arm": "https://sts-dl.rkto.cc/Ruikoto/sync-the-spire/releases/download/v1.4.1/SyncTheSpire-v1.4.1-win-arm64.zip",
   "force_update": true,
-  "changelog": "# 更新日志\n\nℹ️建议在Windows应用商店下载和更新，支持自动更新，使用更加方便。\n\n## v1.4.0 - 2026-03-26\n\n- **MOD列表预览**，支持在切换分支时预览MOD列表。\n- **NSFW分支标注**，智能检测分支中是否包含NSFW内容，并在切换分支时进行明显标注。\n- **自动查找游戏和存档路径**，省得手填了，目前仅支持Steam平台。\n- 修复了公告关闭后下次会再次弹出的BUG。\n- 修复了某些情况下Git组件报认证失败的BUG。\n- 替换图标库资源。\n\n## v1.3.0 - 2026-03-25\n\n- **改进更新检查和自动更新机制**，商店版本现在直接调用官方API进行应用内更新，更方便好用。\n- **优化游戏/MOD文件夹选择功能**，在某些选错路径层级的情况可以自动纠错，减少让人摸不着头脑的报错。\n- **优化Toast提示**，较长的Toast支持滚动查看，而非直接截断。\n- **加入日志系统**，提供更详细的操作记录和错误信息，方便用户排查问题。\n- **改进应用内公告**，支持Markdown渲染。\n\n## v1.2.3 - 2026-03-24\n\n- **上架 Microsoft Store**，提供更便捷的安装与更新方式。\n\n## v1.2.2 - 2026-03-23\n\n- **重构 UI 界面**，提供更简洁易用的视觉与交互体验。\n- **重做刷新逻辑**，点击刷新即可一键检测本地未提交的改动及云端未拉取的更新。\n- **新增昵称设置**，用于 MOD 上传至远程仓库时的作者署名（更新后首次启动将自动引导完成设置）。\n- **优化更新日志显示**，全面支持多行文本展示与 Markdown 格式渲染。\n\n## v1.2.1 - 2026-03-20\n\n- **重构重定向模块**，改用内置的轻量级辅助 MOD 来实现重定向功能。\n\n## v1.2.0 - 2026-03-20\n\n- **新增存档重定向**，彻底替代此前存在缺陷的存档合并功能。\n- **优化同步机制**，新增并完善了上传过程中的冲突检测与解决流程。\n- **内置 MinGit 环境**，修复并完善对 Gitee 平台的支持。\n- **修复异常提示**，解决了实际上传失败但错误提示为成功的问题。",
+  "changelog": "# 更新日志\n\nℹ️建议在Windows应用商店下载和更新，支持自动更新，使用更加方便。\n\n## v1.4.1 - 2026-03-30\n\n- 新增了首次使用引导。\n- 关于页面中新增使用教程的链接按钮。\n- 修复了打开公告和更新日志文本中自带的链接时，无法在外部浏览器中打开的BUG。\n\n## v1.4.0 - 2026-03-26\n\n- **MOD列表预览**，支持在切换分支时预览MOD列表。\n- **NSFW分支标注**，智能检测分支中是否包含NSFW内容，并在切换分支时进行明显标注。\n- **自动查找游戏和存档路径**，省得手填了，目前仅支持Steam平台。\n- 修复了公告关闭后下次会再次弹出的BUG。\n- 修复了某些情况下Git组件报认证失败的BUG。\n- 替换图标库资源。\n\n## v1.3.0 - 2026-03-25\n\n- **改进更新检查和自动更新机制**，商店版本现在直接调用官方API进行应用内更新，更方便好用。\n- **优化游戏/MOD文件夹选择功能**，在某些选错路径层级的情况可以自动纠错，减少让人摸不着头脑的报错。\n- **优化Toast提示**，较长的Toast支持滚动查看，而非直接截断。\n- **加入日志系统**，提供更详细的操作记录和错误信息，方便用户排查问题。\n- **改进应用内公告**，支持Markdown渲染。",
   "force_update_below": "v1.2.0",
   "popup_update_below": "v1.3.0"
 }
