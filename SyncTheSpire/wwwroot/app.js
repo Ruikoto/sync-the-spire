@@ -1,5 +1,11 @@
 'use strict';
 
+// open all markdown-rendered links in external browser
+const renderer = new marked.Renderer();
+renderer.link = ({ href, text }) =>
+    `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+marked.setOptions({ renderer });
+
 // ── IPC bridge ───────────────────────────────────────────────────────────────
 
 function sendMessage(action, payload) {
@@ -251,6 +257,26 @@ function showConflictDialog(message) {
     });
 }
 
+// welcome/guide modal
+let welcomeAutoOpened = false;
+
+function showWelcomeModal() {
+    $('#welcome-modal').classList.remove('hidden');
+}
+
+function closeWelcomeModal() {
+    $('#welcome-modal').classList.add('hidden');
+    if (welcomeAutoOpened) {
+        welcomeAutoOpened = false;
+        promptAutoFind();
+    }
+}
+
+$('#btn-welcome-continue').addEventListener('click', closeWelcomeModal);
+$('#welcome-modal').addEventListener('click', e => {
+    if (e.target === $('#welcome-modal')) closeWelcomeModal();
+});
+
 // steam account picker — returns Promise<string|null> (full save path)
 function pickSteamAccount(payload) {
     const { basePath, accounts } = payload;
@@ -322,7 +348,7 @@ document.addEventListener('keydown', e => {
         }
         return;
     }
-    const modals = ['#backup-list-modal', '#about-modal', '#conflict-modal'];
+    const modals = ['#welcome-modal', '#backup-list-modal', '#about-modal', '#conflict-modal'];
     for (const sel of modals) {
         const m = $(sel);
         if (m && !m.classList.contains('hidden')) {
@@ -528,8 +554,11 @@ on('GET_STATUS', data => {
             $('#setup-subtitle').textContent = '首次配置 — 填写以下信息开始同步';
             sendMessage('GET_CONFIG');
             showPage('setup');
-            // offer auto-find on first launch (not on edit mode re-entry)
-            if (!isEditMode) promptAutoFind();
+            // show welcome guide on first launch (not on edit mode re-entry)
+            if (!isEditMode) {
+                welcomeAutoOpened = true;
+                showWelcomeModal();
+            }
         } else {
             showPage('main');
             updateStatusCard(payload);
@@ -1768,6 +1797,7 @@ $('#about-download').addEventListener('click', e => {
 });
 
 $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
+$('#btn-open-docs').addEventListener('click', () => openExternal('https://sts.rkto.cc/guide/getting-started'));
 
 
 // ── announcements ─────────────────────────────────────────────────────────────

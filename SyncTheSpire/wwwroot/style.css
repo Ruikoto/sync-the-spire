@@ -298,6 +298,11 @@ button, select {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* welcome modal card entrance */
+#welcome-modal > div {
+    animation: fadeIn 0.25s ease-out;
+}
+
 /* update badge red dot pulse */
 .update-badge-dot {
     animation: badge-pulse 2s ease-in-out infinite;

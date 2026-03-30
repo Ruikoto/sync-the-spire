@@ -209,12 +209,64 @@
         </div>
     </div>
 
+    <!-- ============ WELCOME MODAL ============ -->
+    <div id="welcome-modal" class="hidden fixed inset-0 z-35 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border max-w-md w-full mx-4 p-6">
+            <h2 class="text-lg font-bold mb-5">欢迎来到 Sync the Spire</h2>
+            <div class="flex flex-col gap-4 mb-6">
+                <!-- git sync -->
+                <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+                        <i data-lucide="git-branch" class="w-5 h-5 text-spire-accent"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium mb-0.5">基于 Git 实现同步</p>
+                        <p class="text-xs text-spire-muted leading-relaxed">本应用不内置提供任何云存储，因此你需要拥有一个远程仓库。你可以自己创建一个，或者使用你联机队友创建的仓库。</p>
+                    </div>
+                </div>
+                <!-- create repo -->
+                <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+                        <i data-lucide="globe" class="w-5 h-5 text-spire-accent"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium mb-0.5">创建远程仓库</p>
+                        <p class="text-xs text-spire-muted leading-relaxed">你可以使用
+                            <a href="#" onclick="openExternal('https://sts.rkto.cc/guide/gitee');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">Gitee</a>、<a href="#" onclick="openExternal('https://sts.rkto.cc/guide/github');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">GitHub</a>
+                            等平台创建免费的远程仓库。<br>不会操作？我们为你准备了<a href="#" onclick="openExternal('https://sts.rkto.cc/guide/getting-started');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">使用教程</a>！
+                        </p>
+                    </div>
+                </div>
+                <!-- follow teammates -->
+                <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+                        <i data-lucide="users" class="w-5 h-5 text-spire-accent"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium mb-0.5">跟随联机队友</p>
+                        <p class="text-xs text-spire-muted leading-relaxed">使用队友提供的远程仓库，来跟随使用队友的Mod文件，或创建自己的分支，分享自己的Mod配置。<br>不会操作？我们为你准备了<a href="#" onclick="openExternal('https://sts.rkto.cc/guide/getting-started');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">使用教程</a>！</p>
+                    </div>
+                </div>
+            </div>
+            <button id="btn-welcome-continue" class="w-full bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2.5 transition-colors text-sm cursor-pointer">继续</button>
+        </div>
+    </div>
+
     <!-- ============ SETUP PAGE ============ -->
     <div id="page-setup" class="hidden flex-col flex-1 overflow-y-auto">
         <div class="flex justify-center p-6">
             <div class="w-full max-w-md bg-spire-card rounded-xl border border-spire-border p-6">
-                <h1 class="text-xl font-bold mb-1">Sync the Spire</h1>
-                <p id="setup-subtitle" class="text-spire-muted text-sm mb-6">首次配置 — 填写以下信息开始同步</p>
+                <h1 class="text-xl font-bold mb-0.5">Sync the Spire</h1>
+                <div class="flex items-center justify-between mb-4">
+                    <p id="setup-subtitle" class="text-spire-muted text-sm">首次配置 — 填写以下信息开始同步</p>
+                    <a id="setup-guide-link" href="#" onclick="showWelcomeModal();return false;"
+                        class="inline-flex items-center gap-1 text-xs text-spire-accent hover:text-spire-accentHover transition-colors shrink-0">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
+                        </svg>
+                        使用指南
+                    </a>
+                </div>
 
                 <form id="setup-form" class="flex flex-col gap-4" autocomplete="off">
                     <div>
@@ -560,6 +612,10 @@
             <button id="btn-check-update"
                 class="mt-3 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors">
                 检查更新
+            </button>
+            <button id="btn-open-docs"
+                class="mt-2 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors">
+                使用教程
             </button>
         </div>
     </div>
