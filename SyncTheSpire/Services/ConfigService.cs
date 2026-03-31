@@ -28,6 +28,10 @@ public class ConfigService
 
     public ConfigService()
     {
+        // if Store version previously wrote data to the MSIX-virtualized path, move it to the real one
+        if (DistributionHelper.IsMsixPackaged && !Directory.Exists(AppDataDirPath))
+            TryMigrateFromVirtualizedPath();
+
         Directory.CreateDirectory(AppDataDirPath);
     }
 
@@ -108,6 +112,30 @@ public class ConfigService
         if (list.Contains(id)) return;
         list.Add(id);
         File.WriteAllText(DismissalsFilePath, JsonSerializer.Serialize(list));
+    }
+
+    // ── MSIX virtualized-path migration ─────────────────────────────
+
+    /// <summary>
+    /// older Store builds had FS write virtualization on, so data ended up in
+    /// Packages/{family}/LocalCache/Local/SyncTheSpire instead of the real %LocalAppData%.
+    /// </summary>
+    private static void TryMigrateFromVirtualizedPath()
+    {
+        try
+        {
+            var localCache = Windows.Storage.ApplicationData.Current.LocalCacheFolder.Path;
+            var virtualizedPath = Path.Combine(localCache, "Local", "SyncTheSpire");
+
+            if (!Directory.Exists(virtualizedPath)) return;
+
+            Directory.Move(virtualizedPath, AppDataDirPath);
+            LogService.Info($"Migrated data from virtualized MSIX path: {virtualizedPath}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"Virtualized path migration failed: {ex.Message}");
+        }
     }
 
     // ── DPAPI helpers ────────────────────────────────────────────────

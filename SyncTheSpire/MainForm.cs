@@ -80,9 +80,7 @@ public class MainForm : Form
         try
         {
             // use a dedicated user-data folder so we don't pollute the default profile
-            var udFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "SyncTheSpire", "WebView2Data");
+            var udFolder = Path.Combine(ConfigService.AppDataDirPath, "WebView2Data");
 
             var env = await CoreWebView2Environment.CreateAsync(null, udFolder);
             await _webView.EnsureCoreWebView2Async(env);
