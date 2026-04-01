@@ -14,7 +14,8 @@ public class GitResolver
         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "mingit", "cmd", "git.exe");
 
     private static readonly string MinGitDir =
-        Path.Combine(ConfigService.AppDataDirPath, "MinGit");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SyncTheSpire", "MinGit");
     private static readonly string MinGitExePath =
         Path.Combine(MinGitDir, "cmd", "git.exe");
 

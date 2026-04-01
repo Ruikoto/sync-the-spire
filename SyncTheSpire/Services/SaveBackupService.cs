@@ -2,8 +2,10 @@ namespace SyncTheSpire.Services;
 
 public class SaveBackupService
 {
+    // NOTE: will become instance-scoped in Phase 2 (per-workspace backups)
     public static readonly string BackupDir =
-        Path.Combine(ConfigService.AppDataDirPath, "Backups");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SyncTheSpire", "Backups");
 
     // backup entire save folder, returns backup directory path
     public string BackupSaveFolder(string saveFolderPath)

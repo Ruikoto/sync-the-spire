@@ -7,7 +7,8 @@ namespace SyncTheSpire.Services;
 public static class LogService
 {
     private static readonly string LogDir =
-        Path.Combine(ConfigService.AppDataDirPath, "Logs");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SyncTheSpire", "Logs");
 
     private static readonly object WriteLock = new();
 
