@@ -1,6 +1,6 @@
 'use strict';
 
-// ── home page — workspace grid, search, create flow ─────────────────────────
+// ── home page — workspace grid, search, create wizard ───────────────────────
 
 // cached from GET_GAME_TYPES on bootstrap
 let cachedGameTypes = [];
@@ -78,7 +78,8 @@ function renderWorkspaceGrid() {
             renderTabBar();
             clearBranchCache();
             // go straight to setup page
-            isEditMode = true;
+            getWsState().isEditMode = true;
+            getWsState().currentPage = 'setup';
             $('#setup-subtitle').textContent = I18n.t('setup.editSubtitle');
             updateSetupPageTitle();
             adaptSetupFormForGameType(getWsState().capabilities);
@@ -127,39 +128,113 @@ async function openWorkspaceTab(id) {
     sendMessage('GET_STATUS');
 }
 
+// ── wizard state ─────────────────────────────────────────────────────────────
+
+let _wizardSelectedType = null;
+let _wizardCurrentStep = 1;
+
+// default workspace names keyed by game type
+const DEFAULT_WS_NAMES = {
+    sts2: 'Slay the Spire 2 Workspace',
+    stardew: 'Stardew Valley Workspace',
+    minecraft: 'Minecraft Workspace',
+    generic: 'Workspace',
+};
+
+function showWizardStep(step, animate) {
+    const step1 = $('#wizard-step-1');
+    const step2 = $('#wizard-step-2');
+    const dots = document.querySelectorAll('#wizard-dots .wizard-dot');
+
+    if (!animate) {
+        // instant switch (used for initial reset)
+        step1.classList.toggle('hidden', step !== 1);
+        step2.classList.toggle('hidden', step !== 2);
+        step1.className = 'wizard-step p-1' + (step !== 1 ? ' hidden' : '');
+        step2.className = 'wizard-step p-1' + (step !== 2 ? ' hidden' : '');
+    } else {
+        const forward = step > _wizardCurrentStep;
+        const outgoing = _wizardCurrentStep === 1 ? step1 : step2;
+        const incoming = step === 1 ? step1 : step2;
+
+        // animate outgoing step
+        outgoing.className = `wizard-step p-1 ${forward ? 'wizard-forward-out' : 'wizard-back-out'}`;
+
+        // after animation completes, swap visibility and animate incoming
+        setTimeout(() => {
+            outgoing.classList.add('hidden');
+            incoming.classList.remove('hidden');
+            incoming.className = `wizard-step p-1 ${forward ? 'wizard-forward-in' : 'wizard-back-in'}`;
+        }, 250);
+    }
+
+    _wizardCurrentStep = step;
+
+    // update progress dots
+    dots.forEach((dot, i) => {
+        dot.classList.toggle('active', i === step - 1);
+    });
+}
+
 function openCreateWorkspaceModal() {
     const modal = $('#create-workspace-modal');
-    const nameInput = $('#new-ws-name');
-    const selector = $('#game-type-selector');
+    _wizardSelectedType = null;
 
-    nameInput.value = '';
+    // reset to step 1 without animation
+    showWizardStep(1, false);
 
     // render game type cards
-    selector.innerHTML = cachedGameTypes.map((gt, i) => `
-        <div class="game-type-card${i === 0 ? ' selected' : ''}" data-type="${escAttr(gt.typeKey)}">
-            <div class="flex items-center gap-2">
-                <span class="game-badge-${gt.typeKey}" style="display:flex;">${gameIcon(gt.typeKey, 16)}</span>
-                <span class="text-sm font-medium">${esc(gt.displayName)}</span>
-            </div>
-        </div>
-    `).join('');
+    const grid = $('#wizard-game-grid');
+    grid.innerHTML = cachedGameTypes.map(gt => {
+        const disabled = gt.comingSoon;
+        return `
+            <div class="wizard-game-card${disabled ? ' disabled' : ''}" data-type="${escAttr(gt.typeKey)}">
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="game-badge-${gt.typeKey}" style="display:flex;">${gameIcon(gt.typeKey, 28)}</span>
+                    <span class="text-sm font-medium">${esc(gt.displayName)}</span>
+                </div>
+                <p class="text-[10px] text-spire-muted leading-relaxed">${disabled
+                    ? `<span class="coming-soon-badge">${esc(I18n.t('home.createWizard.comingSoon'))}</span>`
+                    : `${esc(I18n.t('home.createWizard.gameDesc.' + gt.typeKey, gt.displayName))}`
+                }</p>
+            </div>`;
+    }).join('');
 
-    // bind selection
-    selector.querySelectorAll('.game-type-card').forEach(card => {
+    // bind enabled cards — clicking advances to step 2
+    grid.querySelectorAll('.wizard-game-card:not(.disabled)').forEach(card => {
         card.addEventListener('click', () => {
-            selector.querySelectorAll('.game-type-card').forEach(c => c.classList.remove('selected'));
-            card.classList.add('selected');
+            _wizardSelectedType = card.dataset.type;
+            const gt = cachedGameTypes.find(g => g.typeKey === _wizardSelectedType);
+
+            // populate step 2 selected game display
+            $('#wizard-selected-icon').innerHTML = gameIcon(_wizardSelectedType, 16);
+            $('#wizard-selected-icon').className = `flex items-center game-badge-${_wizardSelectedType}`;
+            const badge = $('#wizard-selected-name');
+            badge.textContent = gt?.displayName || _wizardSelectedType;
+            badge.className = `game-badge game-badge-${_wizardSelectedType}`;
+
+            // set default name
+            const nameInput = $('#new-ws-name');
+            nameInput.value = DEFAULT_WS_NAMES[_wizardSelectedType] || DEFAULT_WS_NAMES.generic;
+
+            // slide to step 2
+            showWizardStep(2, true);
+            setTimeout(() => { nameInput.focus(); nameInput.select(); }, 280);
         });
     });
 
     modal.classList.remove('hidden');
-    nameInput.focus();
+}
+
+function closeCreateWizard() {
+    $('#create-workspace-modal').classList.add('hidden');
+    _wizardSelectedType = null;
+    _wizardCurrentStep = 1;
 }
 
 async function handleCreateWorkspace() {
     const name = $('#new-ws-name').value.trim();
-    const selectedCard = document.querySelector('#game-type-selector .game-type-card.selected');
-    const gameType = selectedCard?.dataset.type || 'sts2';
+    const gameType = _wizardSelectedType || 'sts2';
 
     if (!name) {
         toast(I18n.t('home.enterWorkspaceName'), 'error');
@@ -181,8 +256,8 @@ async function handleCreateWorkspace() {
     AppState.openTabs = p.openTabs || [];
     AppState.activeWorkspaceId = p.activeWorkspace;
 
-    // close modal
-    $('#create-workspace-modal').classList.add('hidden');
+    // close wizard
+    closeCreateWizard();
 
     renderTabBar();
     renderWorkspaceGrid();
@@ -201,14 +276,17 @@ function initHomePage() {
     _homePageInitialized = true;
     $('#btn-create-workspace')?.addEventListener('click', openCreateWorkspaceModal);
     $('#create-ws-confirm')?.addEventListener('click', handleCreateWorkspace);
-    $('#create-ws-cancel')?.addEventListener('click', () => {
-        $('#create-workspace-modal').classList.add('hidden');
+    $('#create-ws-cancel')?.addEventListener('click', closeCreateWizard);
+
+    // wizard back button
+    $('#wizard-back')?.addEventListener('click', () => {
+        showWizardStep(1, true);
     });
 
     // close modal on backdrop click
     $('#create-workspace-modal')?.addEventListener('click', (e) => {
         if (e.target === e.currentTarget) {
-            $('#create-workspace-modal').classList.add('hidden');
+            closeCreateWizard();
         }
     });
 

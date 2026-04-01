@@ -50,6 +50,20 @@
       "nameLabel": "工作区名称",
       "namePlaceholder": "例如：与朋友联机",
       "gameTypeLabel": "游戏类型"
+    },
+    "createWizard": {
+      "step1Title": "选择游戏",
+      "step1Desc": "选择你要同步的游戏类型",
+      "step2Title": "创建工作区",
+      "nameLabel": "工作区名称",
+      "namePlaceholder": "为你的工作区起个名字",
+      "comingSoon": "开发中",
+      "gameDesc": {
+        "sts2": "Mod 管理 · 同步 · 存档管理",
+        "stardew": "Mod 同步",
+        "minecraft": "Mod 同步",
+        "generic": "通用文件夹同步"
+      }
     }
   },
   "setup": {

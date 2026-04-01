@@ -50,6 +50,20 @@
       "nameLabel": "Workspace Name",
       "namePlaceholder": "e.g. Co-op with friends",
       "gameTypeLabel": "Game Type"
+    },
+    "createWizard": {
+      "step1Title": "Select Game",
+      "step1Desc": "Choose the game you want to sync",
+      "step2Title": "Create Workspace",
+      "nameLabel": "Workspace Name",
+      "namePlaceholder": "Name your workspace",
+      "comingSoon": "Coming Soon",
+      "gameDesc": {
+        "sts2": "Save sync · Mod management · Multi-device",
+        "stardew": "Save sync · Multi-device",
+        "minecraft": "Save sync · Multi-device",
+        "generic": "General-purpose Git folder sync"
+      }
     }
   },
   "setup": {

@@ -8,6 +8,8 @@ public static class GameAdapterRegistry
     private static readonly Dictionary<string, IGameAdapter> Adapters = new(StringComparer.OrdinalIgnoreCase)
     {
         ["sts2"] = new StS2Adapter(),
+        ["stardew"] = new StardewValleyAdapter(),
+        ["minecraft"] = new MinecraftAdapter(),
         ["generic"] = new GenericAdapter(),
     };
 

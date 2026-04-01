@@ -37,17 +37,19 @@ on('GET_STATUS', data => {
 
         if (!payload.isConfigured) {
             // setup page: request saved config for pre-fill
+            ws.currentPage = 'setup';
             $('#setup-subtitle').textContent = I18n.t('setup.firstTimeSubtitle');
             updateSetupPageTitle();
             adaptSetupFormForGameType(ws.capabilities);
             sendMessage('GET_CONFIG');
             showPage('setup');
             // show welcome guide on first launch — only for sts2
-            if (!isEditMode && ws.capabilities?.supportsAutoFind) {
+            if (!ws.isEditMode && ws.capabilities?.supportsAutoFind) {
                 welcomeAutoOpened = true;
                 showWelcomeModal();
             }
         } else {
+            ws.currentPage = 'main';
             showPage('main');
             // update header with workspace info
             const wsInfo = AppState.workspaces[AppState.activeWorkspaceId];
@@ -118,7 +120,7 @@ on('GET_CONFIG', data => {
         prefillConfigForm(data.payload);
         // update subtitle based on whether there's existing config
         if (data.payload?.repoUrl) {
-            isEditMode = true;
+            getWsState().isEditMode = true;
             $('#setup-subtitle').textContent = I18n.t('setup.editSubtitle');
         }
     }
@@ -127,7 +129,7 @@ on('GET_CONFIG', data => {
 on('INIT_CONFIG', data => {
     if (data.status === 'success') {
         toast(data.payload?.message || 'Done!', 'success');
-        isEditMode = false;
+        getWsState().isEditMode = false;
         sendMessage('GET_STATUS');
     }
 });
@@ -438,19 +440,23 @@ guardClick($('#btn-pull'), async () => {
 
 // settings: go to setup page with config pre-filled
 $('#btn-settings').addEventListener('click', () => {
-    isEditMode = true;
+    const ws = getWsState();
+    ws.isEditMode = true;
+    ws.currentPage = 'setup';
     $('#setup-subtitle').textContent = I18n.t('setup.editSubtitle');
     updateSetupPageTitle();
-    adaptSetupFormForGameType(getWsState().capabilities);
+    adaptSetupFormForGameType(ws.capabilities);
     sendMessage('GET_CONFIG');
     showPage('setup');
 });
 
 // back button on setup page — return to dashboard or home
 $('#btn-setup-back').addEventListener('click', () => {
-    if (isEditMode) {
+    const ws = getWsState();
+    if (ws.isEditMode) {
         // was editing, go back to dashboard
-        isEditMode = false;
+        ws.isEditMode = false;
+        ws.currentPage = 'main';
         showPage('main');
     } else {
         // was in first-time setup, go back to home
@@ -643,7 +649,29 @@ async function switchToWorkspace(id) {
             const m = $(sel);
             if (m && !m.classList.contains('hidden')) m.classList.add('hidden');
         }
-        sendMessage('GET_STATUS');
+
+        const ws = getWsState();
+        // restore cached page state if available, otherwise fetch fresh
+        if (ws.currentPage === 'setup') {
+            prefillConfigForm(null);
+            if (ws.isEditMode) {
+                $('#setup-subtitle').textContent = I18n.t('setup.editSubtitle');
+            } else {
+                $('#setup-subtitle').textContent = I18n.t('setup.firstTimeSubtitle');
+            }
+            updateSetupPageTitle();
+            adaptSetupFormForGameType(ws.capabilities);
+            sendMessage('GET_CONFIG');
+            showPage('setup');
+        } else if (ws.currentPage === 'main') {
+            showPage('main');
+            // refresh dashboard data
+            sendMessage('GET_STATUS');
+        } else {
+            // no cached state — full fetch from backend
+            prefillConfigForm(null);
+            sendMessage('GET_STATUS');
+        }
     } catch (err) {
         toast(I18n.t('main.switchFailedMsg', { message: err.message }), 'error');
     }
@@ -743,6 +771,10 @@ async function bootstrap() {
         } else {
             // no workspace — show home page
             goHome();
+            // first launch: auto-open create wizard when no workspaces exist
+            if (Object.keys(AppState.workspaces).length === 0) {
+                openCreateWorkspaceModal();
+            }
         }
     } catch (err) {
         toast(I18n.t('home.loadFailedMsg', { message: err.message }), 'error');

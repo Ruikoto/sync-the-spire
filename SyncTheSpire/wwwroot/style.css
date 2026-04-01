@@ -135,6 +135,14 @@ button, select {
     background: rgba(148, 163, 184, 0.12);
     color: #94a3b8;
 }
+.game-badge-stardew {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+}
+.game-badge-minecraft {
+    background: rgba(139, 92, 46, 0.15);
+    color: #c4956a;
+}
 
 /* game type selector cards in create modal */
 .game-type-card {
@@ -151,6 +159,84 @@ button, select {
     border-color: #6366f1;
     background: rgba(99, 102, 241, 0.08);
 }
+
+/* ── wizard create modal ────────────────────────────────────────────── */
+
+/* wizard step — only one visible at a time, toggled via hidden class */
+.wizard-step {
+    display: flex;
+    flex-direction: column;
+}
+.wizard-step.hidden {
+    display: none;
+}
+
+/* wizard game cards — larger than regular game-type-card */
+.wizard-game-card {
+    cursor: pointer;
+    border: 1px solid #2a2d3a;
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.wizard-game-card:hover:not(.disabled) {
+    border-color: #3a3d4a;
+    background: rgba(255, 255, 255, 0.02);
+    transform: translateY(-1px);
+}
+.wizard-game-card.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* coming-soon badge */
+.coming-soon-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(250, 204, 21, 0.12);
+    color: #facc15;
+    letter-spacing: 0.3px;
+}
+
+/* wizard progress dots */
+.wizard-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3a3d4a;
+    transition: background 0.25s, transform 0.25s;
+}
+.wizard-dot.active {
+    background: #6366f1;
+    transform: scale(1.3);
+}
+
+/* wizard slide animations */
+@keyframes wizardSlideOutLeft {
+    from { transform: translateX(0); opacity: 1; }
+    to   { transform: translateX(-30px); opacity: 0; }
+}
+@keyframes wizardSlideInRight {
+    from { transform: translateX(30px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+}
+@keyframes wizardSlideOutRight {
+    from { transform: translateX(0); opacity: 1; }
+    to   { transform: translateX(30px); opacity: 0; }
+}
+@keyframes wizardSlideInLeft {
+    from { transform: translateX(-30px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
+}
+
+.wizard-forward-out { animation: wizardSlideOutLeft 0.25s ease forwards; }
+.wizard-forward-in  { animation: wizardSlideInRight 0.25s ease forwards; }
+.wizard-back-out    { animation: wizardSlideOutRight 0.25s ease forwards; }
+.wizard-back-in     { animation: wizardSlideInLeft 0.25s ease forwards; }
 
 /* branch table */
 .branch-sort-th.active-sort {

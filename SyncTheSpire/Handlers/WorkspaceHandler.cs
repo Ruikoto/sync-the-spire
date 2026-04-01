@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using SyncTheSpire.Adapters;
@@ -47,10 +48,15 @@ public class WorkspaceHandler : HandlerBase
     // GET_GAME_TYPES — available game adapters for workspace creation
     public void HandleGetGameTypes()
     {
+        var version = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        var isNightly = version.StartsWith("nightly-");
+
         var types = GameAdapterRegistry.All.Select(a => new
         {
             typeKey = a.TypeKey,
             displayName = a.DisplayName,
+            comingSoon = isNightly ? false : a.ComingSoon,
         }).ToList();
 
         Send(IpcResponse.Success("GET_GAME_TYPES", types));

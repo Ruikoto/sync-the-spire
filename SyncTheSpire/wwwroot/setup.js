@@ -22,14 +22,20 @@ function setAuthType(type) {
 
 // ── config form prefill ──────────────────────────────────────────────────────
 
-let isEditMode = false; // true when coming from Settings button, false for first-time setup
+// isEditMode is now per-workspace: getWsState().isEditMode
 
 function prefillConfigForm(cfg) {
-    // always clear password fields first
+    // always clear ALL fields first to prevent cross-workspace leaking
+    $('#cfg-repo').value = '';
+    $('#cfg-nickname').value = '';
+    $('#cfg-user').value = '';
     $('#cfg-token').value = '';
+    $('#cfg-ssh-key').value = '';
     $('#cfg-ssh-pass').value = '';
+    $('#cfg-path').value = '';
+    $('#cfg-save').value = '';
 
-    if (!cfg) return;
+    if (!cfg) { setAuthType('anonymous'); return; }
     if (cfg.repoUrl) $('#cfg-repo').value = cfg.repoUrl;
     // auto-fill nickname: saved value first, then git global user.name as hint
     if (cfg.nickname) {

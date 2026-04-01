@@ -1,14 +1,14 @@
 namespace SyncTheSpire.Adapters;
 
 /// <summary>
-/// Generic git-sync adapter — no game-specific logic.
-/// Users pick an arbitrary folder to sync via git. No auto-find, no save redirect,
-/// no modded saves, no mod scanning.
+/// Minecraft adapter — placeholder for future game-specific logic.
+/// Currently behaves identically to GenericAdapter. ComingSoon = true
+/// so it's disabled in release builds until full support is ready.
 /// </summary>
-public class GenericAdapter : IGameAdapter
+public class MinecraftAdapter : IGameAdapter
 {
-    public string TypeKey => "generic";
-    public string DisplayName => "通用";
+    public string TypeKey => "minecraft";
+    public string DisplayName => "Minecraft";
 
     // ── path resolution ──────────────────────────────────────────────────
 
@@ -26,10 +26,10 @@ public class GenericAdapter : IGameAdapter
     public bool SupportsAutoFind => false;
 
     public (string? Path, string? Error) FindGamePath() =>
-        (null, "通用模式不支持自动检测");
+        (null, "Minecraft 暂不支持自动检测");
 
     public SaveDiscoveryResult FindSavePath() =>
-        new(null, null, null, "通用模式不支持自动检测");
+        new(null, null, null, "Minecraft 暂不支持自动检测");
 
     // ── capabilities ─────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ public class GenericAdapter : IGameAdapter
     public bool SupportsSaveBackup => false;
     public bool SupportsModdedSaves => false;
     public bool SupportsModScanning => false;
-    public bool ComingSoon => false;
+    public bool ComingSoon => true;
 
     // ── save redirect (no-op) ────────────────────────────────────────────
 

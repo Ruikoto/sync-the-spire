@@ -52,6 +52,7 @@ public interface IGameAdapter
     bool SupportsSaveBackup { get; }
     bool SupportsModdedSaves { get; }
     bool SupportsModScanning { get; }
+    bool ComingSoon { get; }           // true = not yet ready for release builds
 
     // ── save redirect (ModProfileBypass for StS2, no-op for others) ──────
 

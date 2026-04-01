@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using SyncTheSpire.Adapters;
@@ -446,6 +447,16 @@ public class MessageRouter
         if (string.IsNullOrWhiteSpace(name))
         {
             Send(IpcResponse.Error("CREATE_WORKSPACE", "工作区名称不能为空"));
+            return;
+        }
+
+        // block coming-soon game types in release builds
+        var adapter = GameAdapterRegistry.Get(gameType);
+        var ver = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        if (!ver.StartsWith("nightly-") && adapter.ComingSoon)
+        {
+            Send(IpcResponse.Error("CREATE_WORKSPACE", "该游戏类型尚未开放"));
             return;
         }
 

@@ -28,6 +28,8 @@ function _defaultWsState() {
         lastSyncStatus: null,
         lastHasLocalChanges: false,
         capabilities: null,  // filled by GET_STATUS response
+        currentPage: null,   // 'setup' or 'main' — tracks which page this workspace is on
+        isEditMode: false,   // whether setup page is in edit mode (vs first-time config)
     };
 }
 

@@ -298,34 +298,54 @@
         </div>
     </div>
 
-    <!-- create workspace modal -->
+    <!-- create workspace wizard modal -->
     <div id="create-workspace-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
-        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
-            <h3 class="text-sm font-medium mb-4" data-i18n="home.createModal.title">新建工作区</h3>
-            <div class="flex flex-col gap-4">
-                <div>
-                    <label for="new-ws-name" class="block text-sm mb-1" data-i18n="home.createModal.nameLabel">工作区名称</label>
-                    <input id="new-ws-name" type="text" placeholder="例如：与朋友联机" data-i18n-placeholder="home.createModal.namePlaceholder"
-                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
-                </div>
-                <div>
-                    <label class="block text-sm mb-2" data-i18n="home.createModal.gameTypeLabel">游戏类型</label>
-                    <div id="game-type-selector" class="flex flex-col gap-2">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 p-5 flex flex-col" style="animation: fadeIn 0.25s ease-out;">
+            <!-- wizard body -->
+            <div id="wizard-body" class="overflow-hidden">
+                <!-- step 1: game type selection -->
+                <div id="wizard-step-1" class="wizard-step p-1">
+                    <h3 class="text-sm font-medium mb-1" data-i18n="home.createWizard.step1Title">选择游戏</h3>
+                    <p class="text-xs text-spire-muted mb-4" data-i18n="home.createWizard.step1Desc">选择你要同步的游戏类型</p>
+                    <div id="wizard-game-grid" class="grid grid-cols-2 gap-3">
                         <!-- dynamically populated by home.js -->
                     </div>
                 </div>
+                <!-- step 2: name + create -->
+                <div id="wizard-step-2" class="wizard-step hidden p-1">
+                    <div class="flex items-center gap-2 mb-4">
+                        <button id="wizard-back" class="text-spire-muted hover:text-spire-text transition-colors p-1 -ml-1" type="button">
+                            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                        </button>
+                        <h3 class="text-sm font-medium" data-i18n="home.createWizard.step2Title">创建工作区</h3>
+                    </div>
+                    <div id="wizard-selected-game" class="flex items-center gap-2 mb-4">
+                        <span id="wizard-selected-icon" class="flex items-center"></span>
+                        <span id="wizard-selected-name" class="game-badge text-xs"></span>
+                    </div>
+                    <div class="mb-4">
+                        <label for="new-ws-name" class="block text-xs text-spire-muted mb-1.5" data-i18n="home.createWizard.nameLabel">工作区名称</label>
+                        <input id="new-ws-name" type="text" placeholder="为你的工作区起个名字" data-i18n-placeholder="home.createWizard.namePlaceholder"
+                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                    </div>
+                    <div class="flex justify-end gap-2 mt-auto">
+                        <button id="create-ws-cancel"
+                            class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                            data-i18n="common.cancel" type="button">
+                            取消
+                        </button>
+                        <button id="create-ws-confirm"
+                            class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors"
+                            data-i18n="common.create" type="button">
+                            创建
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="flex justify-end gap-2 mt-5">
-                <button id="create-ws-cancel"
-                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
-                    data-i18n="common.cancel">
-                    取消
-                </button>
-                <button id="create-ws-confirm"
-                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors"
-                    data-i18n="common.create">
-                    创建
-                </button>
+            <!-- progress dots -->
+            <div id="wizard-dots" class="flex justify-center gap-2 mt-4">
+                <span class="wizard-dot active"></span>
+                <span class="wizard-dot"></span>
             </div>
         </div>
     </div>
@@ -375,17 +395,17 @@
                             <span class="help-tip" data-tip="Gitee 平台请使用免密认证方式" data-i18n-tip="setup.authTypeTip">?</span>
                         </div>
                         <div class="flex bg-spire-bg rounded-lg border border-spire-border p-0.5">
-                            <label class="auth-tab active flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150" data-i18n="setup.authAnonymous">
+                            <label class="auth-tab active flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150">
                                 <input type="radio" name="authType" value="anonymous" checked class="hidden" />
-                                免密
+                                <span data-i18n="setup.authAnonymous">免密</span>
                             </label>
-                            <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted" data-i18n="setup.authHttps">
+                            <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
                                 <input type="radio" name="authType" value="https" class="hidden" />
-                                HTTPS
+                                <span data-i18n="setup.authHttps">HTTPS</span>
                             </label>
-                            <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted" data-i18n="setup.authSsh">
+                            <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
                                 <input type="radio" name="authType" value="ssh" class="hidden" />
-                                SSH
+                                <span data-i18n="setup.authSsh">SSH</span>
                             </label>
                         </div>
                     </div>

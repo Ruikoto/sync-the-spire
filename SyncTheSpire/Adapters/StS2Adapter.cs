@@ -114,6 +114,7 @@ public class StS2Adapter : IGameAdapter
     public bool SupportsSaveBackup => true;
     public bool SupportsModdedSaves => true;
     public bool SupportsModScanning => true;
+    public bool ComingSoon => false;
 
     // ── save redirect (ModProfileBypass) ─────────────────────────────────
 
