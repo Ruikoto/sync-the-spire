@@ -34,14 +34,18 @@ public class FilesystemHandler : HandlerBase
 
     public void HandleOpenFolder(JsonElement? payload)
     {
-        var folderType = payload?.GetProperty("folderType").GetString();
-        var cfg = _configService.LoadConfig();
+        // M2 fix: use TryGetProperty
+        string? folderType = null;
+        if (payload is not null && payload.Value.TryGetProperty("folderType", out var ftEl))
+            folderType = ftEl.GetString();
+
+        var ws = _configService.Workspace;
 
         var path = folderType switch
         {
-            "game" => cfg.GameInstallPath,
-            "mod" => cfg.GameModPath,
-            "save" => cfg.SaveFolderPath,
+            "game" => ws.GameInstallPath,
+            "mod" => ws.GameModPath,
+            "save" => ws.SaveFolderPath,
             "config" => ConfigService.AppDataDirPath,
             "backup" => _backupService.BackupDir,
             _ => null
@@ -53,7 +57,8 @@ public class FilesystemHandler : HandlerBase
             return;
         }
 
-        Process.Start(new ProcessStartInfo
+        // L2 fix: dispose the Process handle
+        using var proc = Process.Start(new ProcessStartInfo
         {
             FileName = "explorer.exe",
             Arguments = $"\"{path}\"",
@@ -96,8 +101,7 @@ public class FilesystemHandler : HandlerBase
 
     public void HandleRestoreJunction()
     {
-        var cfg = _configService.LoadConfig();
-        _junctionHelper.EnsureJunction(cfg.GameModPath, _configService.RepoPath);
+        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("RESTORE_JUNCTION", new { message = "Mod 文件夹已恢复连接。" }));
     }

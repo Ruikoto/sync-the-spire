@@ -25,6 +25,9 @@ on('GET_VERSION', data => {
 on('GET_STATUS', data => {
     if (data.status === 'success') {
         const payload = data.payload;
+        // H5 fix: verify this response is for the currently active workspace
+        // (delayed responses from a previous workspace would corrupt state)
+        if (!AppState.activeWorkspaceId) return;
         const ws = getWsState();
 
         // stash capabilities from backend
@@ -75,8 +78,9 @@ on('REFRESH_SYNC', data => {
     // always stop spinner regardless of status
     $('#refresh-icon').style.animation = '';
     $('#refresh-label').textContent = '刷新';
-    // stale response from a previous workspace — ignore if main page isn't visible
+    // H5 fix: ignore stale response if main page isn't visible or workspace changed
     if ($('#page-main').classList.contains('hidden')) return;
+    if (!AppState.activeWorkspaceId) return;
     if (data.status === 'success') {
         updateStatusCard(data.payload);
         // silently pre-fetch branches so the modal opens instantly later
@@ -485,7 +489,7 @@ document.addEventListener('keydown', e => {
         }
         return;
     }
-    const modals = ['#welcome-modal', '#backup-list-modal', '#settings-modal', '#conflict-modal'];
+    const modals = ['#welcome-modal', '#backup-list-modal', '#settings-modal', '#conflict-modal', '#create-workspace-modal'];
     for (const sel of modals) {
         const m = $(sel);
         if (m && !m.classList.contains('hidden')) {
@@ -546,6 +550,9 @@ function renderTabBar() {
     const tabBar = $('#tab-bar');
     if (!tabBar) return;
 
+    // L10 fix: preserve scroll position across re-renders
+    const prevScroll = tabBar.scrollLeft;
+
     tabBar.innerHTML = AppState.openTabs.map(id => {
         const ws = AppState.workspaces[id];
         if (!ws) return '';
@@ -585,6 +592,9 @@ function renderTabBar() {
             closeWorkspaceTab(btn.dataset.tabClose);
         });
     });
+
+    // L10 fix: restore scroll position
+    tabBar.scrollLeft = prevScroll;
 }
 
 async function switchToWorkspace(id) {
@@ -595,6 +605,16 @@ async function switchToWorkspace(id) {
         renderTabBar();
         // clear stale branch data from previous workspace
         clearBranchCache();
+        // M6 fix: clear the sync fade timer so it doesn't hide the new workspace's status
+        if (typeof syncFadeTimer !== 'undefined' && syncFadeTimer) {
+            clearTimeout(syncFadeTimer);
+            syncFadeTimer = null;
+        }
+        // M7 fix: close any open modals from the previous workspace
+        for (const sel of ['#branch-modal', '#backup-list-modal', '#welcome-modal', '#create-workspace-modal']) {
+            const m = $(sel);
+            if (m && !m.classList.contains('hidden')) m.classList.add('hidden');
+        }
         sendMessage('GET_STATUS');
     } catch (err) {
         toast('切换失败：' + err.message, 'error');

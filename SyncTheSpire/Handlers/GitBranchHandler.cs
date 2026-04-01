@@ -55,7 +55,12 @@ public class GitBranchHandler : HandlerBase
 
     public void HandleGetBranchMods(JsonElement? payload)
     {
-        var branchName = payload?.GetProperty("branchName").GetString();
+        if (payload is null || !payload.Value.TryGetProperty("branchName", out var bnEl))
+        {
+            Send(IpcResponse.Error("GET_BRANCH_MODS", "Missing branch name"));
+            return;
+        }
+        var branchName = bnEl.GetString();
         if (string.IsNullOrWhiteSpace(branchName))
         {
             Send(IpcResponse.Error("GET_BRANCH_MODS", "Missing branch name"));
@@ -87,20 +92,23 @@ public class GitBranchHandler : HandlerBase
 
     public void HandleSwitchToVanilla()
     {
-        var cfg = _configService.LoadConfig();
-
         // silently save any local changes first
         _gitService.SilentCommitIfDirty();
 
         // just remove the junction, real files stay safe in AppData
-        _junctionService.RemoveJunction(cfg.GameModPath);
+        _junctionService.RemoveJunction(_configService.Workspace.GameModPath);
 
         Send(IpcResponse.Success("SWITCH_TO_VANILLA", new { message = "已切换到纯净模式，Mod 文件夹已断开。" }));
     }
 
     public void HandleSyncOtherBranch(JsonElement? payload)
     {
-        var branchName = payload?.GetProperty("branchName").GetString();
+        if (payload is null || !payload.Value.TryGetProperty("branchName", out var bnEl))
+        {
+            Send(IpcResponse.Error("SYNC_OTHER_BRANCH", "请选择一个分支"));
+            return;
+        }
+        var branchName = bnEl.GetString();
         if (string.IsNullOrWhiteSpace(branchName))
         {
             Send(IpcResponse.Error("SYNC_OTHER_BRANCH", "请选择一个分支"));
@@ -115,15 +123,19 @@ public class GitBranchHandler : HandlerBase
         _gitService.ForceCheckoutBranch(branchName);
 
         // make sure junction is pointing correctly
-        var cfg = _configService.LoadConfig();
-        _junctionHelper.EnsureJunction(cfg.GameModPath, _configService.RepoPath);
+        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("SYNC_OTHER_BRANCH", new { message = $"已同步到 {branchName}" }));
     }
 
     public void HandleCreateMyBranch(JsonElement? payload)
     {
-        var branchName = payload?.GetProperty("branchName").GetString();
+        if (payload is null || !payload.Value.TryGetProperty("branchName", out var bnEl))
+        {
+            Send(IpcResponse.Error("CREATE_MY_BRANCH", "请输入分支名称"));
+            return;
+        }
+        var branchName = bnEl.GetString();
         if (string.IsNullOrWhiteSpace(branchName))
         {
             Send(IpcResponse.Error("CREATE_MY_BRANCH", "请输入分支名称"));
@@ -135,8 +147,7 @@ public class GitBranchHandler : HandlerBase
         _gitService.SilentCommitIfDirty();
         _gitService.CreateBranch(branchName);
 
-        var cfg = _configService.LoadConfig();
-        _junctionHelper.EnsureJunction(cfg.GameModPath, _configService.RepoPath);
+        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("CREATE_MY_BRANCH", new { message = $"分支 {branchName} 已创建" }));
     }
@@ -168,6 +179,13 @@ public class GitBranchHandler : HandlerBase
 
     public void HandleForcePush()
     {
+        // L1 fix: guard against force pushing on init branch
+        if (_gitService.IsOnInitBranch)
+        {
+            Send(IpcResponse.Error("FORCE_PUSH", "请先选择或创建一个分支"));
+            return;
+        }
+
         Send(IpcResponse.Progress("FORCE_PUSH", "正在覆盖云端..."));
         _gitService.ForcePush();
         Send(IpcResponse.Success("FORCE_PUSH", new { message = "已覆盖云端配置！" }));
@@ -175,11 +193,17 @@ public class GitBranchHandler : HandlerBase
 
     public void HandleResetToRemote()
     {
+        // L1 fix: guard against reset on init branch
+        if (_gitService.IsOnInitBranch)
+        {
+            Send(IpcResponse.Error("RESET_TO_REMOTE", "请先选择或创建一个分支"));
+            return;
+        }
+
         Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
         _gitService.ResetToRemote();
 
-        var cfg = _configService.LoadConfig();
-        _junctionHelper.EnsureJunction(cfg.GameModPath, _configService.RepoPath);
+        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("RESET_TO_REMOTE", new { message = "已同步为云端配置！" }));
     }

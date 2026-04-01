@@ -25,8 +25,15 @@ public static class VdfParser
                 var end = content.IndexOf('"', i + 1);
                 if (end == -1) break;
                 // handle escaped quotes (rare in VDF but just in case)
-                while (end > 0 && content[end - 1] == '\\')
+                // count consecutive backslashes before the quote — odd = escaped, even = literal
+                while (end > 0)
+                {
+                    int slashes = 0;
+                    for (int k = end - 1; k >= i + 1 && content[k] == '\\'; k--)
+                        slashes++;
+                    if (slashes % 2 == 0) break; // even backslashes means the quote is real
                     end = content.IndexOf('"', end + 1);
+                }
                 if (end == -1) break;
                 tokens.Add(content[(i + 1)..end]);
                 i = end + 1;

@@ -115,14 +115,17 @@ public class SaveHandler : HandlerBase
 
     public void HandleRestoreBackup(JsonElement? payload)
     {
-        var backupName = payload?.GetProperty("backupName").GetString();
+        // M2 fix: use TryGetProperty
+        string? backupName = null;
+        if (payload is not null && payload.Value.TryGetProperty("backupName", out var bnEl))
+            backupName = bnEl.GetString();
         if (string.IsNullOrWhiteSpace(backupName))
         {
             Send(IpcResponse.Error("RESTORE_BACKUP", "未指定备份名称"));
             return;
         }
 
-        // sanitize: prevent path traversal (same check as DeleteBackup)
+        // sanitize: prevent path traversal
         if (backupName.Contains("..") || backupName.Contains('/') || backupName.Contains('\\'))
         {
             Send(IpcResponse.Error("RESTORE_BACKUP", "备份名称无效"));
@@ -158,10 +161,20 @@ public class SaveHandler : HandlerBase
 
     public void HandleDeleteBackup(JsonElement? payload)
     {
-        var backupName = payload?.GetProperty("backupName").GetString();
+        // M2 fix: use TryGetProperty
+        string? backupName = null;
+        if (payload is not null && payload.Value.TryGetProperty("backupName", out var bnEl))
+            backupName = bnEl.GetString();
         if (string.IsNullOrWhiteSpace(backupName))
         {
             Send(IpcResponse.Error("DELETE_BACKUP", "未指定备份名称"));
+            return;
+        }
+
+        // M6 fix: same sanitization as RESTORE_BACKUP
+        if (backupName.Contains("..") || backupName.Contains('/') || backupName.Contains('\\'))
+        {
+            Send(IpcResponse.Error("DELETE_BACKUP", "备份名称无效"));
             return;
         }
 

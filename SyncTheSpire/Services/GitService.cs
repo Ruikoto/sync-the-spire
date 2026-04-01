@@ -112,6 +112,7 @@ public class GitService
     /// <summary>
     /// run git.exe with proper env vars. used for SSH (always) and as fallback for HTTPS
     /// when LibGit2Sharp can't handle a platform's auth challenge.
+    /// L3 fix: parse args more carefully — split respects quoted segments
     /// </summary>
     private string RunGitCli(string args, string? workDir = null, int timeout = 120_000)
     {
@@ -126,8 +127,8 @@ public class GitService
             RedirectStandardError = true,
         };
 
-        // use ArgumentList for safe arg passing instead of raw Arguments string
-        foreach (var arg in args.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        // split aware of double-quoted segments so paths with spaces work
+        foreach (var arg in SplitArgs(args))
             psi.ArgumentList.Add(arg);
 
         ConfigureGitEnv(psi);
@@ -926,5 +927,31 @@ public class GitService
             if (Directory.GetFileSystemEntries(dir).Length == 0)
                 Directory.Delete(dir);
         }
+    }
+
+    // L3: split a command string respecting double-quoted segments
+    private static List<string> SplitArgs(string input)
+    {
+        var result = new List<string>();
+        var i = 0;
+        while (i < input.Length)
+        {
+            if (char.IsWhiteSpace(input[i])) { i++; continue; }
+            if (input[i] == '"')
+            {
+                var end = input.IndexOf('"', i + 1);
+                if (end == -1) end = input.Length;
+                result.Add(input[(i + 1)..end]);
+                i = end + 1;
+            }
+            else
+            {
+                var end = input.IndexOf(' ', i);
+                if (end == -1) end = input.Length;
+                result.Add(input[i..end]);
+                i = end;
+            }
+        }
+        return result;
     }
 }

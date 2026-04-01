@@ -32,8 +32,13 @@ public class ConfigService
     }
 
     /// <summary>
+    /// Direct access to the underlying WorkspaceConfig — preferred over LoadConfig().
+    /// </summary>
+    public WorkspaceConfig Workspace => _workspace;
+
+    /// <summary>
     /// Returns an AppConfig view of the current workspace config.
-    /// This bridges old code that expects AppConfig.
+    /// Legacy bridge — prefer using Workspace directly for correct GameModPath.
     /// </summary>
     public AppConfig LoadConfig()
     {

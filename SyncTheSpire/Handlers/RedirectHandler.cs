@@ -27,7 +27,7 @@ public class RedirectHandler : HandlerBase
 
     public void HandleGetRedirectStatus()
     {
-        var cfg = _configService.LoadConfig();
+        var ws = _configService.Workspace;
 
         if (!_adapter.SupportsSaveRedirect)
         {
@@ -40,7 +40,7 @@ public class RedirectHandler : HandlerBase
             return;
         }
 
-        var isJunction = cfg.IsConfigured && _junctionService.IsJunction(cfg.GameModPath);
+        var isJunction = ws.IsConfigured && _junctionService.IsJunction(ws.GameModPath);
 
         if (!isJunction)
         {
@@ -53,7 +53,7 @@ public class RedirectHandler : HandlerBase
             return;
         }
 
-        var isEnabled = _adapter.IsSaveRedirectEnabled(cfg.GameModPath);
+        var isEnabled = _adapter.IsSaveRedirectEnabled(ws.GameModPath);
 
         Send(IpcResponse.Success("GET_REDIRECT_STATUS", new
         {
@@ -71,19 +71,22 @@ public class RedirectHandler : HandlerBase
             return;
         }
 
-        var cfg = _configService.LoadConfig();
-        if (!cfg.IsConfigured || !_junctionService.IsJunction(cfg.GameModPath))
+        var ws = _configService.Workspace;
+        if (!ws.IsConfigured || !_junctionService.IsJunction(ws.GameModPath))
         {
             Send(IpcResponse.Error("SET_REDIRECT", "Mod 未连接，请先连接 Mod"));
             return;
         }
 
-        var enabled = payload?.GetProperty("enabled").GetBoolean() ?? true;
+        // M2 fix: use TryGetProperty
+        var enabled = true;
+        if (payload is not null && payload.Value.TryGetProperty("enabled", out var enabledEl))
+            enabled = enabledEl.GetBoolean();
 
         if (enabled)
-            _adapter.EnableSaveRedirect(cfg.GameModPath);
+            _adapter.EnableSaveRedirect(ws.GameModPath);
         else
-            _adapter.DisableSaveRedirect(cfg.GameModPath);
+            _adapter.DisableSaveRedirect(ws.GameModPath);
 
         Send(IpcResponse.Success("SET_REDIRECT", new
         {

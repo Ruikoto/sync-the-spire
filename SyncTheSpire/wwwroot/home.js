@@ -193,7 +193,12 @@ async function handleCreateWorkspace() {
 
 // ── home page event bindings (called once at bootstrap) ─────────────────────
 
+// M9 fix: guard against double initialization
+let _homePageInitialized = false;
+
 function initHomePage() {
+    if (_homePageInitialized) return;
+    _homePageInitialized = true;
     $('#btn-create-workspace')?.addEventListener('click', openCreateWorkspaceModal);
     $('#create-ws-confirm')?.addEventListener('click', handleCreateWorkspace);
     $('#create-ws-cancel')?.addEventListener('click', () => {

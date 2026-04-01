@@ -32,9 +32,16 @@ function _defaultWsState() {
 }
 
 // get or create workspace state for the active workspace
+// M5 fix: always store the created state so mutations persist
 function getWsState(id) {
     const wsId = id || AppState.activeWorkspaceId;
-    if (!wsId) return _defaultWsState(); // shouldn't happen, but safe fallback
+    if (!wsId) {
+        // no workspace active — store under a sentinel key so mutations aren't lost
+        if (!AppState.workspaceStates['__none__']) {
+            AppState.workspaceStates['__none__'] = _defaultWsState();
+        }
+        return AppState.workspaceStates['__none__'];
+    }
     if (!AppState.workspaceStates[wsId]) {
         AppState.workspaceStates[wsId] = _defaultWsState();
     }

@@ -56,55 +56,19 @@ public class WorkspaceHandler : HandlerBase
         Send(IpcResponse.Success("GET_GAME_TYPES", types));
     }
 
-    // CREATE_WORKSPACE — create + auto-open tab + set active
-    public void HandleCreateWorkspace(JsonElement? payload)
-    {
-        var name = payload?.GetProperty("name").GetString() ?? "";
-        var gameType = payload?.GetProperty("gameType").GetString() ?? "sts2";
-
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            Send(IpcResponse.Error("CREATE_WORKSPACE", "工作区名称不能为空"));
-            return;
-        }
-
-        var ws = _workspaceManager.CreateWorkspace(name, gameType);
-        _workspaceManager.SetActiveWorkspace(ws.Id);
-
-        Send(IpcResponse.Success("CREATE_WORKSPACE", new
-        {
-            id = ws.Id,
-            name = ws.Name,
-            gameType = ws.GameType,
-            gameDisplayName = GameAdapterRegistry.Get(ws.GameType).DisplayName,
-            openTabs = _workspaceManager.Config.OpenTabs,
-            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
-        }));
-    }
-
-    // DELETE_WORKSPACE — remove workspace + return updated state
-    public void HandleDeleteWorkspace(JsonElement? payload)
-    {
-        var id = payload?.GetProperty("id").GetString() ?? "";
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            Send(IpcResponse.Error("DELETE_WORKSPACE", "缺少工作区 ID"));
-            return;
-        }
-
-        _workspaceManager.DeleteWorkspace(id);
-
-        Send(IpcResponse.Success("DELETE_WORKSPACE", new
-        {
-            openTabs = _workspaceManager.Config.OpenTabs,
-            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
-        }));
-    }
-
     // OPEN_WORKSPACE_TAB — add to open tabs (doesn't switch)
     public void HandleOpenTab(JsonElement? payload)
     {
-        var id = payload?.GetProperty("id").GetString() ?? "";
+        // M2 fix: use TryGetProperty + validate empty
+        string? id = null;
+        if (payload is not null && payload.Value.TryGetProperty("id", out var idEl))
+            id = idEl.GetString();
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            Send(IpcResponse.Error("OPEN_WORKSPACE_TAB", "缺少工作区 ID"));
+            return;
+        }
+
         _workspaceManager.OpenTab(id);
 
         Send(IpcResponse.Success("OPEN_WORKSPACE_TAB", new
@@ -117,12 +81,23 @@ public class WorkspaceHandler : HandlerBase
     // RENAME_WORKSPACE — update workspace name
     public void HandleRenameWorkspace(JsonElement? payload)
     {
-        var id = payload?.GetProperty("id").GetString() ?? "";
-        var newName = payload?.GetProperty("name").GetString() ?? "";
+        // M2 fix: use TryGetProperty
+        string? id = null, newName = null;
+        if (payload is not null)
+        {
+            if (payload.Value.TryGetProperty("id", out var idEl)) id = idEl.GetString();
+            if (payload.Value.TryGetProperty("name", out var nameEl)) newName = nameEl.GetString();
+        }
 
         if (string.IsNullOrWhiteSpace(newName))
         {
             Send(IpcResponse.Error("RENAME_WORKSPACE", "名称不能为空"));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            Send(IpcResponse.Error("RENAME_WORKSPACE", "工作区 ID 不能为空"));
             return;
         }
 

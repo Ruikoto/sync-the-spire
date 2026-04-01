@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using SyncTheSpire.Helpers;
 using SyncTheSpire.Models;
 
 namespace SyncTheSpire.Services;
@@ -21,9 +22,6 @@ public class WorkspaceManager
     private const string EncPrefix = "dpapi:";
 
     private AppConfigV2 _config = null!;
-
-    // fallback for migration when Directory.Move fails (files locked, etc.)
-    private readonly Dictionary<string, (string RepoPath, string GitDirPath)> _pathOverrides = new();
 
     public AppConfigV2 Config => _config;
     public string DismissalsPath => DismissalsFilePath;
@@ -66,6 +64,14 @@ public class WorkspaceManager
         catch (Exception ex)
         {
             LogService.Warn($"Config file corrupted, using defaults: {ex.Message}");
+            // M4 fix: backup the corrupted file before replacing with empty defaults
+            try
+            {
+                var corruptBackup = Path.Combine(AppDataDir, "config.corrupted.backup.json");
+                File.Copy(ConfigFilePath, corruptBackup, overwrite: true);
+                LogService.Info($"Corrupted config backed up to {corruptBackup}");
+            }
+            catch { /* best-effort backup */ }
             _config = new AppConfigV2();
         }
 
@@ -105,7 +111,10 @@ public class WorkspaceManager
         };
 
         var json = JsonSerializer.Serialize(toSerialize, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(ConfigFilePath, json);
+        // M4 fix: atomic write — write to temp file then rename (safe on NTFS)
+        var tmpPath = ConfigFilePath + ".tmp";
+        File.WriteAllText(tmpPath, json);
+        File.Move(tmpPath, ConfigFilePath, overwrite: true);
         LogService.Info("Config saved (v2)");
     }
 
@@ -213,10 +222,11 @@ public class WorkspaceManager
             Settings = new AppSettings(),
         };
 
-        // store override paths if moves failed (will be used by GetRepoPath/GetGitDirPath)
+        // C2 fix: store fallback paths directly in workspace config (persisted)
         if (actualRepo != newRepo || actualGitDir != newGitDir)
         {
-            _pathOverrides[wsId] = (actualRepo, actualGitDir);
+            if (actualRepo != newRepo) ws.RepoPathOverride = actualRepo;
+            if (actualGitDir != newGitDir) ws.GitDirPathOverride = actualGitDir;
             LogService.Info($"Using fallback paths for workspace {wsId}: Repo={actualRepo}, GitDir={actualGitDir}");
         }
 
@@ -310,7 +320,8 @@ public class WorkspaceManager
 
         if (Directory.Exists(wsDir))
         {
-            try { Directory.Delete(wsDir, true); }
+            // H7 fix: use ForceDeleteDirectory — git objects have read-only attributes on Windows
+            try { FileSystemHelper.ForceDeleteDirectory(wsDir); }
             catch (Exception ex) { LogService.Warn($"Failed to delete workspace dir: {ex.Message}"); }
         }
 
@@ -366,11 +377,21 @@ public class WorkspaceManager
 
     public string GetWorkspaceDir(string id) => Path.Combine(WorkspacesRoot, id);
 
-    public string GetRepoPath(string id) =>
-        _pathOverrides.TryGetValue(id, out var o) ? o.RepoPath : Path.Combine(GetWorkspaceDir(id), "Repo");
+    public string GetRepoPath(string id)
+    {
+        var ws = GetWorkspace(id);
+        if (ws != null && !string.IsNullOrEmpty(ws.RepoPathOverride))
+            return ws.RepoPathOverride;
+        return Path.Combine(GetWorkspaceDir(id), "Repo");
+    }
 
-    public string GetGitDirPath(string id) =>
-        _pathOverrides.TryGetValue(id, out var o) ? o.GitDirPath : Path.Combine(GetWorkspaceDir(id), "GitDir");
+    public string GetGitDirPath(string id)
+    {
+        var ws = GetWorkspace(id);
+        if (ws != null && !string.IsNullOrEmpty(ws.GitDirPathOverride))
+            return ws.GitDirPathOverride;
+        return Path.Combine(GetWorkspaceDir(id), "GitDir");
+    }
 
     public string GetBackupDir(string id) => Path.Combine(GetWorkspaceDir(id), "Backups");
 

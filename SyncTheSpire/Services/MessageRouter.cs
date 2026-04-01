@@ -34,6 +34,17 @@ public class MessageRouter
     private SteamFinderHandler _steamFinderHandler = null!;
     private FilesystemHandler _filesystemHandler = null!;
 
+    // A3: actions that require an active workspace context — unified null guard
+    private static readonly HashSet<string> WorkspaceScopedActions =
+    [
+        "GET_STATUS", "REFRESH_SYNC", "GET_CONFIG", "INIT_CONFIG",
+        "GET_BRANCHES", "SWITCH_TO_VANILLA", "SYNC_OTHER_BRANCH",
+        "CREATE_MY_BRANCH", "SAVE_AND_PUSH_MY_BRANCH", "FORCE_PUSH", "RESET_TO_REMOTE",
+        "GET_SAVE_STATUS", "UNLINK_SAVES", "BACKUP_SAVES", "GET_BACKUP_LIST", "RESTORE_BACKUP", "DELETE_BACKUP",
+        "GET_REDIRECT_STATUS", "SET_REDIRECT",
+        "RESTORE_JUNCTION", "OPEN_FOLDER",
+    ];
+
     // current workspace context (null if no workspace active yet)
     private WorkspaceContext? _currentContext;
 
@@ -184,7 +195,13 @@ public class MessageRouter
                 return;
             // mod preview reads immutable git objects — safe outside the gate
             case "GET_BRANCH_MODS":
-                _gitBranchHandler?.HandleGetBranchMods(req.Payload);
+                // H2 fix: send error instead of silently dropping when no workspace
+                if (_gitBranchHandler is null)
+                {
+                    Send(IpcResponse.Error("GET_BRANCH_MODS", "当前没有活跃的工作区"));
+                    return;
+                }
+                _gitBranchHandler.HandleGetBranchMods(req.Payload);
                 return;
             // steam auto-find — read-only filesystem/registry, no need for the gate
             case "FIND_GAME_PATH":
@@ -205,6 +222,13 @@ public class MessageRouter
         _gate.Wait();
         try
         {
+            // A3: unified null-workspace interception — INIT_CONFIG is exempt (creates workspace)
+            if (_currentContext == null && req.Action != "INIT_CONFIG" && WorkspaceScopedActions.Contains(req.Action))
+            {
+                Send(IpcResponse.Error(req.Action, "请先选择一个工作区"));
+                return;
+            }
+
             switch (req.Action)
             {
                 case "GET_STATUS":
@@ -228,11 +252,6 @@ public class MessageRouter
                     break;
 
                 case "GET_BRANCHES":
-                    if (_gitBranchHandler is null || _currentContext is null)
-                    {
-                        Send(IpcResponse.Error("GET_BRANCHES", "当前没有活跃的工作区"));
-                        break;
-                    }
                     _gitBranchHandler.HandleGetBranches();
                     break;
 
@@ -416,8 +435,13 @@ public class MessageRouter
     // CREATE_WORKSPACE — create, switch context, notify
     private void HandleCreateWorkspaceAndSwitch(JsonElement? payload)
     {
-        var name = payload?.GetProperty("name").GetString() ?? "";
-        var gameType = payload?.GetProperty("gameType").GetString() ?? "sts2";
+        // M2 fix: safe property access
+        string? name = null, gameType = "sts2";
+        if (payload is not null)
+        {
+            if (payload.Value.TryGetProperty("name", out var nameEl)) name = nameEl.GetString();
+            if (payload.Value.TryGetProperty("gameType", out var gtEl)) gameType = gtEl.GetString() ?? "sts2";
+        }
 
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -447,8 +471,10 @@ public class MessageRouter
     // SWITCH_WORKSPACE — dispose old context, create new one, rebuild handlers
     private void HandleSwitchWorkspace(JsonElement? payload)
     {
-        var id = payload?.GetProperty("id").GetString() ?? "";
-        var ws = _workspaceManager.GetWorkspace(id);
+        string? id = null;
+        if (payload is not null && payload.Value.TryGetProperty("id", out var idEl))
+            id = idEl.GetString();
+        var ws = string.IsNullOrWhiteSpace(id) ? null : _workspaceManager.GetWorkspace(id);
         if (ws == null)
         {
             Send(IpcResponse.Error("SWITCH_WORKSPACE", "工作区不存在"));
@@ -456,7 +482,7 @@ public class MessageRouter
         }
 
         _currentContext?.Dispose();
-        _workspaceManager.SetActiveWorkspace(id);
+        _workspaceManager.SetActiveWorkspace(id!);
         _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
         BuildHandlers();
 
@@ -472,7 +498,9 @@ public class MessageRouter
     // DELETE_WORKSPACE — dispose context if active, delete, rebuild if needed
     private void HandleDeleteWorkspaceAndSwitch(JsonElement? payload)
     {
-        var id = payload?.GetProperty("id").GetString() ?? "";
+        string? id = null;
+        if (payload is not null && payload.Value.TryGetProperty("id", out var idEl))
+            id = idEl.GetString();
         if (string.IsNullOrWhiteSpace(id))
         {
             Send(IpcResponse.Error("DELETE_WORKSPACE", "缺少工作区 ID"));
@@ -510,10 +538,12 @@ public class MessageRouter
     // CLOSE_WORKSPACE_TAB — close tab, switch if it was the active one
     private void HandleCloseTabAndMaybeSwitch(JsonElement? payload)
     {
-        var id = payload?.GetProperty("id").GetString() ?? "";
+        string? id = null;
+        if (payload is not null && payload.Value.TryGetProperty("id", out var idEl))
+            id = idEl.GetString() ?? "";
         var wasActive = _workspaceManager.Config.ActiveWorkspace == id;
 
-        _workspaceManager.CloseTab(id);
+        _workspaceManager.CloseTab(id ?? "");
 
         // if closed tab was active, we need to switch context
         if (wasActive)

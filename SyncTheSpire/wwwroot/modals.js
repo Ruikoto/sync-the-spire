@@ -459,10 +459,7 @@ const QUOTES_STS2 = [
     '成交！',
     '概不退换。',
     '祝你顺利啊。',
-    '面具就是酷，我也是同党啊！',
     '你有没有看见我的送货员？',
-    '多留会儿，听听音乐啊！',
-    '一个人前进太危险了！把你的钱都给我吧！',
     '这是… 怎么了…？…难道…真的… …做到了吗…？',
     '…高塔沉睡了… 那么… 我也… …该睡了……',
     '启程去屠戮这座高塔。',
@@ -524,7 +521,8 @@ const ANNOUNCEMENTS_URL = 'https://sts.rkto.cc/announcements.json';
 let latestVersionInfo = null;
 
 function compareVersions(current, latest) {
-    const parse = v => v.replace(/^v/i, '').split('.').map(Number);
+    // L9 fix: strip non-numeric suffixes like "-beta" before parsing
+    const parse = v => v.replace(/^v/i, '').split('.').map(s => parseInt(s, 10) || 0);
     const c = parse(current), l = parse(latest);
     for (let i = 0; i < 3; i++) {
         if ((l[i] || 0) !== (c[i] || 0)) return (l[i] || 0) - (c[i] || 0);

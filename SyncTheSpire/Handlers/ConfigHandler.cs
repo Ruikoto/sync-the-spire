@@ -46,8 +46,7 @@ public class ConfigHandler : HandlerBase
 
     public void HandleGetStatus()
     {
-        var cfg = _configService.LoadConfig();
-        var repoExists = _gitService.IsRepoValid;
+        var ws = _configService.Workspace;
 
         // adapter capabilities — frontend uses these to show/hide UI sections
         var capabilities = new
@@ -61,8 +60,11 @@ public class ConfigHandler : HandlerBase
             supportsModToggle = _adapter.TypeKey != "generic",
         };
 
+        // C3 fix: short-circuit when no real workspace context
+        var repoExists = _gitService != null && _gitService.IsRepoValid;
+
         object data;
-        if (!cfg.IsConfigured || !repoExists)
+        if (!ws.IsConfigured || !repoExists)
         {
             data = new
             {
@@ -75,8 +77,8 @@ public class ConfigHandler : HandlerBase
         }
         else
         {
-            var isJunction = _junctionService.IsJunction(cfg.GameModPath);
-            var branch = _gitService.GetCurrentBranch();
+            var isJunction = _junctionService.IsJunction(ws.GameModPath);
+            var branch = _gitService!.GetCurrentBranch();
             var isInit = branch == GitService.InitBranch;
             data = new
             {
@@ -97,16 +99,24 @@ public class ConfigHandler : HandlerBase
     /// </summary>
     public void HandleRefreshSync()
     {
-        var cfg = _configService.LoadConfig();
-        if (!cfg.IsConfigured || !_gitService.IsRepoValid || _gitService.IsOnInitBranch)
+        var ws = _configService.Workspace;
+        if (!ws.IsConfigured || _gitService == null || !_gitService.IsRepoValid || _gitService.IsOnInitBranch)
         {
-            // nothing useful to fetch, just return basic status
-            HandleGetStatus();
+            // H3 fix: return REFRESH_SYNC event (not GET_STATUS) so frontend stops spinner
+            Send(IpcResponse.Success("REFRESH_SYNC", new
+            {
+                currentBranch = (string?)null,
+                isJunctionActive = false,
+                hasLocalChanges = false,
+                ahead = 0,
+                behind = 0,
+                hasRemoteBranch = false
+            }));
             return;
         }
 
         var sync = _gitService.FetchAndGetSyncStatus();
-        var isJunction = _junctionService.IsJunction(cfg.GameModPath);
+        var isJunction = _junctionService.IsJunction(ws.GameModPath);
         var branch = _gitService.GetCurrentBranch();
 
         Send(IpcResponse.Success("REFRESH_SYNC", new
@@ -127,7 +137,7 @@ public class ConfigHandler : HandlerBase
     public void HandleGetConfig()
     {
         var cfg = _configService.LoadConfig();
-        var gitUserName = _gitService.ReadGitGlobalConfig("user.name");
+        var gitUserName = _gitService?.ReadGitGlobalConfig("user.name");
         Send(IpcResponse.Success("GET_CONFIG", new
         {
             nickname = cfg.Nickname,
@@ -200,7 +210,7 @@ public class ConfigHandler : HandlerBase
         _configService.SaveConfig(cfg);
 
         // resolve the actual target path — adapter decides if it's {install}\Mods or install itself
-        var targetModPath = _adapter.ResolveModPath(cfg.GameInstallPath) ?? cfg.GameModPath;
+        var targetModPath = _adapter.ResolveModPath(cfg.GameInstallPath) ?? _configService.Workspace.GameModPath;
 
         // check if remote URL changed — if so, nuke the old repo and re-clone
         // (could be a completely different repo, can't just update the remote)

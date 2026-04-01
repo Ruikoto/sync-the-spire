@@ -15,6 +15,9 @@ function on(event, fn) {
     handlers[event].push(fn);
 }
 
+// H6 fix: track which action triggered the loading overlay
+let _loadingAction = null;
+
 // listen for messages from C# backend (WebView2 uses 'message' event)
 window.chrome.webview.addEventListener('message', e => {
     let msg;
@@ -26,11 +29,17 @@ window.chrome.webview.addEventListener('message', e => {
 
     // show progress toasts automatically
     if (data.status === 'progress') {
+        _loadingAction = event;
         showLoading(data.message || 'Processing...', data.percent);
         return;
     }
 
-    hideLoading();
+    // H6 fix: only hide loading if this response matches the action that caused it
+    // or if there's no tracked action (legacy/safety fallback)
+    if (_loadingAction === null || _loadingAction === event) {
+        hideLoading();
+        _loadingAction = null;
+    }
 
     // show error toasts
     if (data.status === 'error') {
@@ -45,10 +54,15 @@ window.chrome.webview.addEventListener('message', e => {
     }
 });
 
-// one-shot IPC call — returns a Promise that resolves with the response data
-function ipcCall(action, payload) {
-    return new Promise(resolve => {
+// H4 fix: one-shot IPC call with timeout — returns a Promise
+function ipcCall(action, payload, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+
         const handler = (data) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
             const list = handlers[action];
             if (list) {
                 const idx = list.indexOf(handler);
@@ -56,6 +70,18 @@ function ipcCall(action, payload) {
             }
             resolve(data);
         };
+
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            const list = handlers[action];
+            if (list) {
+                const idx = list.indexOf(handler);
+                if (idx !== -1) list.splice(idx, 1);
+            }
+            resolve({ status: 'error', message: `${action} 请求超时` });
+        }, timeoutMs);
+
         on(action, handler);
         sendMessage(action, payload);
     });

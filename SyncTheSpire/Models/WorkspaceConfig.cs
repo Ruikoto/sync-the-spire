@@ -48,6 +48,14 @@ public class WorkspaceConfig
     [JsonPropertyName("saveFolderPath")]
     public string SaveFolderPath { get; set; } = string.Empty;
 
+    // fallback paths for V1→V2 migration when Directory.Move fails (files locked)
+    // if non-empty, these override the default workspaces/{id}/Repo|GitDir paths
+    [JsonPropertyName("repoPathOverride")]
+    public string RepoPathOverride { get; set; } = string.Empty;
+
+    [JsonPropertyName("gitDirPathOverride")]
+    public string GitDirPathOverride { get; set; } = string.Empty;
+
     /// <summary>
     /// resolved mod/sync folder: StS2 = {GameInstallPath}\Mods, generic = GameInstallPath itself
     /// </summary>

@@ -26,10 +26,14 @@ public class AnnouncementHandler : HandlerBase
 
     public void HandleDismissAnnouncement(JsonElement? payload)
     {
-        if (payload is null) return;
-        if (!payload.Value.TryGetProperty("id", out var idEl)) return;
+        if (payload is null || !payload.Value.TryGetProperty("id", out var idEl))
+        {
+            Send(IpcResponse.Success("DISMISS_ANNOUNCEMENT"));
+            return;
+        }
         var id = idEl.GetString();
         if (!string.IsNullOrEmpty(id))
             _configService.DismissAnnouncement(id);
+        Send(IpcResponse.Success("DISMISS_ANNOUNCEMENT"));
     }
 }

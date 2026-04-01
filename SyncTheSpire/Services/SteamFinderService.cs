@@ -43,8 +43,8 @@ public class SteamFinderService
             if (Directory.Exists(fullPath))
                 return new GamePathResult(fullPath, null);
 
-            // manifest exists but folder is missing
-            return new GamePathResult(null, "检测到游戏安装记录，但安装目录不存在");
+            // manifest exists but folder is missing — try other libraries first
+            continue;
         }
 
         return new GamePathResult(null, "未在 Steam 库中找到 Slay the Spire 2");
