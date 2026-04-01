@@ -23,6 +23,7 @@ public class WorkspaceContext : IDisposable
     public string RepoPath { get; }
     public string GitDirPath { get; }
     public string BackupDir { get; }
+    public string WorkTreePath { get; }
 
     public WorkspaceContext(
         WorkspaceConfig config,
@@ -38,8 +39,14 @@ public class WorkspaceContext : IDisposable
         GitDirPath = manager.GetGitDirPath(config.Id);
         BackupDir = manager.GetBackupDir(config.Id);
 
+        // junction mode: working tree is the internal Repo/ dir (game folder junctions to it)
+        // non-junction mode: working tree is the user's actual folder
+        WorkTreePath = GameAdapter.SupportsJunction
+            ? RepoPath
+            : (!string.IsNullOrWhiteSpace(config.GameInstallPath) ? config.GameInstallPath : RepoPath);
+
         // create workspace-scoped services
-        ConfigService = new ConfigService(config, manager, RepoPath, GitDirPath);
+        ConfigService = new ConfigService(config, manager, RepoPath, GitDirPath, WorkTreePath);
         BackupService = new SaveBackupService(BackupDir);
         GitService = new GitService(ConfigService, gitResolver);
         MergeService = new SaveMergeService(junctionService, BackupService, GameAdapter);

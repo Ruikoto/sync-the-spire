@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
+using SyncTheSpire.Adapters;
 using SyncTheSpire.Helpers;
 using SyncTheSpire.Models;
 using SyncTheSpire.Services;
@@ -12,6 +13,7 @@ public class GitBranchHandler : HandlerBase
     private readonly GitService _gitService;
     private readonly JunctionService _junctionService;
     private readonly JunctionHelper _junctionHelper;
+    private readonly IGameAdapter _adapter;
 
     public GitBranchHandler(
         CoreWebView2 webView,
@@ -19,13 +21,15 @@ public class GitBranchHandler : HandlerBase
         ConfigService configService,
         GitService gitService,
         JunctionService junctionService,
-        JunctionHelper junctionHelper)
+        JunctionHelper junctionHelper,
+        IGameAdapter adapter)
         : base(webView, uiContext)
     {
         _configService = configService;
         _gitService = gitService;
         _junctionService = junctionService;
         _junctionHelper = junctionHelper;
+        _adapter = adapter;
     }
 
     public void HandleGetBranches()
@@ -103,8 +107,11 @@ public class GitBranchHandler : HandlerBase
         // silently save any local changes first
         _gitService.SilentCommitIfDirty();
 
-        // just remove the junction, real files stay safe in AppData
-        _junctionService.RemoveJunction(_configService.Workspace.GameModPath);
+        if (_adapter.SupportsJunction)
+        {
+            // just remove the junction, real files stay safe in AppData
+            _junctionService.RemoveJunction(_configService.Workspace.GameModPath);
+        }
 
         Send(IpcResponse.Success("SWITCH_TO_VANILLA", new { message = "已切换到纯净模式，Mod 文件夹已断开。" }));
     }
@@ -131,7 +138,8 @@ public class GitBranchHandler : HandlerBase
         _gitService.ForceCheckoutBranch(branchName);
 
         // make sure junction is pointing correctly
-        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
+        if (_adapter.SupportsJunction)
+            _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("SYNC_OTHER_BRANCH", new { message = $"已同步到 {branchName}" }));
     }
@@ -155,7 +163,8 @@ public class GitBranchHandler : HandlerBase
         _gitService.SilentCommitIfDirty();
         _gitService.CreateBranch(branchName);
 
-        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
+        if (_adapter.SupportsJunction)
+            _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("CREATE_MY_BRANCH", new { message = $"分支 {branchName} 已创建" }));
     }
@@ -211,7 +220,8 @@ public class GitBranchHandler : HandlerBase
         Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
         _gitService.ResetToRemote();
 
-        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
+        if (_adapter.SupportsJunction)
+            _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("RESET_TO_REMOTE", new { message = "已同步为云端配置！" }));
     }

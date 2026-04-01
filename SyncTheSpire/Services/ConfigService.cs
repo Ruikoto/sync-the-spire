@@ -19,16 +19,18 @@ public class ConfigService
 
     public string RepoPath { get; }
     public string GitDirPath { get; }
+    public string WorkTreePath { get; }
 
     public bool IsRepoInitialized => Directory.Exists(GitDirPath) &&
                                      Directory.Exists(Path.Combine(GitDirPath, "objects"));
 
-    public ConfigService(WorkspaceConfig workspace, WorkspaceManager manager, string repoPath, string gitDirPath)
+    public ConfigService(WorkspaceConfig workspace, WorkspaceManager manager, string repoPath, string gitDirPath, string workTreePath)
     {
         _workspace = workspace;
         _manager = manager;
         RepoPath = repoPath;
         GitDirPath = gitDirPath;
+        WorkTreePath = workTreePath;
     }
 
     /// <summary>

@@ -77,7 +77,9 @@ public class ConfigHandler : HandlerBase
         }
         else
         {
-            var isJunction = _junctionService.IsJunction(ws.GameModPath);
+            var isJunction = _adapter.SupportsJunction
+                ? _junctionService.IsJunction(ws.GameModPath)
+                : true; // non-junction mode: working tree is user's folder, always "connected"
             var branch = _gitService!.GetCurrentBranch();
             var isInit = branch == GitService.InitBranch;
             data = new
@@ -116,7 +118,9 @@ public class ConfigHandler : HandlerBase
         }
 
         var sync = _gitService.FetchAndGetSyncStatus();
-        var isJunction = _junctionService.IsJunction(ws.GameModPath);
+        var isJunction = _adapter.SupportsJunction
+            ? _junctionService.IsJunction(ws.GameModPath)
+            : true;
         var branch = _gitService.GetCurrentBranch();
 
         Send(IpcResponse.Success("REFRESH_SYNC", new
@@ -226,40 +230,53 @@ public class ConfigHandler : HandlerBase
         {
             Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
 
-            // detach junction so deleting Repo/ doesn't wipe the user's mods
-            if (_junctionService.IsJunction(targetModPath))
-                _junctionService.RemoveJunction(targetModPath);
-
-            // stash mod files before nuking Repo/ — we'll put them back after clone
-            var stashPath = _configService.RepoPath + "_stash";
-            FileSystemHelper.ForceDeleteDirectory(stashPath);
-            if (Directory.Exists(_configService.RepoPath))
-                Directory.Move(_configService.RepoPath, stashPath);
-
-            FileSystemHelper.ForceDeleteDirectory(_configService.GitDirPath);
-
-            try
+            if (_adapter.SupportsJunction)
             {
-                _gitService.CloneRepo();
-            }
-            catch
-            {
-                // clone failed — restore stashed mod files so they aren't lost
-                if (Directory.Exists(stashPath) && !Directory.Exists(_configService.RepoPath))
-                    Directory.Move(stashPath, _configService.RepoPath);
-                throw;
-            }
+                // detach junction so deleting Repo/ doesn't wipe the user's mods
+                if (_junctionService.IsJunction(targetModPath))
+                    _junctionService.RemoveJunction(targetModPath);
 
-            // restore mod files into the fresh Repo/ so the user's mods survive
-            if (Directory.Exists(stashPath))
-            {
-                _junctionService.FallbackCopy(stashPath, _configService.RepoPath);
+                // stash mod files before nuking Repo/ — we'll put them back after clone
+                var stashPath = _configService.RepoPath + "_stash";
                 FileSystemHelper.ForceDeleteDirectory(stashPath);
+                if (Directory.Exists(_configService.RepoPath))
+                    Directory.Move(_configService.RepoPath, stashPath);
+
+                FileSystemHelper.ForceDeleteDirectory(_configService.GitDirPath);
+
+                try
+                {
+                    _gitService.CloneRepo();
+                }
+                catch
+                {
+                    // clone failed — restore stashed mod files so they aren't lost
+                    if (Directory.Exists(stashPath) && !Directory.Exists(_configService.RepoPath))
+                        Directory.Move(stashPath, _configService.RepoPath);
+                    throw;
+                }
+
+                // restore mod files into the fresh Repo/ so the user's mods survive
+                if (Directory.Exists(stashPath))
+                {
+                    _junctionService.FallbackCopy(stashPath, _configService.RepoPath);
+                    FileSystemHelper.ForceDeleteDirectory(stashPath);
+                }
+            }
+            else
+            {
+                // non-junction mode: clone to Repo/ (temp), SeparateGitDir redirects core.worktree
+                // to the user's folder, then CheckoutEmptyInitBranch cleans up Repo/
+                FileSystemHelper.ForceDeleteDirectory(_configService.RepoPath);
+                FileSystemHelper.ForceDeleteDirectory(_configService.GitDirPath);
+
+                _gitService.CloneRepo();
             }
         }
 
-        // set up junction: backup existing folder, then link to repo working tree
-        _junctionHelper.EnsureJunction(targetModPath, _configService.RepoPath);
+        // junction mode: link game folder to repo working tree
+        if (_adapter.SupportsJunction)
+            _junctionHelper.EnsureJunction(targetModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("INIT_CONFIG", new { message = "配置完成，仓库已就绪！" }));
     }

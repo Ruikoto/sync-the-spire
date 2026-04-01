@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
+using SyncTheSpire.Adapters;
 using SyncTheSpire.Helpers;
 using SyncTheSpire.Models;
 using SyncTheSpire.Services;
@@ -13,6 +14,7 @@ public class FilesystemHandler : HandlerBase
     private readonly JunctionService _junctionService;
     private readonly SaveBackupService _backupService;
     private readonly JunctionHelper _junctionHelper;
+    private readonly IGameAdapter _adapter;
     private readonly MainForm _form;
 
     public FilesystemHandler(
@@ -22,6 +24,7 @@ public class FilesystemHandler : HandlerBase
         JunctionService junctionService,
         SaveBackupService backupService,
         JunctionHelper junctionHelper,
+        IGameAdapter adapter,
         MainForm form)
         : base(webView, uiContext)
     {
@@ -29,6 +32,7 @@ public class FilesystemHandler : HandlerBase
         _junctionService = junctionService;
         _backupService = backupService;
         _junctionHelper = junctionHelper;
+        _adapter = adapter;
         _form = form;
     }
 
@@ -101,7 +105,8 @@ public class FilesystemHandler : HandlerBase
 
     public void HandleRestoreJunction()
     {
-        _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
+        if (_adapter.SupportsJunction)
+            _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("RESTORE_JUNCTION", new { message = "Mod 文件夹已恢复连接。" }));
     }

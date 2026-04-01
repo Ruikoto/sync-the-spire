@@ -37,6 +37,7 @@ public class GitService
 
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
+    private string WorkTreePath => _config.WorkTreePath;
 
     private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
 
@@ -83,14 +84,14 @@ public class GitService
         if (setGitDir && Directory.Exists(GitDirPath))
         {
             psi.Environment["GIT_DIR"] = GitDirPath;
-            psi.Environment["GIT_WORK_TREE"] = RepoPath;
+            psi.Environment["GIT_WORK_TREE"] = WorkTreePath;
         }
 
         var configIdx = 0;
 
-        // bypass ownership check for AppData repo path (same as GlobalSettings.SetOwnerValidation)
+        // bypass ownership check for working tree path (same as GlobalSettings.SetOwnerValidation)
         psi.Environment[$"GIT_CONFIG_KEY_{configIdx}"] = "safe.directory";
-        psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = RepoPath;
+        psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = WorkTreePath;
         configIdx++;
 
         // HTTPS auth: inject Basic auth header so git.exe works with any platform (GitHub, Gitee, etc.)
@@ -120,7 +121,7 @@ public class GitService
         var psi = new ProcessStartInfo
         {
             FileName = _resolver.GetGitPath(),
-            WorkingDirectory = workDir ?? RepoPath,
+            WorkingDirectory = workDir ?? WorkTreePath,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
@@ -669,7 +670,8 @@ public class GitService
         var branch = repo.Branches[InitBranch]!;
         Commands.Checkout(repo, branch, new CheckoutOptions { CheckoutModifiers = CheckoutModifiers.Force });
 
-        // wipe all files from working tree so junction stays clean
+        // wipe all files from the clone dir so junction stays clean
+        // (for non-junction mode, RepoPath is separate from WorkTreePath — clean it up too)
         foreach (var f in Directory.GetFiles(RepoPath))
             File.Delete(f);
         foreach (var d in Directory.GetDirectories(RepoPath))
@@ -877,7 +879,7 @@ public class GitService
 
         // tell git where the working tree lives
         using var repo = new Repository(GitDirPath);
-        repo.Config.Set("core.worktree", RepoPath);
+        repo.Config.Set("core.worktree", WorkTreePath);
     }
 
     /// <summary>
@@ -899,7 +901,7 @@ public class GitService
         string[] artifacts = [".gitignore", ".gitattributes"];
         foreach (var name in artifacts)
         {
-            var path = Path.Combine(RepoPath, name);
+            var path = Path.Combine(WorkTreePath, name);
             if (File.Exists(path))
                 File.Delete(path);
         }

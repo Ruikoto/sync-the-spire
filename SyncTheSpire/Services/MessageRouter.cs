@@ -96,19 +96,19 @@ public class MessageRouter
             var junctionHelper = new JunctionHelper(_junctionService, ctx.BackupService, Send);
 
             _configHandler = new ConfigHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter);
-            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper);
+            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter);
             _saveHandler = new SaveHandler(_webView, _uiContext, ctx.ConfigService, ctx.BackupService, ctx.MergeService, _junctionService);
             _redirectHandler = new RedirectHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, adapter);
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, adapter);
-            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, _form);
+            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, adapter, _form);
         }
         else
         {
             // no workspace active — create stub handlers with a temporary config service
             // so GET_STATUS can report "not configured" and GET_VERSION still works
             var stubWs = new WorkspaceConfig();
-            var stubCs = new ConfigService(stubWs, _workspaceManager, "", "");
+            var stubCs = new ConfigService(stubWs, _workspaceManager, "", "", "");
             var stubBackup = new SaveBackupService(Path.Combine(WorkspaceManager.AppDataDir, "Backups"));
             var stubJH = new JunctionHelper(_junctionService, stubBackup, Send);
             var stubAdapter = GameAdapterRegistry.Get("sts2");
@@ -119,7 +119,7 @@ public class MessageRouter
             _redirectHandler = new RedirectHandler(_webView, _uiContext, stubCs, _junctionService, stubAdapter);
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, stubCs);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, stubAdapter);
-            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, stubCs, _junctionService, stubBackup, stubJH, _form);
+            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, stubCs, _junctionService, stubBackup, stubJH, stubAdapter, _form);
         }
     }
 

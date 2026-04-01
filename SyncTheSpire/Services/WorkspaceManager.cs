@@ -306,9 +306,10 @@ public class WorkspaceManager
 
         // clean up data directory
         var wsDir = GetWorkspaceDir(id);
+        var adapter = Adapters.GameAdapterRegistry.Get(ws.GameType);
 
         // remove junction first if exists, so we don't accidentally nuke the game mod folder
-        if (!string.IsNullOrWhiteSpace(ws.GameModPath))
+        if (adapter.SupportsJunction && !string.IsNullOrWhiteSpace(ws.GameModPath))
         {
             var junctionService = new JunctionService();
             if (junctionService.IsJunction(ws.GameModPath))
@@ -320,7 +321,6 @@ public class WorkspaceManager
             // clean up save-folder junctions (modded/profileN) that point into this workspace's Repo
             if (!string.IsNullOrWhiteSpace(ws.SaveFolderPath) && Directory.Exists(ws.SaveFolderPath))
             {
-                var adapter = Adapters.GameAdapterRegistry.Get(ws.GameType);
                 var moddedSub = adapter.ModdedSaveSubfolder;
                 if (!string.IsNullOrEmpty(moddedSub))
                 {

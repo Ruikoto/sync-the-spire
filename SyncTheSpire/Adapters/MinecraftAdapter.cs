@@ -37,6 +37,7 @@ public class MinecraftAdapter : IGameAdapter
     public bool SupportsSaveBackup => false;
     public bool SupportsModdedSaves => false;
     public bool SupportsModScanning => false;
+    public bool SupportsJunction => true;
     public bool ComingSoon => true;
 
     // ── save redirect (no-op) ────────────────────────────────────────────

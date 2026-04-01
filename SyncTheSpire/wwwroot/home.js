@@ -163,7 +163,11 @@ function showWizardStep(step, animate) {
         // after animation completes, swap visibility and animate incoming
         setTimeout(() => {
             outgoing.classList.add('hidden');
+            // reset inline transform so the element starts at its natural position
+            incoming.className = 'wizard-step p-1';
             incoming.classList.remove('hidden');
+            // force reflow so browser registers the un-animated state first
+            void incoming.offsetWidth;
             incoming.className = `wizard-step p-1 ${forward ? 'wizard-forward-in' : 'wizard-back-in'}`;
         }, 250);
     }
