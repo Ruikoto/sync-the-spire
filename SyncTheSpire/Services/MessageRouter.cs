@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
+using SyncTheSpire.Adapters;
 using SyncTheSpire.Handlers;
 using SyncTheSpire.Helpers;
 using SyncTheSpire.Models;
@@ -70,17 +71,18 @@ public class MessageRouter
 
         // these two don't need workspace context
         _storeUpdateHandler = new StoreUpdateHandler(_webView, _uiContext, _storeUpdateService);
-        _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, new SteamFinderService());
 
         if (ctx != null)
         {
+            var adapter = ctx.GameAdapter;
             var junctionHelper = new JunctionHelper(_junctionService, ctx.BackupService, Send);
 
-            _configHandler = new ConfigHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper);
+            _configHandler = new ConfigHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter);
             _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper);
             _saveHandler = new SaveHandler(_webView, _uiContext, ctx.ConfigService, ctx.BackupService, ctx.MergeService, _junctionService);
-            _redirectHandler = new RedirectHandler(_webView, _uiContext, ctx.ConfigService, _junctionService);
+            _redirectHandler = new RedirectHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, adapter);
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
+            _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, adapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, _form);
         }
         else
@@ -91,12 +93,14 @@ public class MessageRouter
             var stubCs = new ConfigService(stubWs, _workspaceManager, "", "");
             var stubBackup = new SaveBackupService(Path.Combine(WorkspaceManager.AppDataDir, "Backups"));
             var stubJH = new JunctionHelper(_junctionService, stubBackup, Send);
+            var stubAdapter = GameAdapterRegistry.Get("sts2");
 
-            _configHandler = new ConfigHandler(_webView, _uiContext, stubCs, null!, _junctionService, stubJH);
+            _configHandler = new ConfigHandler(_webView, _uiContext, stubCs, null!, _junctionService, stubJH, stubAdapter);
             _gitBranchHandler = null!;
             _saveHandler = null!;
-            _redirectHandler = new RedirectHandler(_webView, _uiContext, stubCs, _junctionService);
+            _redirectHandler = new RedirectHandler(_webView, _uiContext, stubCs, _junctionService, stubAdapter);
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, stubCs);
+            _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, stubAdapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, stubCs, _junctionService, stubBackup, stubJH, _form);
         }
     }

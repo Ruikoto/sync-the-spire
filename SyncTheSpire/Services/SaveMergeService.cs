@@ -1,25 +1,29 @@
+using SyncTheSpire.Adapters;
+
 namespace SyncTheSpire.Services;
 
 public class SaveMergeService
 {
     private readonly JunctionService _junctionService;
     private readonly SaveBackupService _backupService;
+    private readonly string[] _profileNames;
+    private readonly string _moddedSubfolder;
 
-    private static readonly string[] ProfileNames = ["profile1", "profile2", "profile3"];
-
-    public SaveMergeService(JunctionService junctionService, SaveBackupService backupService)
+    public SaveMergeService(JunctionService junctionService, SaveBackupService backupService, IGameAdapter adapter)
     {
         _junctionService = junctionService;
         _backupService = backupService;
+        _profileNames = adapter.SaveProfileNames;
+        _moddedSubfolder = adapter.ModdedSaveSubfolder;
     }
 
-    // check junction status of all 3 modded profiles
+    // check junction status of all modded profiles
     public SaveMergeStatus GetStatus(string saveFolderPath)
     {
-        var moddedDir = Path.Combine(saveFolderPath, "modded");
-        var hasModded = Directory.Exists(moddedDir);
+        var moddedDir = Path.Combine(saveFolderPath, _moddedSubfolder);
+        var hasModded = !string.IsNullOrEmpty(_moddedSubfolder) && Directory.Exists(moddedDir);
 
-        var profiles = ProfileNames.Select(name =>
+        var profiles = _profileNames.Select(name =>
         {
             var normalPath = Path.Combine(saveFolderPath, name);
             var moddedPath = Path.Combine(moddedDir, name);
@@ -46,9 +50,9 @@ public class SaveMergeService
         LogService.Info($"Unlinking merged saves: {saveFolderPath}");
         var backupPath = _backupService.BackupSaveFolder(saveFolderPath);
 
-        var moddedDir = Path.Combine(saveFolderPath, "modded");
+        var moddedDir = Path.Combine(saveFolderPath, _moddedSubfolder);
 
-        foreach (var name in ProfileNames)
+        foreach (var name in _profileNames)
         {
             var moddedPath = Path.Combine(moddedDir, name);
             var normalPath = Path.Combine(saveFolderPath, name);

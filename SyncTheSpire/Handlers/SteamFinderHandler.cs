@@ -1,4 +1,5 @@
 using Microsoft.Web.WebView2.Core;
+using SyncTheSpire.Adapters;
 using SyncTheSpire.Models;
 using SyncTheSpire.Services;
 
@@ -6,29 +7,43 @@ namespace SyncTheSpire.Handlers;
 
 public class SteamFinderHandler : HandlerBase
 {
-    private readonly SteamFinderService _steamFinder;
+    private readonly IGameAdapter _adapter;
 
     public SteamFinderHandler(
         CoreWebView2 webView,
         SynchronizationContext uiContext,
-        SteamFinderService steamFinder)
+        IGameAdapter adapter)
         : base(webView, uiContext)
     {
-        _steamFinder = steamFinder;
+        _adapter = adapter;
     }
 
     public void HandleFindGamePath()
     {
-        var result = _steamFinder.FindGamePath();
-        if (result.Path is not null)
-            Send(IpcResponse.Success("FIND_GAME_PATH", new { path = result.Path }));
+        if (!_adapter.SupportsAutoFind)
+        {
+            Send(IpcResponse.Error("FIND_GAME_PATH", "当前游戏类型不支持自动检测"));
+            return;
+        }
+
+        var (path, error) = _adapter.FindGamePath();
+        if (path is not null)
+            Send(IpcResponse.Success("FIND_GAME_PATH", new { path }));
         else
-            Send(IpcResponse.Error("FIND_GAME_PATH", result.Error ?? "未找到游戏安装路径"));
+            Send(IpcResponse.Error("FIND_GAME_PATH", error ?? "未找到游戏安装路径"));
     }
 
     public void HandleFindSavePath()
     {
-        var result = _steamFinder.FindSaveAccounts();
+        if (!_adapter.SupportsAutoFind)
+        {
+            Send(IpcResponse.Error("FIND_SAVE_PATH", "当前游戏类型不支持自动检测"));
+            return;
+        }
+
+        var result = _adapter.FindSavePath();
+
+        // multi-account result (Steam games)
         if (result.Accounts is not null)
         {
             Send(IpcResponse.Success("FIND_SAVE_PATH", new
@@ -42,6 +57,11 @@ public class SteamFinderHandler : HandlerBase
                     hasSave = a.HasSaveFolder
                 })
             }));
+        }
+        // single path result (simpler games)
+        else if (result.SinglePath is not null)
+        {
+            Send(IpcResponse.Success("FIND_SAVE_PATH", new { path = result.SinglePath }));
         }
         else
         {

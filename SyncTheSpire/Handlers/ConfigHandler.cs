@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
+using SyncTheSpire.Adapters;
 using SyncTheSpire.Helpers;
 using SyncTheSpire.Models;
 using SyncTheSpire.Services;
@@ -15,6 +16,7 @@ public class ConfigHandler : HandlerBase
     private readonly GitService _gitService;
     private readonly JunctionService _junctionService;
     private readonly JunctionHelper _junctionHelper;
+    private readonly IGameAdapter _adapter;
 
     public ConfigHandler(
         CoreWebView2 webView,
@@ -22,13 +24,15 @@ public class ConfigHandler : HandlerBase
         ConfigService configService,
         GitService gitService,
         JunctionService junctionService,
-        JunctionHelper junctionHelper)
+        JunctionHelper junctionHelper,
+        IGameAdapter adapter)
         : base(webView, uiContext)
     {
         _configService = configService;
         _gitService = gitService;
         _junctionService = junctionService;
         _junctionHelper = junctionHelper;
+        _adapter = adapter;
     }
 
     public void HandleGetVersion()
@@ -45,6 +49,16 @@ public class ConfigHandler : HandlerBase
         var cfg = _configService.LoadConfig();
         var repoExists = _gitService.IsRepoValid;
 
+        // adapter capabilities — frontend uses these to show/hide UI sections
+        var capabilities = new
+        {
+            supportsSaveRedirect = _adapter.SupportsSaveRedirect,
+            supportsSaveBackup = _adapter.SupportsSaveBackup,
+            supportsModdedSaves = _adapter.SupportsModdedSaves,
+            supportsModScanning = _adapter.SupportsModScanning,
+            supportsAutoFind = _adapter.SupportsAutoFind,
+        };
+
         object data;
         if (!cfg.IsConfigured || !repoExists)
         {
@@ -53,7 +67,8 @@ public class ConfigHandler : HandlerBase
                 isConfigured = false,
                 currentBranch = (string?)null,
                 isJunctionActive = false,
-                hasLocalChanges = false
+                hasLocalChanges = false,
+                capabilities
             };
         }
         else
@@ -67,7 +82,8 @@ public class ConfigHandler : HandlerBase
                 currentBranch = isInit ? (string?)null : branch,
                 isJunctionActive = isJunction,
                 hasLocalChanges = isInit ? false : _gitService.HasLocalChanges(),
-                needsBranchSelection = isInit
+                needsBranchSelection = isInit,
+                capabilities
             };
         }
 
@@ -140,34 +156,28 @@ public class ConfigHandler : HandlerBase
             return;
         }
 
-        // validate game install path: must contain SlayTheSpire2.exe
-        // if the user picked a subdirectory, walk up to find the correct root
+        // validate game install path via adapter (walks up ancestors if needed)
         if (!string.IsNullOrWhiteSpace(cfg.GameInstallPath))
         {
-            var resolved = FileSystemHelper.FindAncestorContaining(cfg.GameInstallPath, "SlayTheSpire2.exe", isFile: true);
-            if (resolved is null)
+            var (resolvedPath, error) = _adapter.ValidateGameInstallPath(cfg.GameInstallPath);
+            if (resolvedPath is null)
             {
-                Send(IpcResponse.Error("INIT_CONFIG",
-                    $"游戏安装路径无效：未找到 SlayTheSpire2.exe\n请确认路径是否正确：{cfg.GameInstallPath}"));
+                Send(IpcResponse.Error("INIT_CONFIG", error!));
                 return;
             }
-            cfg.GameInstallPath = resolved;
+            cfg.GameInstallPath = resolvedPath;
         }
 
-        // validate save folder: must contain profile1/ dir and profile.save file
-        // walk up if necessary so the user can pick e.g. saves/profile1 and we still find saves/
+        // validate save folder via adapter
         if (!string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
         {
-            var resolved = FileSystemHelper.FindAncestorContaining(cfg.SaveFolderPath,
-                dir => Directory.Exists(Path.Combine(dir, "profile1"))
-                    && File.Exists(Path.Combine(dir, "profile.save")));
-            if (resolved is null)
+            var (resolvedPath, error) = _adapter.ValidateSaveFolderPath(cfg.SaveFolderPath);
+            if (resolvedPath is null)
             {
-                Send(IpcResponse.Error("INIT_CONFIG",
-                    $"存档路径无效：未找到 profile1 文件夹或 profile.save 文件\n请确认路径是否正确：{cfg.SaveFolderPath}"));
+                Send(IpcResponse.Error("INIT_CONFIG", error!));
                 return;
             }
-            cfg.SaveFolderPath = resolved;
+            cfg.SaveFolderPath = resolvedPath;
         }
 
         // merge sensitive fields from existing config if user left them blank

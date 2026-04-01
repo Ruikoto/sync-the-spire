@@ -1,3 +1,4 @@
+using SyncTheSpire.Adapters;
 using SyncTheSpire.Models;
 
 namespace SyncTheSpire.Services;
@@ -10,6 +11,7 @@ public class WorkspaceContext : IDisposable
 {
     public string WorkspaceId { get; }
     public WorkspaceConfig Config { get; }
+    public IGameAdapter GameAdapter { get; }
 
     // workspace-scoped services
     public ConfigService ConfigService { get; }
@@ -30,6 +32,7 @@ public class WorkspaceContext : IDisposable
     {
         WorkspaceId = config.Id;
         Config = config;
+        GameAdapter = GameAdapterRegistry.Get(config.GameType);
 
         RepoPath = manager.GetRepoPath(config.Id);
         GitDirPath = manager.GetGitDirPath(config.Id);
@@ -39,7 +42,7 @@ public class WorkspaceContext : IDisposable
         ConfigService = new ConfigService(config, manager, RepoPath, GitDirPath);
         BackupService = new SaveBackupService(BackupDir);
         GitService = new GitService(ConfigService, gitResolver);
-        MergeService = new SaveMergeService(junctionService, BackupService);
+        MergeService = new SaveMergeService(junctionService, BackupService, GameAdapter);
     }
 
     public void Dispose()
