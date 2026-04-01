@@ -43,7 +43,7 @@ public class FilesystemHandler : HandlerBase
             "mod" => cfg.GameModPath,
             "save" => cfg.SaveFolderPath,
             "config" => ConfigService.AppDataDirPath,
-            "backup" => SaveBackupService.BackupDir,
+            "backup" => _backupService.BackupDir,
             _ => null
         };
 

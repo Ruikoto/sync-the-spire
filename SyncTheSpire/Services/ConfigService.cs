@@ -1,175 +1,84 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using SyncTheSpire.Models;
 
 namespace SyncTheSpire.Services;
 
+/// <summary>
+/// Workspace-scoped config wrapper.
+/// Presents a WorkspaceConfig through the familiar AppConfig interface so
+/// that existing handlers and GitService keep working without changes.
+/// Delegates persistence to WorkspaceManager.
+/// </summary>
 public class ConfigService
 {
+    // still used by a few places that need the global app data dir (WebView2 UDF, etc.)
     public static readonly string AppDataDirPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SyncTheSpire");
 
-    private static readonly string ConfigFilePath = Path.Combine(AppDataDirPath, "config.json");
-    private static readonly string DismissalsFilePath = Path.Combine(AppDataDirPath, "dismissals.json");
+    private readonly WorkspaceConfig _workspace;
+    private readonly WorkspaceManager _manager;
 
-    // prefix to distinguish DPAPI-encrypted values from plaintext in the JSON
-    private const string EncPrefix = "dpapi:";
-
-    private AppConfig? _cached;
-
-    public string RepoPath => Path.Combine(AppDataDirPath, "Repo");
-
-    // separated git dir -- keeps .git out of the working tree (and the junction)
-    public string GitDirPath => Path.Combine(AppDataDirPath, "GitDir");
+    public string RepoPath { get; }
+    public string GitDirPath { get; }
 
     public bool IsRepoInitialized => Directory.Exists(GitDirPath) &&
                                      Directory.Exists(Path.Combine(GitDirPath, "objects"));
 
-    public ConfigService()
+    public ConfigService(WorkspaceConfig workspace, WorkspaceManager manager, string repoPath, string gitDirPath)
     {
-        // if Store version previously wrote data to the MSIX-virtualized path, move it to the real one
-        if (DistributionHelper.IsMsixPackaged && !Directory.Exists(AppDataDirPath))
-            TryMigrateFromVirtualizedPath();
-
-        Directory.CreateDirectory(AppDataDirPath);
+        _workspace = workspace;
+        _manager = manager;
+        RepoPath = repoPath;
+        GitDirPath = gitDirPath;
     }
 
+    /// <summary>
+    /// Returns an AppConfig view of the current workspace config.
+    /// This bridges old code that expects AppConfig.
+    /// </summary>
     public AppConfig LoadConfig()
     {
-        if (_cached is not null) return _cached;
-
-        if (!File.Exists(ConfigFilePath))
+        return new AppConfig
         {
-            _cached = new AppConfig();
-            return _cached;
-        }
-
-        try
-        {
-            var json = File.ReadAllText(ConfigFilePath);
-            _cached = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
-        }
-        catch (Exception ex)
-        {
-            // corrupted config file — fall back to defaults so the app doesn't crash
-            LogService.Warn($"Config file corrupted, using defaults: {ex.Message}");
-            _cached = new AppConfig();
-        }
-
-        // decrypt sensitive fields (backward-compatible with plaintext from older versions)
-        _cached.Token = DpapiDecrypt(_cached.Token);
-        _cached.SshPassphrase = DpapiDecrypt(_cached.SshPassphrase);
-
-        return _cached;
+            RepoUrl = _workspace.RepoUrl,
+            Nickname = _workspace.Nickname,
+            Username = _workspace.Username,
+            Token = _workspace.Token,
+            AuthType = _workspace.AuthType,
+            SshKeyPath = _workspace.SshKeyPath,
+            SshPassphrase = _workspace.SshPassphrase,
+            GameInstallPath = _workspace.GameInstallPath,
+            GameModPathLegacy = _workspace.GameModPathLegacy,
+            SaveFolderPath = _workspace.SaveFolderPath,
+        };
     }
 
+    /// <summary>
+    /// Saves changes from an AppConfig back into the workspace config and persists to disk.
+    /// </summary>
     public void SaveConfig(AppConfig config)
     {
-        _cached = config;
+        _workspace.RepoUrl = config.RepoUrl;
+        _workspace.Nickname = config.Nickname;
+        _workspace.Username = config.Username;
+        _workspace.Token = config.Token;
+        _workspace.AuthType = config.AuthType;
+        _workspace.SshKeyPath = config.SshKeyPath;
+        _workspace.SshPassphrase = config.SshPassphrase;
+        _workspace.GameInstallPath = config.GameInstallPath;
+        _workspace.GameModPathLegacy = config.GameModPathLegacy;
+        _workspace.SaveFolderPath = config.SaveFolderPath;
 
-        // write a copy with encrypted sensitive fields
-        var toSerialize = new AppConfig
-        {
-            RepoUrl = config.RepoUrl,
-            Nickname = config.Nickname,
-            Username = config.Username,
-            Token = DpapiEncrypt(config.Token),
-            AuthType = config.AuthType,
-            SshKeyPath = config.SshKeyPath,
-            SshPassphrase = DpapiEncrypt(config.SshPassphrase),
-            GameInstallPath = config.GameInstallPath,
-            GameModPathLegacy = config.GameModPathLegacy,
-            SaveFolderPath = config.SaveFolderPath,
-        };
-
-        var json = JsonSerializer.Serialize(toSerialize, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(ConfigFilePath, json);
-        LogService.Info("Config saved");
+        _manager.SaveConfig();
+        LogService.Info("Workspace config saved");
     }
 
     /// <summary>
-    /// blow away cached config so next LoadConfig re-reads from disk
+    /// no-op in workspace mode — config is always in-memory from WorkspaceManager
     /// </summary>
-    public void InvalidateCache() => _cached = null;
+    public void InvalidateCache() { }
 
-    // ── dismissed announcements ────────────────────────────────────────
+    // ── dismissed announcements (delegate to WorkspaceManager, global) ───
 
-    public List<string> GetDismissedAnnouncements()
-    {
-        try
-        {
-            if (!File.Exists(DismissalsFilePath)) return [];
-            var json = File.ReadAllText(DismissalsFilePath);
-            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
-        }
-        catch { return []; }
-    }
-
-    public void DismissAnnouncement(string id)
-    {
-        var list = GetDismissedAnnouncements();
-        if (list.Contains(id)) return;
-        list.Add(id);
-        File.WriteAllText(DismissalsFilePath, JsonSerializer.Serialize(list));
-    }
-
-    // ── MSIX virtualized-path migration ─────────────────────────────
-
-    /// <summary>
-    /// older Store builds had FS write virtualization on, so data ended up in
-    /// Packages/{family}/LocalCache/Local/SyncTheSpire instead of the real %LocalAppData%.
-    /// </summary>
-    private static void TryMigrateFromVirtualizedPath()
-    {
-        try
-        {
-            var localCache = Windows.Storage.ApplicationData.Current.LocalCacheFolder.Path;
-            var virtualizedPath = Path.Combine(localCache, "Local", "SyncTheSpire");
-
-            if (!Directory.Exists(virtualizedPath)) return;
-
-            Directory.Move(virtualizedPath, AppDataDirPath);
-            LogService.Info($"Migrated data from virtualized MSIX path: {virtualizedPath}");
-        }
-        catch (Exception ex)
-        {
-            LogService.Warn($"Virtualized path migration failed: {ex.Message}");
-        }
-    }
-
-    // ── DPAPI helpers ────────────────────────────────────────────────
-
-    private static string DpapiEncrypt(string plaintext)
-    {
-        if (string.IsNullOrEmpty(plaintext)) return plaintext;
-        var bytes = Encoding.UTF8.GetBytes(plaintext);
-        var encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
-        return EncPrefix + Convert.ToBase64String(encrypted);
-    }
-
-    private static string DpapiDecrypt(string stored)
-    {
-        if (string.IsNullOrEmpty(stored)) return stored;
-
-        // already encrypted with our prefix
-        if (stored.StartsWith(EncPrefix))
-        {
-            try
-            {
-                var encrypted = Convert.FromBase64String(stored[EncPrefix.Length..]);
-                var bytes = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(bytes);
-            }
-            catch (Exception ex)
-            {
-                // corrupted — treat as empty
-                LogService.Warn($"DPAPI decrypt failed: {ex.Message}");
-                return string.Empty;
-            }
-        }
-
-        // no prefix — plaintext from an older config, return as-is (will be encrypted on next save)
-        return stored;
-    }
+    public List<string> GetDismissedAnnouncements() => _manager.GetDismissedAnnouncements();
+    public void DismissAnnouncement(string id) => _manager.DismissAnnouncement(id);
 }

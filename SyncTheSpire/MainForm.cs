@@ -80,7 +80,7 @@ public class MainForm : Form
         try
         {
             // use a dedicated user-data folder so we don't pollute the default profile
-            var udFolder = Path.Combine(ConfigService.AppDataDirPath, "WebView2Data");
+            var udFolder = Path.Combine(WorkspaceManager.AppDataDir, "WebView2Data");
 
             var env = await CoreWebView2Environment.CreateAsync(null, udFolder);
             await _webView.EnsureCoreWebView2Async(env);
@@ -102,17 +102,24 @@ public class MainForm : Form
             "app.local", wwwroot, CoreWebView2HostResourceAccessKind.Allow);
 
         // wire up services & router (pass Form reference for window controls)
-        var configService = new ConfigService();
+        var workspaceManager = new WorkspaceManager();
         var junctionService = new JunctionService();
         var gitResolver = new GitResolver();
-        var gitService = new GitService(configService, gitResolver);
-        var backupService = new SaveBackupService();
-        var mergeService = new SaveMergeService(junctionService, backupService);
         var storeUpdateService = new StoreUpdateService();
         storeUpdateService.Initialize(this.Handle);
+
+        // resolve active workspace — create context if one exists
+        WorkspaceContext? wsContext = null;
+        var activeId = workspaceManager.Config.ActiveWorkspace;
+        if (activeId != null && workspaceManager.GetWorkspace(activeId) != null)
+        {
+            wsContext = new WorkspaceContext(
+                workspaceManager.GetWorkspace(activeId)!, workspaceManager, gitResolver, junctionService);
+        }
+
         _router = new MessageRouter(
-            _webView.CoreWebView2, configService, gitService, gitResolver,
-            junctionService, backupService, mergeService, storeUpdateService, this);
+            _webView.CoreWebView2, workspaceManager, wsContext,
+            gitResolver, junctionService, storeUpdateService, this);
 
         _webView.CoreWebView2.WebMessageReceived += (_, e) =>
         {

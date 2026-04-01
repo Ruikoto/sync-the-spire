@@ -136,7 +136,7 @@ public class SaveHandler : HandlerBase
             return;
         }
 
-        var backupPath = Path.Combine(SaveBackupService.BackupDir, backupName);
+        var backupPath = Path.Combine(_backupService.BackupDir, backupName);
         if (!Directory.Exists(backupPath))
         {
             Send(IpcResponse.Error("RESTORE_BACKUP", "备份不存在或已被删除"));

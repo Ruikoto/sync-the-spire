@@ -10,36 +10,43 @@ namespace SyncTheSpire.Services;
 public class MessageRouter
 {
     private readonly CoreWebView2 _webView;
-    private readonly ConfigService _configService;
+    private readonly WorkspaceManager _workspaceManager;
     private readonly MainForm _form;
     private readonly SynchronizationContext _uiContext;
+    private readonly GitResolver _gitResolver;
+    private readonly JunctionService _junctionService;
+    private readonly StoreUpdateService _storeUpdateService;
     // only one IPC operation at a time to prevent concurrent access to git/config/filesystem
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    // domain handlers
-    private readonly ConfigHandler _configHandler;
-    private readonly GitBranchHandler _gitBranchHandler;
-    private readonly SaveHandler _saveHandler;
-    private readonly RedirectHandler _redirectHandler;
-    private readonly AnnouncementHandler _announcementHandler;
-    private readonly StoreUpdateHandler _storeUpdateHandler;
-    private readonly SteamFinderHandler _steamFinderHandler;
-    private readonly FilesystemHandler _filesystemHandler;
+    // domain handlers — rebuilt when workspace changes
+    private ConfigHandler _configHandler = null!;
+    private GitBranchHandler _gitBranchHandler = null!;
+    private SaveHandler _saveHandler = null!;
+    private RedirectHandler _redirectHandler = null!;
+    private AnnouncementHandler _announcementHandler = null!;
+    private StoreUpdateHandler _storeUpdateHandler = null!;
+    private SteamFinderHandler _steamFinderHandler = null!;
+    private FilesystemHandler _filesystemHandler = null!;
+
+    // current workspace context (null if no workspace active yet)
+    private WorkspaceContext? _currentContext;
 
     public MessageRouter(
         CoreWebView2 webView,
-        ConfigService configService,
-        GitService gitService,
+        WorkspaceManager workspaceManager,
+        WorkspaceContext? initialContext,
         GitResolver gitResolver,
         JunctionService junctionService,
-        SaveBackupService backupService,
-        SaveMergeService mergeService,
         StoreUpdateService storeUpdateService,
         MainForm form)
     {
         _webView = webView;
-        _configService = configService;
+        _workspaceManager = workspaceManager;
         _form = form;
+        _gitResolver = gitResolver;
+        _junctionService = junctionService;
+        _storeUpdateService = storeUpdateService;
         // capture the UI SynchronizationContext so background threads can post back
         _uiContext = SynchronizationContext.Current
                      ?? throw new InvalidOperationException("MessageRouter must be created on the UI thread");
@@ -48,19 +55,50 @@ public class MessageRouter
         gitResolver.OnProgress = p =>
             Send(IpcResponse.Progress("GIT_DOWNLOAD", p.Message, p.Percent));
 
-        // shared helper for junction setup (used by multiple handlers)
-        var junctionHelper = new JunctionHelper(junctionService, backupService, Send);
-        var steamFinder = new SteamFinderService();
+        // init handlers with current workspace context (may be null for fresh install)
+        _currentContext = initialContext;
+        BuildHandlers();
+    }
 
-        // create domain handlers
-        _configHandler = new ConfigHandler(webView, _uiContext, configService, gitService, junctionService, junctionHelper);
-        _gitBranchHandler = new GitBranchHandler(webView, _uiContext, configService, gitService, junctionService, junctionHelper);
-        _saveHandler = new SaveHandler(webView, _uiContext, configService, backupService, mergeService, junctionService);
-        _redirectHandler = new RedirectHandler(webView, _uiContext, configService, junctionService);
-        _announcementHandler = new AnnouncementHandler(webView, _uiContext, configService);
-        _storeUpdateHandler = new StoreUpdateHandler(webView, _uiContext, storeUpdateService);
-        _steamFinderHandler = new SteamFinderHandler(webView, _uiContext, steamFinder);
-        _filesystemHandler = new FilesystemHandler(webView, _uiContext, configService, junctionService, backupService, junctionHelper, form);
+    /// <summary>
+    /// Rebuild all domain handlers for the current workspace context.
+    /// Called on init and whenever the active workspace changes.
+    /// </summary>
+    private void BuildHandlers()
+    {
+        var ctx = _currentContext;
+
+        // these two don't need workspace context
+        _storeUpdateHandler = new StoreUpdateHandler(_webView, _uiContext, _storeUpdateService);
+        _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, new SteamFinderService());
+
+        if (ctx != null)
+        {
+            var junctionHelper = new JunctionHelper(_junctionService, ctx.BackupService, Send);
+
+            _configHandler = new ConfigHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper);
+            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper);
+            _saveHandler = new SaveHandler(_webView, _uiContext, ctx.ConfigService, ctx.BackupService, ctx.MergeService, _junctionService);
+            _redirectHandler = new RedirectHandler(_webView, _uiContext, ctx.ConfigService, _junctionService);
+            _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
+            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, _form);
+        }
+        else
+        {
+            // no workspace active — create stub handlers with a temporary config service
+            // so GET_STATUS can report "not configured" and GET_VERSION still works
+            var stubWs = new WorkspaceConfig();
+            var stubCs = new ConfigService(stubWs, _workspaceManager, "", "");
+            var stubBackup = new SaveBackupService(Path.Combine(WorkspaceManager.AppDataDir, "Backups"));
+            var stubJH = new JunctionHelper(_junctionService, stubBackup, Send);
+
+            _configHandler = new ConfigHandler(_webView, _uiContext, stubCs, null!, _junctionService, stubJH);
+            _gitBranchHandler = null!;
+            _saveHandler = null!;
+            _redirectHandler = new RedirectHandler(_webView, _uiContext, stubCs, _junctionService);
+            _announcementHandler = new AnnouncementHandler(_webView, _uiContext, stubCs);
+            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, stubCs, _junctionService, stubBackup, stubJH, _form);
+        }
     }
 
     public void HandleMessage(string rawJson)
@@ -136,7 +174,7 @@ public class MessageRouter
                 return;
             // mod preview reads immutable git objects — safe outside the gate
             case "GET_BRANCH_MODS":
-                _gitBranchHandler.HandleGetBranchMods(req.Payload);
+                _gitBranchHandler?.HandleGetBranchMods(req.Payload);
                 return;
             // steam auto-find — read-only filesystem/registry, no need for the gate
             case "FIND_GAME_PATH":
@@ -169,7 +207,7 @@ public class MessageRouter
                     break;
 
                 case "INIT_CONFIG":
-                    _configHandler.HandleInitConfig(req.Payload);
+                    HandleInitConfigWithWorkspace(req.Payload);
                     break;
 
                 case "GET_BRANCHES":
@@ -272,7 +310,7 @@ public class MessageRouter
             ex.Message.Contains("401") || ex.Message.Contains("403"))
         {
             LogService.Error($"[{req.Action}] Auth failure", ex);
-            var authType = _configService.LoadConfig().AuthType;
+            var authType = _currentContext?.ConfigService.LoadConfig().AuthType ?? "anonymous";
             var msg = authType switch
             {
                 "anonymous" =>
@@ -298,6 +336,25 @@ public class MessageRouter
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>
+    /// Intercepts INIT_CONFIG: if no workspace exists yet, create one first,
+    /// then rebuild handlers with the new workspace context before delegating.
+    /// </summary>
+    private void HandleInitConfigWithWorkspace(JsonElement? payload)
+    {
+        if (_currentContext == null)
+        {
+            // first-time setup — create a default workspace
+            var ws = _workspaceManager.CreateWorkspace("Slay the Spire 2", "sts2");
+            _workspaceManager.SetActiveWorkspace(ws.Id);
+
+            _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+            BuildHandlers();
+        }
+
+        _configHandler.HandleInitConfig(payload);
     }
 
     private void Send(IpcResponse response)
