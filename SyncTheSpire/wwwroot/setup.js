@@ -104,7 +104,101 @@ function pickSteamAccount(payload) {
     });
 }
 
-// ── first-launch auto-find prompt ────────────────────────────────────────────
+// ── adapt setup form based on game type capabilities ─────────────────────────
+
+function adaptSetupFormForGameType(capabilities) {
+    if (!capabilities) return;
+
+    const supportsAutoFind = capabilities.supportsAutoFind;
+    const supportsSaveBackup = capabilities.supportsSaveBackup;
+
+    // auto-find buttons: only show for games that support steam discovery
+    const btnFindGame = $('#btn-find-game');
+    const btnFindSave = $('#btn-find-save');
+    if (btnFindGame) btnFindGame.classList.toggle('hidden', !supportsAutoFind);
+    if (btnFindSave) btnFindSave.classList.toggle('hidden', !supportsAutoFind);
+
+    // save path group: hide for games that don't support save backup
+    const savePath = $('#save-path-group');
+    if (savePath) savePath.classList.toggle('hidden', !supportsSaveBackup);
+
+    // label adjustments for generic game type
+    const labelGamePath = $('#label-game-path');
+    const tipGamePath = document.querySelector('#game-path-group .help-tip');
+    if (labelGamePath) {
+        labelGamePath.textContent = supportsAutoFind ? '游戏安装路径' : '同步文件夹路径';
+    }
+    if (tipGamePath) {
+        tipGamePath.dataset.tip = supportsAutoFind
+            ? '在 Steam 中右键游戏 → 管理 → 浏览本地文件，打开的路径即为游戏安装路径。自动查找仅支持 Steam 平台。'
+            : '你要同步的文件夹';
+    }
+}
+
+// ── setup page title (editable workspace name) ─────────────────────────────
+
+function updateSetupPageTitle() {
+    const wsInfo = AppState.workspaces[AppState.activeWorkspaceId];
+    const nameEl = $('#setup-ws-name');
+    const icon = $('#setup-game-icon');
+    const display = $('#setup-ws-name-display');
+    const input = $('#setup-ws-name-input');
+
+    if (wsInfo) {
+        nameEl.textContent = wsInfo.name;
+        icon.innerHTML = gameIcon(wsInfo.gameType, 20);
+        icon.className = `flex items-center game-badge-${wsInfo.gameType}`;
+        icon.classList.remove('hidden');
+        display.style.cursor = 'pointer';
+    } else {
+        nameEl.textContent = 'Sync the Spire';
+        icon.classList.add('hidden');
+        display.style.cursor = 'default';
+    }
+    // always ensure display mode
+    display.classList.remove('hidden');
+    input.classList.add('hidden');
+}
+
+// click to edit workspace name
+$('#setup-ws-name-display')?.addEventListener('click', () => {
+    const wsInfo = AppState.workspaces[AppState.activeWorkspaceId];
+    if (!wsInfo) return;
+    const display = $('#setup-ws-name-display');
+    const input = $('#setup-ws-name-input');
+    input.value = wsInfo.name;
+    display.classList.add('hidden');
+    input.classList.remove('hidden');
+    input.focus();
+    input.select();
+});
+
+// blur always cancels — only Enter commits
+$('#setup-ws-name-input')?.addEventListener('blur', () => {
+    updateSetupPageTitle();
+});
+
+$('#setup-ws-name-input')?.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const wsInfo = AppState.workspaces[AppState.activeWorkspaceId];
+        if (!wsInfo) { updateSetupPageTitle(); return; }
+        const newName = $('#setup-ws-name-input').value.trim();
+        if (newName && newName !== wsInfo.name) {
+            const res = await ipcCall('RENAME_WORKSPACE', { id: wsInfo.id, name: newName });
+            if (res.status === 'success') {
+                wsInfo.name = newName;
+                renderTabBar();
+                renderWorkspaceGrid();
+            }
+        }
+        updateSetupPageTitle();
+    }
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        updateSetupPageTitle();
+    }
+});
 
 async function promptAutoFind() {
     await new Promise(r => setTimeout(r, 300));

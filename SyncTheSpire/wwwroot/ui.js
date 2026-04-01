@@ -16,11 +16,22 @@ function escAttr(str) {
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// per-game-type SVG icons (inline, sized via style for Tailwind safety)
+const GAME_ICONS = {
+    sts2: (size = 14) => `<svg style="width:${size}px;height:${size}px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L8 10h8L12 2z"/><path d="M9 10l-3 8h12l-3-8"/><path d="M6 18l-2 4h16l-2-4"/></svg>`,
+    generic: (size = 14) => `<svg style="width:${size}px;height:${size}px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/><path d="M12 11v4m-2-2h4"/></svg>`,
+};
+function gameIcon(typeKey, size) { return (GAME_ICONS[typeKey] || GAME_ICONS.generic)(size); }
+
 function showPage(name) {
-    $('#page-setup').classList.add('hidden');
-    $('#page-setup').classList.remove('flex');
-    $('#page-main').classList.add('hidden');
-    $('#page-main').classList.remove('flex');
+    // hide all pages
+    for (const id of ['page-home', 'page-setup', 'page-main']) {
+        const el = $(`#${id}`);
+        if (el) {
+            el.classList.add('hidden');
+            el.classList.remove('flex');
+        }
+    }
 
     const el = $(`#page-${name}`);
     if (!el) return;
@@ -30,6 +41,21 @@ function showPage(name) {
     // pick a random quote when entering the main page
     if (name === 'main') {
         setRandomQuote();
+    }
+
+    // update tab bar highlight
+    updateTabBarActive(name === 'home' ? 'home' : AppState.activeWorkspaceId);
+}
+
+// highlight the correct tab in the tab bar
+function updateTabBarActive(tabId) {
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    if (tabId === 'home') {
+        const homeTab = $('#tab-home');
+        if (homeTab) homeTab.classList.add('active');
+    } else if (tabId) {
+        const wsTab = document.querySelector(`.tab-item[data-tab="${tabId}"]`);
+        if (wsTab) wsTab.classList.add('active');
     }
 }
 

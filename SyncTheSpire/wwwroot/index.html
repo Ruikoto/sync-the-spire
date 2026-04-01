@@ -9,19 +9,25 @@
 </head>
 <body class="bg-spire-bg text-spire-text h-screen overflow-hidden flex flex-col select-none">
 
-    <!-- custom title bar -->
-    <div id="titlebar" class="flex items-center justify-between bg-spire-card border-b border-spire-border h-9 shrink-0">
-        <div id="titlebar-drag" class="flex-1 h-full flex items-center pl-3 cursor-default">
-            <span class="text-xs font-medium text-spire-muted">Sync the Spire</span>
-        </div>
-        <div class="flex h-full">
-            <button id="btn-minimize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最小化">
+    <!-- custom title bar / tab bar -->
+    <div id="titlebar" class="flex items-center bg-spire-card border-b border-spire-border h-9 shrink-0">
+        <!-- home tab (always visible) -->
+        <button id="tab-home" class="tab-item active no-drag h-full flex items-center gap-1.5 px-3 text-xs text-spire-muted hover:text-spire-text transition-colors shrink-0" data-tab="home">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>
+        </button>
+        <!-- dynamic workspace tabs -->
+        <div id="tab-bar" class="tab-bar-scroll flex items-center h-full overflow-x-auto min-w-0 shrink-0"></div>
+        <!-- drag area (fills remaining space, min width for usability) -->
+        <div id="titlebar-drag" class="flex-1 h-full min-w-[40px] cursor-default"></div>
+        <!-- window controls -->
+        <div class="flex h-full shrink-0">
+            <button id="btn-minimize" class="titlebar-btn no-drag w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最小化">
                 <svg width="10" height="1" viewBox="0 0 10 1"><rect fill="currentColor" width="10" height="1"/></svg>
             </button>
-            <button id="btn-maximize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最大化">
+            <button id="btn-maximize" class="titlebar-btn no-drag w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最大化">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
             </button>
-            <button id="btn-close" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-spire-danger hover:text-white transition-colors" aria-label="关闭">
+            <button id="btn-close" class="titlebar-btn no-drag w-11 h-full flex items-center justify-center text-spire-muted hover:bg-spire-danger hover:text-white transition-colors" aria-label="关闭">
                 <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
             </button>
         </div>
@@ -252,11 +258,77 @@
         </div>
     </div>
 
+    <!-- ============ HOME PAGE ============ -->
+    <div id="page-home" class="hidden flex-col flex-1 overflow-y-auto p-4 gap-4">
+        <!-- app title + about -->
+        <div class="flex items-center justify-between">
+            <h1 class="text-xl font-bold">Sync the Spire</h1>
+            <button id="btn-home-about" class="w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="关于">
+                <svg class="w-4 h-4" style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
+            </button>
+        </div>
+        <!-- workspace section -->
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-medium text-spire-muted">工作区</h2>
+            <button id="btn-create-workspace"
+                class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                新建工作区
+            </button>
+        </div>
+        <input id="workspace-search" type="text" placeholder="搜索工作区..."
+            class="w-full bg-spire-card border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+        <div id="workspace-grid" class="flex flex-col gap-3"></div>
+        <div id="workspace-empty" class="hidden flex flex-col items-center justify-center py-16 text-spire-muted">
+            <svg class="w-12 h-12 mb-3 opacity-30" style="width:48px;height:48px;" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/></svg>
+            <p class="text-sm mb-1">还没有工作区</p>
+            <p class="text-xs">点击上方按钮创建你的第一个工作区</p>
+        </div>
+    </div>
+
+    <!-- create workspace modal -->
+    <div id="create-workspace-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
+            <h3 class="text-sm font-medium mb-4">新建工作区</h3>
+            <div class="flex flex-col gap-4">
+                <div>
+                    <label for="new-ws-name" class="block text-sm mb-1">工作区名称</label>
+                    <input id="new-ws-name" type="text" placeholder="例如：与朋友联机"
+                        class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                </div>
+                <div>
+                    <label class="block text-sm mb-2">游戏类型</label>
+                    <div id="game-type-selector" class="flex flex-col gap-2">
+                        <!-- dynamically populated by home.js -->
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+                <button id="create-ws-cancel"
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    取消
+                </button>
+                <button id="create-ws-confirm"
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">
+                    创建
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ============ SETUP PAGE ============ -->
     <div id="page-setup" class="hidden flex-col flex-1 overflow-y-auto">
         <div class="flex justify-center p-6">
             <div class="w-full max-w-md bg-spire-card rounded-xl border border-spire-border p-6">
-                <h1 class="text-xl font-bold mb-0.5">Sync the Spire</h1>
+                <div class="flex items-center gap-2 mb-2">
+                    <span id="setup-game-icon" class="flex items-center"></span>
+                    <div id="setup-ws-name-display" class="group flex items-center gap-1.5 cursor-pointer rounded-md px-1 -ml-1 hover:bg-white/5 transition-colors" title="点击重命名工作区">
+                        <h1 id="setup-ws-name" class="text-xl font-bold">Sync the Spire</h1>
+                        <svg class="w-3.5 h-3.5 text-spire-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" style="width:14px;height:14px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                    </div>
+                    <input id="setup-ws-name-input" type="text"
+                        class="hidden text-xl font-bold bg-spire-bg border border-spire-accent rounded-lg px-2 py-0.5 focus:outline-none flex-1 min-w-0" />
+                </div>
                 <div class="flex items-center justify-between mb-4">
                     <p id="setup-subtitle" class="text-spire-muted text-sm">首次配置 — 填写以下信息开始同步</p>
                     <a id="setup-guide-link" href="#" onclick="showWelcomeModal();return false;"
@@ -328,9 +400,10 @@
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                     </div>
+                    <div id="game-path-group">
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
-                            <label for="cfg-path" class="block text-sm">游戏安装路径</label>
+                            <label for="cfg-path" class="block text-sm" id="label-game-path">游戏安装路径</label>
                             <span class="help-tip" data-tip="在 Steam 中右键游戏 → 管理 → 浏览本地文件，打开的路径即为游戏安装路径。自动查找仅支持 Steam 平台。">?</span>
                         </div>
                         <div class="flex gap-2">
@@ -346,6 +419,8 @@
                             </button>
                         </div>
                     </div>
+                    </div>
+                    <div id="save-path-group">
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
                             <label for="cfg-save" class="block text-sm">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
@@ -364,9 +439,10 @@
                             </button>
                         </div>
                     </div>
+                    </div>
                     <div class="mt-2 flex gap-2">
                         <button id="btn-setup-back" type="button"
-                            class="hidden text-sm text-spire-muted hover:text-spire-text border border-spire-border font-medium rounded-lg py-2 px-4 transition-colors">
+                            class="text-sm text-spire-muted hover:text-spire-text border border-spire-border font-medium rounded-lg py-2 px-4 transition-colors">
                             返回
                         </button>
                         <button type="submit"
@@ -384,9 +460,12 @@
 
         <!-- header bar -->
         <div class="flex items-center justify-between">
-            <div class="flex items-end gap-3">
-                <h1 class="text-lg font-bold">Sync the Spire</h1>
-                <span id="header-quote" class="text-xs text-spire-muted"></span>
+            <div class="flex items-center gap-2.5">
+                <span id="header-game-icon" class="flex items-center"></span>
+                <div class="flex items-baseline gap-2">
+                    <h1 id="header-ws-name" class="text-lg font-bold leading-tight"></h1>
+                    <span id="header-quote" class="text-xs text-spire-muted"></span>
+                </div>
             </div>
             <div class="flex items-center gap-1.5">
                 <button id="btn-about" class="relative w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="关于">
@@ -461,7 +540,7 @@
         </div>
 
         <!-- mod toggle -->
-        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
+        <div id="card-mod-toggle" class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
                 <div>
                     <div class="flex items-center gap-2">

@@ -33,6 +33,13 @@ let branchSortAsc = false; // newest first by default
 let branchPreviewName = '';
 const branchModsCache = {};
 
+// called on workspace switch to prevent stale data from the previous workspace
+function clearBranchCache() {
+    branchData = [];
+    branchCurrentName = '';
+    for (const k in branchModsCache) delete branchModsCache[k];
+}
+
 function showBranchListView() {
     $('#branch-list-view').classList.remove('hidden');
     $('#branch-preview-view').classList.add('hidden');
@@ -384,7 +391,7 @@ $('#backup-list-modal').addEventListener('click', e => {
 const REPO_URL = 'https://github.com/Ruikoto/sync-the-spire';
 const AUTHOR_URL = 'https://github.com/Ruikoto';
 
-const QUOTES = [
+const QUOTES_STS2 = [
     '此事已成',
     '咔咔！',
     '咕嗷。。。',
@@ -461,11 +468,21 @@ const QUOTES = [
     '启程去屠戮这座高塔。',
 ];
 
+// per-game quote lists — add new games here
+const QUOTES_BY_GAME = {
+    sts2: QUOTES_STS2,
+    // generic and other game types: no quotes
+};
+
 function setRandomQuote(animate) {
     const el = $('#header-quote');
+    const wsInfo = AppState.workspaces[AppState.activeWorkspaceId];
+    const gameType = wsInfo?.gameType || '';
+    const quotes = QUOTES_BY_GAME[gameType] || [];
+    if (quotes.length === 0) { el.textContent = ''; return; }
     const pick = () => {
         let q;
-        do { q = QUOTES[Math.floor(Math.random() * QUOTES.length)]; } while (q === el.textContent && QUOTES.length > 1);
+        do { q = quotes[Math.floor(Math.random() * quotes.length)]; } while (q === el.textContent && quotes.length > 1);
         return q;
     };
     if (!animate) { el.textContent = pick(); return; }

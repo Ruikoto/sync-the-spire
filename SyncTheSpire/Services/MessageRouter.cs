@@ -20,6 +20,9 @@ public class MessageRouter
     // only one IPC operation at a time to prevent concurrent access to git/config/filesystem
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    // workspace handler — lives outside the per-workspace lifecycle
+    private WorkspaceHandler _workspaceHandler = null!;
+
     // domain handlers — rebuilt when workspace changes
     private ConfigHandler _configHandler = null!;
     private GitBranchHandler _gitBranchHandler = null!;
@@ -69,7 +72,8 @@ public class MessageRouter
     {
         var ctx = _currentContext;
 
-        // these two don't need workspace context
+        // these don't need workspace context
+        _workspaceHandler = new WorkspaceHandler(_webView, _uiContext, _workspaceManager);
         _storeUpdateHandler = new StoreUpdateHandler(_webView, _uiContext, _storeUpdateService);
 
         if (ctx != null)
@@ -187,6 +191,13 @@ public class MessageRouter
             case "FIND_SAVE_PATH":
                 _steamFinderHandler.HandleFindSavePath();
                 return;
+            // workspace queries — read-only, no gate needed
+            case "GET_WORKSPACES":
+                _workspaceHandler.HandleGetWorkspaces();
+                return;
+            case "GET_GAME_TYPES":
+                _workspaceHandler.HandleGetGameTypes();
+                return;
         }
 
         _gate.Wait();
@@ -215,6 +226,11 @@ public class MessageRouter
                     break;
 
                 case "GET_BRANCHES":
+                    if (_gitBranchHandler is null || _currentContext is null)
+                    {
+                        Send(IpcResponse.Error("GET_BRANCHES", "当前没有活跃的工作区"));
+                        break;
+                    }
                     _gitBranchHandler.HandleGetBranches();
                     break;
 
@@ -292,6 +308,31 @@ public class MessageRouter
                     _announcementHandler.HandleDismissAnnouncement(req.Payload);
                     break;
 
+                // ── workspace management ─────────────────────────────
+                case "CREATE_WORKSPACE":
+                    HandleCreateWorkspaceAndSwitch(req.Payload);
+                    break;
+
+                case "DELETE_WORKSPACE":
+                    HandleDeleteWorkspaceAndSwitch(req.Payload);
+                    break;
+
+                case "SWITCH_WORKSPACE":
+                    HandleSwitchWorkspace(req.Payload);
+                    break;
+
+                case "OPEN_WORKSPACE_TAB":
+                    _workspaceHandler.HandleOpenTab(req.Payload);
+                    break;
+
+                case "CLOSE_WORKSPACE_TAB":
+                    HandleCloseTabAndMaybeSwitch(req.Payload);
+                    break;
+
+                case "RENAME_WORKSPACE":
+                    _workspaceHandler.HandleRenameWorkspace(req.Payload);
+                    break;
+
                 default:
                     Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
                     break;
@@ -359,6 +400,131 @@ public class MessageRouter
         }
 
         _configHandler.HandleInitConfig(payload);
+    }
+
+    // CREATE_WORKSPACE — create, switch context, notify
+    private void HandleCreateWorkspaceAndSwitch(JsonElement? payload)
+    {
+        var name = payload?.GetProperty("name").GetString() ?? "";
+        var gameType = payload?.GetProperty("gameType").GetString() ?? "sts2";
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Send(IpcResponse.Error("CREATE_WORKSPACE", "工作区名称不能为空"));
+            return;
+        }
+
+        var ws = _workspaceManager.CreateWorkspace(name, gameType);
+        _workspaceManager.SetActiveWorkspace(ws.Id);
+
+        // switch context to the new workspace
+        _currentContext?.Dispose();
+        _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+        BuildHandlers();
+
+        Send(IpcResponse.Success("CREATE_WORKSPACE", new
+        {
+            id = ws.Id,
+            name = ws.Name,
+            gameType = ws.GameType,
+            gameDisplayName = GameAdapterRegistry.Get(ws.GameType).DisplayName,
+            openTabs = _workspaceManager.Config.OpenTabs,
+            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
+        }));
+    }
+
+    // SWITCH_WORKSPACE — dispose old context, create new one, rebuild handlers
+    private void HandleSwitchWorkspace(JsonElement? payload)
+    {
+        var id = payload?.GetProperty("id").GetString() ?? "";
+        var ws = _workspaceManager.GetWorkspace(id);
+        if (ws == null)
+        {
+            Send(IpcResponse.Error("SWITCH_WORKSPACE", "工作区不存在"));
+            return;
+        }
+
+        _currentContext?.Dispose();
+        _workspaceManager.SetActiveWorkspace(id);
+        _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+        BuildHandlers();
+
+        Send(IpcResponse.Success("SWITCH_WORKSPACE", new
+        {
+            id = ws.Id,
+            name = ws.Name,
+            gameType = ws.GameType,
+            gameDisplayName = GameAdapterRegistry.Get(ws.GameType).DisplayName,
+        }));
+    }
+
+    // DELETE_WORKSPACE — dispose context if active, delete, rebuild if needed
+    private void HandleDeleteWorkspaceAndSwitch(JsonElement? payload)
+    {
+        var id = payload?.GetProperty("id").GetString() ?? "";
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            Send(IpcResponse.Error("DELETE_WORKSPACE", "缺少工作区 ID"));
+            return;
+        }
+
+        // if deleting the active workspace, tear down context first
+        if (_workspaceManager.Config.ActiveWorkspace == id)
+        {
+            _currentContext?.Dispose();
+            _currentContext = null;
+        }
+
+        _workspaceManager.DeleteWorkspace(id);
+
+        // if there's a new active workspace after deletion, spin up its context
+        var newActive = _workspaceManager.Config.ActiveWorkspace;
+        if (newActive != null)
+        {
+            var ws = _workspaceManager.GetWorkspace(newActive);
+            if (ws != null)
+            {
+                _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+            }
+        }
+        BuildHandlers();
+
+        Send(IpcResponse.Success("DELETE_WORKSPACE", new
+        {
+            openTabs = _workspaceManager.Config.OpenTabs,
+            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
+        }));
+    }
+
+    // CLOSE_WORKSPACE_TAB — close tab, switch if it was the active one
+    private void HandleCloseTabAndMaybeSwitch(JsonElement? payload)
+    {
+        var id = payload?.GetProperty("id").GetString() ?? "";
+        var wasActive = _workspaceManager.Config.ActiveWorkspace == id;
+
+        _workspaceManager.CloseTab(id);
+
+        // if closed tab was active, we need to switch context
+        if (wasActive)
+        {
+            _currentContext?.Dispose();
+            _currentContext = null;
+
+            var newActive = _workspaceManager.Config.ActiveWorkspace;
+            if (newActive != null)
+            {
+                var ws = _workspaceManager.GetWorkspace(newActive);
+                if (ws != null)
+                    _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+            }
+            BuildHandlers();
+        }
+
+        Send(IpcResponse.Success("CLOSE_WORKSPACE_TAB", new
+        {
+            openTabs = _workspaceManager.Config.OpenTabs,
+            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
+        }));
     }
 
     private void Send(IpcResponse response)

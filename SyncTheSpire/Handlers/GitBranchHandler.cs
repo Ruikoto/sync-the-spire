@@ -30,8 +30,6 @@ public class GitBranchHandler : HandlerBase
 
     public void HandleGetBranches()
     {
-        Send(IpcResponse.Progress("GET_BRANCHES", "正在获取分支列表..."));
-
         var branches = _gitService.GetRemoteBranches();
         var current = _gitService.GetCurrentBranch();
 

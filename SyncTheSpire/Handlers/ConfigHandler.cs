@@ -57,6 +57,8 @@ public class ConfigHandler : HandlerBase
             supportsModdedSaves = _adapter.SupportsModdedSaves,
             supportsModScanning = _adapter.SupportsModScanning,
             supportsAutoFind = _adapter.SupportsAutoFind,
+            // generic adapter: junction is always on, no toggle needed
+            supportsModToggle = _adapter.TypeKey != "generic",
         };
 
         object data;
@@ -197,6 +199,9 @@ public class ConfigHandler : HandlerBase
         _configService.InvalidateCache();
         _configService.SaveConfig(cfg);
 
+        // resolve the actual target path — adapter decides if it's {install}\Mods or install itself
+        var targetModPath = _adapter.ResolveModPath(cfg.GameInstallPath) ?? cfg.GameModPath;
+
         // check if remote URL changed — if so, nuke the old repo and re-clone
         // (could be a completely different repo, can't just update the remote)
         var needsClone = !_gitService.IsRepoValid;
@@ -212,8 +217,8 @@ public class ConfigHandler : HandlerBase
             Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
 
             // detach junction so deleting Repo/ doesn't wipe the user's mods
-            if (_junctionService.IsJunction(cfg.GameModPath))
-                _junctionService.RemoveJunction(cfg.GameModPath);
+            if (_junctionService.IsJunction(targetModPath))
+                _junctionService.RemoveJunction(targetModPath);
 
             // stash mod files before nuking Repo/ — we'll put them back after clone
             var stashPath = _configService.RepoPath + "_stash";
@@ -233,8 +238,8 @@ public class ConfigHandler : HandlerBase
             }
         }
 
-        // set up junction: backup existing game mod folder, then create junction
-        _junctionHelper.EnsureJunction(cfg.GameModPath, _configService.RepoPath);
+        // set up junction: backup existing folder, then link to repo working tree
+        _junctionHelper.EnsureJunction(targetModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("INIT_CONFIG", new { message = "配置完成，仓库已就绪！" }));
     }

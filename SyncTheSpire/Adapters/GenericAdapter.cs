@@ -8,7 +8,7 @@ namespace SyncTheSpire.Adapters;
 public class GenericAdapter : IGameAdapter
 {
     public string TypeKey => "generic";
-    public string DisplayName => "通用 Git 同步";
+    public string DisplayName => "通用";
 
     // ── path resolution ──────────────────────────────────────────────────
 

@@ -29,7 +29,7 @@
 }
 
 /* smooth page transitions */
-#page-setup, #page-main {
+#page-home, #page-setup, #page-main {
     transition: opacity 0.2s ease;
 }
 
@@ -67,8 +67,89 @@ button, select {
 #titlebar-drag {
     -webkit-app-region: drag;
 }
-.titlebar-btn {
+.titlebar-btn, .no-drag {
     -webkit-app-region: no-drag;
+}
+
+/* tab bar */
+.tab-item {
+    position: relative;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+}
+.tab-item.active {
+    color: #e2e8f0;
+}
+.tab-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #6366f1;
+    border-radius: 1px 1px 0 0;
+}
+.tab-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.tab-close {
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+.tab-item:hover .tab-close {
+    opacity: 1;
+}
+.tab-close:hover {
+    color: #ef4444;
+}
+.tab-bar-scroll::-webkit-scrollbar {
+    height: 0;
+}
+
+/* workspace card */
+.workspace-card {
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+}
+.workspace-card:hover {
+    border-color: #3a3d4a;
+    transform: translateY(-1px);
+}
+
+/* game type badges */
+.game-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 999px;
+    letter-spacing: 0.3px;
+}
+.game-badge-sts2 {
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+}
+.game-badge-generic {
+    background: rgba(148, 163, 184, 0.12);
+    color: #94a3b8;
+}
+
+/* game type selector cards in create modal */
+.game-type-card {
+    cursor: pointer;
+    border: 1px solid #2a2d3a;
+    border-radius: 8px;
+    padding: 10px;
+    transition: border-color 0.15s, background 0.15s;
+}
+.game-type-card:hover {
+    border-color: #3a3d4a;
+}
+.game-type-card.selected {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.08);
 }
 
 /* branch table */

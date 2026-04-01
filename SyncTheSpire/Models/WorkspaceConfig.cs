@@ -49,12 +49,12 @@ public class WorkspaceConfig
     public string SaveFolderPath { get; set; } = string.Empty;
 
     /// <summary>
-    /// resolved mod folder: {GameInstallPath}\Mods
+    /// resolved mod/sync folder: StS2 = {GameInstallPath}\Mods, generic = GameInstallPath itself
     /// </summary>
     [JsonIgnore]
     public string GameModPath =>
         !string.IsNullOrWhiteSpace(GameInstallPath)
-            ? Path.Combine(GameInstallPath, "Mods")
+            ? GameType == "generic" ? GameInstallPath : Path.Combine(GameInstallPath, "Mods")
             : GameModPathLegacy; // fallback for old configs
 
     [JsonIgnore]

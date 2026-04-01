@@ -25,29 +25,44 @@ on('GET_VERSION', data => {
 on('GET_STATUS', data => {
     if (data.status === 'success') {
         const payload = data.payload;
+        const ws = getWsState();
+
+        // stash capabilities from backend
+        if (payload.capabilities) {
+            ws.capabilities = payload.capabilities;
+        }
+
         if (!payload.isConfigured) {
-            // first-time setup: request saved config for pre-fill
-            $('#btn-setup-back').classList.add('hidden');
+            // setup page: request saved config for pre-fill
             $('#setup-subtitle').textContent = '首次配置 — 填写以下信息开始同步';
+            updateSetupPageTitle();
+            adaptSetupFormForGameType(ws.capabilities);
             sendMessage('GET_CONFIG');
             showPage('setup');
-            // show welcome guide on first launch (not on edit mode re-entry)
-            if (!isEditMode) {
+            // show welcome guide on first launch — only for sts2
+            if (!isEditMode && ws.capabilities?.supportsAutoFind) {
                 welcomeAutoOpened = true;
                 showWelcomeModal();
             }
         } else {
             showPage('main');
+            // update header with workspace info
+            const wsInfo = AppState.workspaces[AppState.activeWorkspaceId];
+            if (wsInfo) {
+                const icon = $('#header-game-icon');
+                icon.innerHTML = gameIcon(wsInfo.gameType, 18);
+                icon.className = `flex items-center game-badge-${wsInfo.gameType}`;
+                $('#header-ws-name').textContent = wsInfo.name;
+            }
             updateStatusCard(payload);
+            updateDashboardForCapabilities(ws.capabilities);
             // default to disabled until GET_SAVE_STATUS confirms save path
-            AppState.savePathConfigured = false;
+            ws.savePathConfigured = false;
             updateSaveBackupCard();
-            // pre-fetch branches so the modal opens instantly
-            sendMessage('GET_BRANCHES');
             sendMessage('GET_SAVE_STATUS');
             sendMessage('GET_REDIRECT_STATUS');
             // auto-refresh on startup if a branch is active
-            if (!AppState.needsBranchSelection && AppState.currentBranch) {
+            if (!ws.needsBranchSelection && ws.currentBranch) {
                 $('#refresh-icon').style.animation = 'spin 0.7s linear infinite';
                 $('#refresh-label').textContent = '刷新中...';
                 sendMessage('REFRESH_SYNC');
@@ -60,10 +75,12 @@ on('REFRESH_SYNC', data => {
     // always stop spinner regardless of status
     $('#refresh-icon').style.animation = '';
     $('#refresh-label').textContent = '刷新';
+    // stale response from a previous workspace — ignore if main page isn't visible
+    if ($('#page-main').classList.contains('hidden')) return;
     if (data.status === 'success') {
         updateStatusCard(data.payload);
-        // don't re-fetch branches here -- REFRESH_SYNC already fetched,
-        // and GET_BRANCHES has a progress message that triggers the loading overlay
+        // silently pre-fetch branches so the modal opens instantly later
+        sendMessage('GET_BRANCHES');
         sendMessage('GET_SAVE_STATUS');
         sendMessage('GET_REDIRECT_STATUS');
     }
@@ -84,7 +101,6 @@ on('INIT_CONFIG', data => {
     if (data.status === 'success') {
         toast(data.payload?.message || 'Done!', 'success');
         isEditMode = false;
-        $('#btn-setup-back').classList.add('hidden');
         sendMessage('GET_STATUS');
     }
 });
@@ -109,7 +125,7 @@ on('SWITCH_TO_VANILLA', data => {
 
 on('SYNC_OTHER_BRANCH', data => {
     if (data.status === 'success') {
-        AppState.lastSyncStatus = null;
+        getWsState().lastSyncStatus = null;
         toast(data.payload?.message || 'Synced!', 'success');
         sendMessage('GET_STATUS');
     }
@@ -117,7 +133,7 @@ on('SYNC_OTHER_BRANCH', data => {
 
 on('CREATE_MY_BRANCH', data => {
     if (data.status === 'success') {
-        AppState.lastSyncStatus = null;
+        getWsState().lastSyncStatus = null;
         toast(data.payload?.message || 'Branch created!', 'success');
         $('#inp-branch').value = '';
         sendMessage('GET_STATUS');
@@ -126,7 +142,7 @@ on('CREATE_MY_BRANCH', data => {
 
 on('SAVE_AND_PUSH_MY_BRANCH', async data => {
     if (data.status === 'success') {
-        AppState.lastSyncStatus = null;
+        getWsState().lastSyncStatus = null;
         toast(data.payload?.message || 'Pushed!', 'success');
         sendMessage('GET_STATUS');
     }
@@ -183,7 +199,7 @@ on('SET_REDIRECT', data => {
 on('GET_SAVE_STATUS', data => {
     if (data.status !== 'success') return;
     const p = data.payload;
-    AppState.savePathConfigured = !!p.isConfigured;
+    getWsState().savePathConfigured = !!p.isConfigured;
     updateSaveBackupCard();
     // if saves are in merged state, prompt user to unlink
     if (p.isConfigured && (p.mergeState === 'linked' || p.mergeState === 'partial')) {
@@ -340,7 +356,7 @@ $('#btn-open-folder').addEventListener('click', (e) => {
         const modItem = $('#folder-item-mod');
         const saveItem = $('#folder-item-save');
         modItem.classList.toggle('hidden', !$('#mod-checkbox').checked);
-        saveItem.classList.toggle('hidden', !AppState.savePathConfigured);
+        saveItem.classList.toggle('hidden', !getWsState().savePathConfigured);
     }
 });
 document.addEventListener('click', () => {
@@ -372,37 +388,44 @@ guardClick($('#btn-create'), () => {
 
 // push -- save local changes and upload to current branch
 guardClick($('#btn-push'), async () => {
-    if (!AppState.currentBranch) return;
+    if (!getWsState().currentBranch) return;
     sendMessage('SAVE_AND_PUSH_MY_BRANCH');
 });
 
 // pull -- fetch latest from remote, overwrite local
 guardClick($('#btn-pull'), async () => {
-    if (!AppState.currentBranch) return;
-    if (AppState.lastHasLocalChanges || (AppState.lastSyncStatus && AppState.lastSyncStatus.ahead > 0)) {
+    const ws = getWsState();
+    if (!ws.currentBranch) return;
+    if (ws.lastHasLocalChanges || (ws.lastSyncStatus && ws.lastSyncStatus.ahead > 0)) {
         const ok = await showConfirm(
             '本地有未上传的改动，拉取会覆盖这些改动。确定继续？',
             '拉取远端内容'
         );
         if (!ok) return;
     }
-    sendMessage('SYNC_OTHER_BRANCH', { branchName: AppState.currentBranch });
+    sendMessage('SYNC_OTHER_BRANCH', { branchName: ws.currentBranch });
 });
 
 // settings: go to setup page with config pre-filled
 $('#btn-settings').addEventListener('click', () => {
     isEditMode = true;
     $('#setup-subtitle').textContent = '编辑配置';
-    $('#btn-setup-back').classList.remove('hidden');
+    updateSetupPageTitle();
+    adaptSetupFormForGameType(getWsState().capabilities);
     sendMessage('GET_CONFIG');
     showPage('setup');
 });
 
-// back button on setup page — cancel edit, return to main
+// back button on setup page — return to dashboard or home
 $('#btn-setup-back').addEventListener('click', () => {
-    isEditMode = false;
-    $('#btn-setup-back').classList.add('hidden');
-    showPage('main');
+    if (isEditMode) {
+        // was editing, go back to dashboard
+        isEditMode = false;
+        showPage('main');
+    } else {
+        // was in first-time setup, go back to home
+        showPage('home');
+    }
 });
 
 // auth type toggle: show/hide relevant fields + swap active tab style
@@ -516,7 +539,141 @@ $('#titlebar-drag').addEventListener('dblclick', () => sendMessage('WINDOW_MAXIM
 })();
 
 
+// ── tab bar rendering + workspace switching ──────────────────────────────────
+
+function renderTabBar() {
+    const tabBar = $('#tab-bar');
+    if (!tabBar) return;
+
+    tabBar.innerHTML = AppState.openTabs.map(id => {
+        const ws = AppState.workspaces[id];
+        if (!ws) return '';
+        const isActive = id === AppState.activeWorkspaceId;
+        return `
+            <div class="tab-item${isActive ? ' active' : ''} h-full flex items-center gap-1.5 px-3 text-xs text-spire-muted shrink-0" data-tab="${escAttr(id)}">
+                <span class="game-badge-${ws.gameType}" style="display:flex;">${gameIcon(ws.gameType, 12)}</span>
+                <span class="truncate max-w-[120px]">${esc(ws.name)}</span>
+                <button class="tab-close ml-1 text-spire-muted hover:text-spire-danger text-xs leading-none" data-tab-close="${escAttr(id)}" title="关闭标签页">&times;</button>
+            </div>`;
+    }).join('');
+
+    // bind tab click events
+    tabBar.querySelectorAll('.tab-item').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            if (e.target.closest('.tab-close')) return;
+            const id = tab.dataset.tab;
+            // always switch if we're not on the main/setup page for this workspace
+            const currentPage = !$('#page-main').classList.contains('hidden') || !$('#page-setup').classList.contains('hidden');
+            if (id !== AppState.activeWorkspaceId || !currentPage) {
+                switchToWorkspace(id);
+            }
+        });
+        // middle-click to close tab
+        tab.addEventListener('auxclick', (e) => {
+            if (e.button === 1) {
+                e.preventDefault();
+                closeWorkspaceTab(tab.dataset.tab);
+            }
+        });
+    });
+
+    // bind close buttons
+    tabBar.querySelectorAll('[data-tab-close]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeWorkspaceTab(btn.dataset.tabClose);
+        });
+    });
+}
+
+async function switchToWorkspace(id) {
+    try {
+        const res = await ipcCall('SWITCH_WORKSPACE', { id });
+        if (res.status !== 'success') throw new Error(res.message || '切换失败');
+        AppState.activeWorkspaceId = res.payload.id;
+        renderTabBar();
+        // clear stale branch data from previous workspace
+        clearBranchCache();
+        sendMessage('GET_STATUS');
+    } catch (err) {
+        toast('切换失败：' + err.message, 'error');
+    }
+}
+
+async function closeWorkspaceTab(id) {
+    try {
+        const res = await ipcCall('CLOSE_WORKSPACE_TAB', { id });
+        if (res.status !== 'success') throw new Error(res.message || '关闭失败');
+        AppState.openTabs = res.payload.openTabs || [];
+        AppState.activeWorkspaceId = res.payload.activeWorkspace;
+        renderTabBar();
+
+        if (res.payload.activeWorkspace) {
+            // clear cached branch data when switching context
+            clearBranchCache();
+            sendMessage('GET_STATUS');
+        } else {
+            // no more tabs open, go to home
+            goHome();
+        }
+    } catch (err) {
+        toast('关闭标签页失败：' + err.message, 'error');
+    }
+}
+
+function goHome() {
+    updateTabBarActive('home');
+    renderWorkspaceGrid();
+    showPage('home');
+}
+
+// bind home tab click
+$('#tab-home')?.addEventListener('click', () => goHome());
+
 // ── bootstrap ────────────────────────────────────────────────────────────────
 
-sendMessage('GET_VERSION');
-sendMessage('GET_STATUS');
+async function bootstrap() {
+    sendMessage('GET_VERSION');
+
+    // fetch available game types
+    try {
+        const res = await ipcCall('GET_GAME_TYPES');
+        cachedGameTypes = (res.status === 'success' && Array.isArray(res.payload)) ? res.payload : [];
+    } catch { cachedGameTypes = []; }
+
+    // fetch all workspaces and tab state
+    try {
+        const res = await ipcCall('GET_WORKSPACES');
+        if (res.status !== 'success' || !res.payload) {
+            throw new Error(res.message || '获取工作区失败');
+        }
+        const { workspaces, openTabs, activeWorkspace } = res.payload;
+
+        // populate AppState
+        AppState.openTabs = openTabs || [];
+        AppState.activeWorkspaceId = activeWorkspace;
+        AppState.workspaces = {};
+        (workspaces || []).forEach(ws => {
+            AppState.workspaces[ws.id] = ws;
+        });
+
+        // init home page listeners
+        initHomePage();
+
+        renderTabBar();
+
+        if (activeWorkspace) {
+            // load the active workspace
+            sendMessage('GET_STATUS');
+        } else {
+            // no workspace — show home page
+            goHome();
+        }
+    } catch (err) {
+        toast('加载工作区失败：' + err.message, 'error');
+        initHomePage();
+        goHome();
+    }
+}
+
+bootstrap();
