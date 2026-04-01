@@ -386,7 +386,7 @@ $('#backup-list-modal').addEventListener('click', e => {
 });
 
 
-// ── about modal ──────────────────────────────────────────────────────────────
+// ── settings modal (replaces standalone about modal) ────────────────────────
 
 const REPO_URL = 'https://github.com/Ruikoto/sync-the-spire';
 const AUTHOR_URL = 'https://github.com/Ruikoto';
@@ -502,15 +502,18 @@ $('#about-author').textContent = 'Ruikoto（泡菜）';
 $('#about-repo').addEventListener('click', e => { e.preventDefault(); openExternal(REPO_URL); });
 $('#about-author').addEventListener('click', e => { e.preventDefault(); openExternal(AUTHOR_URL); });
 
-$('#btn-about').addEventListener('click', () => {
+function openSettingsModal() {
     hideUpdateBadge();
-    $('#about-modal').classList.remove('hidden');
-});
-$('#about-modal-close').addEventListener('click', () => {
-    $('#about-modal').classList.add('hidden');
-});
-$('#about-modal').addEventListener('click', e => {
-    if (e.target === $('#about-modal')) $('#about-modal').classList.add('hidden');
+    $('#settings-modal').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+    $('#settings-modal').classList.add('hidden');
+}
+
+$('#settings-modal-close').addEventListener('click', closeSettingsModal);
+$('#settings-modal').addEventListener('click', e => {
+    if (e.target === $('#settings-modal')) closeSettingsModal();
 });
 
 
@@ -547,12 +550,12 @@ function getUpdateBehavior() {
 }
 
 function showUpdateBadge() {
-    const dot = $('#about-update-dot');
+    const dot = $('#settings-update-dot');
     if (dot) dot.classList.remove('hidden');
 }
 
 function hideUpdateBadge() {
-    const dot = $('#about-update-dot');
+    const dot = $('#settings-update-dot');
     if (dot) dot.classList.add('hidden');
 }
 
@@ -773,8 +776,8 @@ on('INSTALL_STORE_UPDATE', data => {
 
 $('#about-download').addEventListener('click', e => {
     e.preventDefault();
-    // close about first, then show full update modal with changelog
-    $('#about-modal').classList.add('hidden');
+    // close settings first, then show full update modal with changelog
+    closeSettingsModal();
     showUpdateModal(false);
 });
 

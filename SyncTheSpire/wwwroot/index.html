@@ -19,6 +19,11 @@
         <div id="tab-bar" class="tab-bar-scroll flex items-center h-full overflow-x-auto min-w-0 shrink-0"></div>
         <!-- drag area (fills remaining space, min width for usability) -->
         <div id="titlebar-drag" class="flex-1 h-full min-w-[40px] cursor-default"></div>
+        <!-- global settings (sliders icon, distinct from workspace gear) -->
+        <button id="btn-titlebar-settings" class="relative no-drag w-9 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" title="设置">
+            <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5" style="width:14px;height:14px;"></i>
+            <span id="settings-update-dot" class="hidden absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
+        </button>
         <!-- window controls -->
         <div class="flex h-full shrink-0">
             <button id="btn-minimize" class="titlebar-btn no-drag w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最小化">
@@ -260,13 +265,8 @@
 
     <!-- ============ HOME PAGE ============ -->
     <div id="page-home" class="hidden flex-col flex-1 overflow-y-auto p-4 gap-4">
-        <!-- app title + about -->
-        <div class="flex items-center justify-between">
-            <h1 class="text-xl font-bold">Sync the Spire</h1>
-            <button id="btn-home-about" class="w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="关于">
-                <svg class="w-4 h-4" style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
-            </button>
-        </div>
+        <!-- app title -->
+        <h1 class="text-xl font-bold">Sync the Spire</h1>
         <!-- workspace section -->
         <div class="flex items-center justify-between">
             <h2 class="text-sm font-medium text-spire-muted">工作区</h2>
@@ -468,10 +468,6 @@
                 </div>
             </div>
             <div class="flex items-center gap-1.5">
-                <button id="btn-about" class="relative w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="关于">
-                    <i data-lucide="info" class="w-4 h-4"></i>
-                    <span id="about-update-dot" class="hidden absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
-                </button>
                 <button id="btn-settings" class="w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="设置">
                     <i data-lucide="settings" class="w-4 h-4"></i>
                 </button>
@@ -652,14 +648,30 @@
         </div>
     </div>
 
-    <!-- about modal -->
-    <div id="about-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+    <!-- settings modal (global settings + about) -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-xs mx-4 p-5">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-sm font-medium">关于</h2>
-                <button id="about-modal-close"
+                <h2 class="text-sm font-medium">设置</h2>
+                <button id="settings-modal-close"
                     class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
             </div>
+
+            <!-- language -->
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-sm text-spire-muted">语言</span>
+                <select id="settings-language" disabled
+                    class="settings-select bg-spire-bg border border-spire-border rounded-lg text-xs text-spire-muted px-2 py-1 outline-none cursor-not-allowed">
+                    <option value="zh-CN">中文</option>
+                </select>
+            </div>
+            <p class="text-[10px] text-spire-muted/60 mb-4">更多语言即将推出</p>
+
+            <!-- divider -->
+            <div class="border-t border-spire-border mb-4"></div>
+
+            <!-- about section -->
+            <h3 class="text-xs font-medium text-spire-muted mb-3">关于</h3>
             <div class="flex flex-col gap-3 text-sm">
                 <div class="flex items-center justify-between">
                     <span class="text-spire-muted">版本</span>
@@ -702,6 +714,7 @@
     <script src="lib/lucide.min.js"></script>
     <script src="lib/marked.min.js"></script>
     <script src="ipc.js"></script>
+    <script src="i18n.js"></script>
     <script src="ui.js"></script>
     <script src="state.js"></script>
     <script src="modals.js"></script>

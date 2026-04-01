@@ -1,0 +1,26 @@
+{
+  "settings": {
+    "title": "设置",
+    "language": "语言",
+    "languageHint": "更多语言即将推出",
+    "about": "关于"
+  },
+  "status": {
+    "connected": "已连接",
+    "modConnected": "Mod 已连接",
+    "pureMode": "纯净模式 (Mod 未连接)",
+    "noBranch": "请通过下方选择一个分支开始",
+    "notSelected": "未选择"
+  },
+  "sync": {
+    "upToDate": "✓ 已是最新",
+    "newBranch": "新分支，尚未推送到远端",
+    "localChanges": "↑ 有本地改动未上传"
+  },
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "save": "保存",
+    "close": "关闭"
+  }
+}

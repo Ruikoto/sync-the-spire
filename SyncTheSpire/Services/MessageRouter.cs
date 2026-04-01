@@ -22,6 +22,7 @@ public class MessageRouter
 
     // workspace handler — lives outside the per-workspace lifecycle
     private WorkspaceHandler _workspaceHandler = null!;
+    private SettingsHandler _settingsHandler = null!;
 
     // domain handlers — rebuilt when workspace changes
     private ConfigHandler _configHandler = null!;
@@ -74,6 +75,7 @@ public class MessageRouter
 
         // these don't need workspace context
         _workspaceHandler = new WorkspaceHandler(_webView, _uiContext, _workspaceManager);
+        _settingsHandler = new SettingsHandler(_webView, _uiContext, _workspaceManager);
         _storeUpdateHandler = new StoreUpdateHandler(_webView, _uiContext, _storeUpdateService);
 
         if (ctx != null)
@@ -331,6 +333,15 @@ public class MessageRouter
 
                 case "RENAME_WORKSPACE":
                     _workspaceHandler.HandleRenameWorkspace(req.Payload);
+                    break;
+
+                // ── global settings ───────────────────────────────
+                case "GET_SETTINGS":
+                    _settingsHandler.HandleGetSettings();
+                    break;
+
+                case "SAVE_SETTINGS":
+                    _settingsHandler.HandleSaveSettings(req.Payload);
                     break;
 
                 default:

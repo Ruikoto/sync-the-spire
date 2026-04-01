@@ -485,7 +485,7 @@ document.addEventListener('keydown', e => {
         }
         return;
     }
-    const modals = ['#welcome-modal', '#backup-list-modal', '#about-modal', '#conflict-modal'];
+    const modals = ['#welcome-modal', '#backup-list-modal', '#settings-modal', '#conflict-modal'];
     for (const sel of modals) {
         const m = $(sel);
         if (m && !m.classList.contains('hidden')) {
@@ -504,6 +504,7 @@ document.addEventListener('keydown', e => {
 // ── title bar controls ───────────────────────────────────────────────────────
 
 $('#titlebar-drag').addEventListener('mousedown', () => sendMessage('WINDOW_DRAG'));
+$('#btn-titlebar-settings').addEventListener('click', () => openSettingsModal());
 $('#btn-minimize').addEventListener('click', () => sendMessage('WINDOW_MINIMIZE'));
 $('#btn-maximize').addEventListener('click', () => sendMessage('WINDOW_MAXIMIZE'));
 $('#btn-close').addEventListener('click', () => sendMessage('WINDOW_CLOSE'));
@@ -634,6 +635,7 @@ $('#tab-home')?.addEventListener('click', () => goHome());
 
 async function bootstrap() {
     sendMessage('GET_VERSION');
+    I18n.load('zh-CN'); // fire-and-forget, non-blocking
 
     // fetch available game types
     try {

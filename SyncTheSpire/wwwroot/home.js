@@ -200,11 +200,6 @@ function initHomePage() {
         $('#create-workspace-modal').classList.add('hidden');
     });
 
-    // about button on home page
-    $('#btn-home-about')?.addEventListener('click', () => {
-        $('#about-modal').classList.remove('hidden');
-    });
-
     // close modal on backdrop click
     $('#create-workspace-modal')?.addEventListener('click', (e) => {
         if (e.target === e.currentTarget) {
