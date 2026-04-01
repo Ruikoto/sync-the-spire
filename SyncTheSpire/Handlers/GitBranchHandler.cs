@@ -30,6 +30,14 @@ public class GitBranchHandler : HandlerBase
 
     public void HandleGetBranches()
     {
+        // guard: bail out if workspace isn't configured or repo isn't ready
+        // this can happen when a stale front-end request lands after switching to an unconfigured workspace
+        if (!_configService.Workspace.IsConfigured || !_gitService.IsRepoValid)
+        {
+            Send(IpcResponse.Success("GET_BRANCHES", new { branches = Array.Empty<object>(), currentBranch = (string?)null }));
+            return;
+        }
+
         var branches = _gitService.GetRemoteBranches();
         var current = _gitService.GetCurrentBranch();
 

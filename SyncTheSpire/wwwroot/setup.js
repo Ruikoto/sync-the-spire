@@ -56,7 +56,7 @@ function pickSteamAccount(payload) {
         return Promise.resolve(basePath + '\\' + valid[0].steamId);
     }
     if (valid.length === 0) {
-        toast('未找到有效的存档文件夹', 'error');
+        toast(I18n.t('modals.steam.notFound'), 'error');
         return Promise.resolve(null);
     }
 
@@ -75,8 +75,8 @@ function pickSteamAccount(payload) {
             btn.disabled = disabled;
 
             let label = esc(a.personaName);
-            if (a.mostRecent) label += ' <span class="text-spire-accent text-[10px] ml-1">当前账号</span>';
-            if (disabled) label += ' <span class="text-[10px] ml-1">无存档</span>';
+            if (a.mostRecent) label += ` <span class="text-spire-accent text-[10px] ml-1">${esc(I18n.t('modals.steam.currentAccount'))}</span>`;
+            if (disabled) label += ` <span class="text-[10px] ml-1">${esc(I18n.t('modals.steam.noSave'))}</span>`;
             btn.innerHTML = `<div>${label}</div><div class="text-[10px] text-spire-muted mt-0.5">${esc(a.steamId)}</div>`;
 
             if (!disabled) {
@@ -126,12 +126,12 @@ function adaptSetupFormForGameType(capabilities) {
     const labelGamePath = $('#label-game-path');
     const tipGamePath = document.querySelector('#game-path-group .help-tip');
     if (labelGamePath) {
-        labelGamePath.textContent = supportsAutoFind ? '游戏安装路径' : '同步文件夹路径';
+        labelGamePath.textContent = supportsAutoFind ? I18n.t('setup.gamePathLabel') : I18n.t('setup.syncFolderLabel');
     }
     if (tipGamePath) {
         tipGamePath.dataset.tip = supportsAutoFind
-            ? '在 Steam 中右键游戏 → 管理 → 浏览本地文件，打开的路径即为游戏安装路径。自动查找仅支持 Steam 平台。'
-            : '你要同步的文件夹';
+            ? I18n.t('setup.gamePathTip')
+            : I18n.t('setup.syncFolderTip');
     }
 }
 
@@ -203,8 +203,8 @@ $('#setup-ws-name-input')?.addEventListener('keydown', async (e) => {
 async function promptAutoFind() {
     await new Promise(r => setTimeout(r, 300));
     const ok = await showConfirm(
-        '是否自动检测游戏安装路径和存档路径？（仅支持 Steam 平台）',
-        '自动检测'
+        I18n.t('setup.autoDetectConfirm'),
+        I18n.t('setup.autoDetectTitle')
     );
     if (!ok) return;
 
@@ -220,11 +220,11 @@ async function promptAutoFind() {
     }
 
     const found = [];
-    if ($('#cfg-path').value) found.push('游戏路径');
-    if ($('#cfg-save').value) found.push('存档路径');
+    if ($('#cfg-path').value) found.push(I18n.t('setup.gamePath'));
+    if ($('#cfg-save').value) found.push(I18n.t('setup.savePath'));
     if (found.length > 0) {
-        toast('已自动填入' + found.join('和'), 'success');
+        toast(I18n.t('setup.autoFillResult', { paths: found.join(I18n.t('setup.autoFillAnd')) }), 'success');
     } else {
-        toast('未能自动检测到路径，请手动填写', 'info');
+        toast(I18n.t('setup.autoFillFailed'), 'info');
     }
 }

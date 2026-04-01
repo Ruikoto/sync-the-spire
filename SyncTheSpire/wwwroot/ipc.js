@@ -17,6 +17,8 @@ function on(event, fn) {
 
 // H6 fix: track which action triggered the loading overlay
 let _loadingAction = null;
+// A2 fix: suppress global error toast for actions handled by ipcCall
+const _ipcCallActions = new Set();
 
 // listen for messages from C# backend (WebView2 uses 'message' event)
 window.chrome.webview.addEventListener('message', e => {
@@ -41,8 +43,8 @@ window.chrome.webview.addEventListener('message', e => {
         _loadingAction = null;
     }
 
-    // show error toasts
-    if (data.status === 'error') {
+    // show error toasts — but not for actions that ipcCall is handling
+    if (data.status === 'error' && !_ipcCallActions.has(event)) {
         toast(data.message || 'Unknown error', 'error');
     }
 
@@ -58,28 +60,31 @@ window.chrome.webview.addEventListener('message', e => {
 function ipcCall(action, payload, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
         let settled = false;
+        _ipcCallActions.add(action);
 
-        const handler = (data) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
+        const cleanup = () => {
             const list = handlers[action];
             if (list) {
                 const idx = list.indexOf(handler);
                 if (idx !== -1) list.splice(idx, 1);
             }
+            // only remove from suppression set if no other ipcCall is pending for this action
+            if (!list || !list.length) _ipcCallActions.delete(action);
+        };
+
+        const handler = (data) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
             resolve(data);
         };
 
         const timer = setTimeout(() => {
             if (settled) return;
             settled = true;
-            const list = handlers[action];
-            if (list) {
-                const idx = list.indexOf(handler);
-                if (idx !== -1) list.splice(idx, 1);
-            }
-            resolve({ status: 'error', message: `${action} 请求超时` });
+            cleanup();
+            resolve({ status: 'error', message: I18n.t('common.ipcTimeout', { action }) });
         }, timeoutMs);
 
         on(action, handler);

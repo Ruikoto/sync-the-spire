@@ -16,7 +16,7 @@ on('GET_VERSION', data => {
     AppState.appDistribution = data.payload?.distribution || 'direct';
     $('#about-version').textContent = AppState.appVersion;
     if (!/^v?\d+\.\d+/.test(AppState.appVersion)) {
-        toast('当前为非正式构建版本，建议前往 About 页面下载最新正式版', 'info');
+        toast(I18n.t('toast.nightlyBuild'), 'info');
     }
     checkForUpdates();
     checkAnnouncements();
@@ -37,7 +37,7 @@ on('GET_STATUS', data => {
 
         if (!payload.isConfigured) {
             // setup page: request saved config for pre-fill
-            $('#setup-subtitle').textContent = '首次配置 — 填写以下信息开始同步';
+            $('#setup-subtitle').textContent = I18n.t('setup.firstTimeSubtitle');
             updateSetupPageTitle();
             adaptSetupFormForGameType(ws.capabilities);
             sendMessage('GET_CONFIG');
@@ -66,21 +66,44 @@ on('GET_STATUS', data => {
             sendMessage('GET_REDIRECT_STATUS');
             // auto-refresh on startup if a branch is active
             if (!ws.needsBranchSelection && ws.currentBranch) {
-                $('#refresh-icon').style.animation = 'spin 0.7s linear infinite';
-                $('#refresh-label').textContent = '刷新中...';
-                sendMessage('REFRESH_SYNC');
+                startRefreshSync();
             }
         }
     }
 });
 
+// track which workspace the latest REFRESH_SYNC was for
+let _refreshSyncWsId = null;
+let _refreshTimeout = null;
+
+function startRefreshSync() {
+    $('#refresh-icon').style.animation = 'spin 0.7s linear infinite';
+    $('#refresh-label').textContent = I18n.t('main.refreshing');
+    _refreshSyncWsId = AppState.activeWorkspaceId;
+    if (_refreshTimeout) clearTimeout(_refreshTimeout);
+    _refreshTimeout = setTimeout(() => {
+        $('#refresh-icon').style.animation = '';
+        $('#refresh-label').textContent = I18n.t('main.refresh');
+        _refreshTimeout = null;
+        toast(I18n.t('main.refreshTimeout'), 'warning');
+    }, 60000);
+    sendMessage('REFRESH_SYNC');
+}
+
 on('REFRESH_SYNC', data => {
     // always stop spinner regardless of status
     $('#refresh-icon').style.animation = '';
-    $('#refresh-label').textContent = '刷新';
+    $('#refresh-label').textContent = I18n.t('main.refresh');
+    if (_refreshTimeout) { clearTimeout(_refreshTimeout); _refreshTimeout = null; }
     // H5 fix: ignore stale response if main page isn't visible or workspace changed
     if ($('#page-main').classList.contains('hidden')) return;
     if (!AppState.activeWorkspaceId) return;
+    // skip follow-up fetches if we've switched workspace since the request was sent
+    if (_refreshSyncWsId && _refreshSyncWsId !== AppState.activeWorkspaceId) {
+        _refreshSyncWsId = null;
+        return;
+    }
+    _refreshSyncWsId = null;
     if (data.status === 'success') {
         updateStatusCard(data.payload);
         // silently pre-fetch branches so the modal opens instantly later
@@ -96,7 +119,7 @@ on('GET_CONFIG', data => {
         // update subtitle based on whether there's existing config
         if (data.payload?.repoUrl) {
             isEditMode = true;
-            $('#setup-subtitle').textContent = '编辑配置';
+            $('#setup-subtitle').textContent = I18n.t('setup.editSubtitle');
         }
     }
 });
@@ -121,6 +144,7 @@ on('GET_BRANCHES', data => {
 });
 
 on('SWITCH_TO_VANILLA', data => {
+    $('#mod-checkbox').disabled = false;
     if (data.status === 'success') {
         toast(data.payload?.message || 'Done', 'success');
         sendMessage('GET_STATUS');
@@ -152,7 +176,7 @@ on('SAVE_AND_PUSH_MY_BRANCH', async data => {
     }
     if (data.status === 'conflict') {
         const choice = await showConflictDialog(
-            data.payload?.message || '云端存在更新的配置，与本地改动冲突。'
+            data.payload?.message || I18n.t('modals.conflict.defaultMessage')
         );
         if (choice === 'force') sendMessage('FORCE_PUSH');
         else if (choice === 'reset') sendMessage('RESET_TO_REMOTE');
@@ -174,6 +198,7 @@ on('RESET_TO_REMOTE', data => {
 });
 
 on('RESTORE_JUNCTION', data => {
+    $('#mod-checkbox').disabled = false;
     if (data.status === 'success') {
         toast(data.payload?.message || 'Restored!', 'success');
         sendMessage('GET_STATUS');
@@ -189,8 +214,9 @@ on('GET_REDIRECT_STATUS', data => {
 });
 
 on('SET_REDIRECT', data => {
+    $('#redirect-checkbox').disabled = false;
     if (data.status === 'success') {
-        toast(data.payload?.message || '操作完成', 'success');
+        toast(data.payload?.message || I18n.t('common.operationComplete'), 'success');
         sendMessage('GET_REDIRECT_STATUS');
     } else {
         // revert toggle on failure
@@ -216,21 +242,21 @@ on('UNLINK_SAVES', data => {
     if (data.status === 'success') {
         $('#save-unlink-modal').classList.add('hidden');
         btn.disabled = false;
-        btn.textContent = '关闭存档合并';
-        toast(data.payload?.message || '已关闭存档合并', 'success');
+        btn.textContent = I18n.t('saveBackup.unlinkButton');
+        toast(data.payload?.message || I18n.t('toast.unlinkDone'), 'success');
     } else {
         // show error inside the modal, keep it open
         btn.disabled = false;
-        btn.textContent = '关闭存档合并';
+        btn.textContent = I18n.t('saveBackup.unlinkButton');
         const errEl = $('#save-unlink-error');
-        errEl.textContent = data.message || '操作失败，请重试';
+        errEl.textContent = data.message || I18n.t('saveBackup.unlinkFailed');
         errEl.classList.remove('hidden');
     }
 });
 
 on('BACKUP_SAVES', data => {
     if (data.status === 'success') {
-        toast(data.payload?.message || '备份完成', 'success');
+        toast(data.payload?.message || I18n.t('toast.backupDone'), 'success');
     }
 });
 
@@ -243,7 +269,7 @@ on('GET_BACKUP_LIST', data => {
 
 on('RESTORE_BACKUP', data => {
     if (data.status === 'success') {
-        toast(data.payload?.message || '恢复完成', 'success');
+        toast(data.payload?.message || I18n.t('toast.restoreDone'), 'success');
         closeBackupListModal();
         sendMessage('GET_SAVE_STATUS');
     }
@@ -251,7 +277,7 @@ on('RESTORE_BACKUP', data => {
 
 on('DELETE_BACKUP', data => {
     if (data.status === 'success') {
-        toast(data.payload?.message || '已删除', 'success');
+        toast(data.payload?.message || I18n.t('toast.deleted'), 'success');
         // refresh the backup list
         sendMessage('GET_BACKUP_LIST');
     }
@@ -278,7 +304,7 @@ $('#setup-form').addEventListener('submit', e => {
     const nickname = $('#cfg-nickname').value.trim();
 
     if (!nickname) {
-        toast('请填写昵称', 'error');
+        toast(I18n.t('setup.nicknameRequired'), 'error');
         $('#cfg-nickname').focus();
         return;
     }
@@ -318,7 +344,7 @@ $('#btn-find-game').addEventListener('click', async () => {
     const result = await ipcCall('FIND_GAME_PATH');
     if (result.status === 'success' && result.payload?.path) {
         $('#cfg-path').value = result.payload.path;
-        toast('已自动检测到游戏安装路径', 'success');
+        toast(I18n.t('toast.gamePathFound'), 'success');
     }
 });
 
@@ -328,16 +354,14 @@ $('#btn-find-save').addEventListener('click', async () => {
         const path = await pickSteamAccount(result.payload);
         if (path) {
             $('#cfg-save').value = path;
-            toast('已自动检测到存档路径', 'success');
+            toast(I18n.t('toast.savePathFound'), 'success');
         }
     }
 });
 
 // refresh -- fetch remote and show sync status
 guardClick($('#btn-refresh'), () => {
-    $('#refresh-icon').style.animation = 'spin 0.7s linear infinite';
-    $('#refresh-label').textContent = '刷新中...';
-    sendMessage('REFRESH_SYNC');
+    startRefreshSync();
 });
 
 // click sync status to dismiss it
@@ -373,9 +397,11 @@ $('#folder-dropdown').addEventListener('click', (e) => {
     $('#folder-dropdown').classList.add('hidden');
 });
 
-// mod toggle
+// mod toggle — disable during pending IPC to prevent rapid clicks
 $('#mod-checkbox').addEventListener('change', (e) => {
-    if (e.target.checked) {
+    const cb = e.target;
+    cb.disabled = true;
+    if (cb.checked) {
         sendMessage('RESTORE_JUNCTION');
     } else {
         sendMessage('SWITCH_TO_VANILLA');
@@ -385,8 +411,8 @@ $('#mod-checkbox').addEventListener('change', (e) => {
 // create branch
 guardClick($('#btn-create'), () => {
     const name = $('#inp-branch').value.trim();
-    if (!name) { toast('请输入分支名称', 'error'); return; }
-    if (!isValidBranchName(name)) { toast('分支名称格式无效（不能包含空格、..、~、^、:、\\、[ ] 等字符）', 'error'); return; }
+    if (!name) { toast(I18n.t('createBranch.nameRequired'), 'error'); return; }
+    if (!isValidBranchName(name)) { toast(I18n.t('createBranch.nameInvalid'), 'error'); return; }
     sendMessage('CREATE_MY_BRANCH', { branchName: name });
 });
 
@@ -402,8 +428,8 @@ guardClick($('#btn-pull'), async () => {
     if (!ws.currentBranch) return;
     if (ws.lastHasLocalChanges || (ws.lastSyncStatus && ws.lastSyncStatus.ahead > 0)) {
         const ok = await showConfirm(
-            '本地有未上传的改动，拉取会覆盖这些改动。确定继续？',
-            '拉取远端内容'
+            I18n.t('main.pullConfirmMessage'),
+            I18n.t('main.pullConfirmTitle')
         );
         if (!ok) return;
     }
@@ -413,7 +439,7 @@ guardClick($('#btn-pull'), async () => {
 // settings: go to setup page with config pre-filled
 $('#btn-settings').addEventListener('click', () => {
     isEditMode = true;
-    $('#setup-subtitle').textContent = '编辑配置';
+    $('#setup-subtitle').textContent = I18n.t('setup.editSubtitle');
     updateSetupPageTitle();
     adaptSetupFormForGameType(getWsState().capabilities);
     sendMessage('GET_CONFIG');
@@ -441,7 +467,9 @@ document.querySelectorAll('input[name="authType"]').forEach(radio => {
 
 // ── save redirect toggle ────────────────────────────────────────────────────
 
+// save redirect toggle — disable during pending IPC
 $('#redirect-checkbox').addEventListener('change', (e) => {
+    e.target.disabled = true;
     sendMessage('SET_REDIRECT', { enabled: e.target.checked });
 });
 
@@ -452,15 +480,15 @@ $('#redirect-checkbox').addEventListener('change', (e) => {
 $('#btn-do-unlink').addEventListener('click', () => {
     const btn = $('#btn-do-unlink');
     btn.disabled = true;
-    btn.textContent = '正在处理...';
+    btn.textContent = I18n.t('common.processing');
     $('#save-unlink-error').classList.add('hidden');
     sendMessage('UNLINK_SAVES');
 });
 
 guardClick($('#btn-backup-saves'), async () => {
     const ok = await showConfirm(
-        '将备份整个存档文件夹到应用数据目录。\n可通过备份管理中的文件夹按钮查看备份位置。',
-        '备份存档'
+        I18n.t('saveBackup.confirmMessage'),
+        I18n.t('saveBackup.confirmTitle')
     );
     if (ok) sendMessage('BACKUP_SAVES');
 });
@@ -561,7 +589,7 @@ function renderTabBar() {
             <div class="tab-item${isActive ? ' active' : ''} h-full flex items-center gap-1.5 px-3 text-xs text-spire-muted shrink-0" data-tab="${escAttr(id)}">
                 <span class="game-badge-${ws.gameType}" style="display:flex;">${gameIcon(ws.gameType, 12)}</span>
                 <span class="truncate max-w-[120px]">${esc(ws.name)}</span>
-                <button class="tab-close ml-1 text-spire-muted hover:text-spire-danger text-xs leading-none" data-tab-close="${escAttr(id)}" title="关闭标签页">&times;</button>
+                <button class="tab-close ml-1 text-spire-muted hover:text-spire-danger text-xs leading-none" data-tab-close="${escAttr(id)}" title="${escAttr(I18n.t('titlebar.closeTab'))}">&times;</button>
             </div>`;
     }).join('');
 
@@ -600,7 +628,7 @@ function renderTabBar() {
 async function switchToWorkspace(id) {
     try {
         const res = await ipcCall('SWITCH_WORKSPACE', { id });
-        if (res.status !== 'success') throw new Error(res.message || '切换失败');
+        if (res.status !== 'success') throw new Error(res.message || I18n.t('main.switchFailed'));
         AppState.activeWorkspaceId = res.payload.id;
         renderTabBar();
         // clear stale branch data from previous workspace
@@ -617,14 +645,14 @@ async function switchToWorkspace(id) {
         }
         sendMessage('GET_STATUS');
     } catch (err) {
-        toast('切换失败：' + err.message, 'error');
+        toast(I18n.t('main.switchFailedMsg', { message: err.message }), 'error');
     }
 }
 
 async function closeWorkspaceTab(id) {
     try {
         const res = await ipcCall('CLOSE_WORKSPACE_TAB', { id });
-        if (res.status !== 'success') throw new Error(res.message || '关闭失败');
+        if (res.status !== 'success') throw new Error(res.message || I18n.t('main.closeTabFailed'));
         AppState.openTabs = res.payload.openTabs || [];
         AppState.activeWorkspaceId = res.payload.activeWorkspace;
         renderTabBar();
@@ -638,7 +666,7 @@ async function closeWorkspaceTab(id) {
             goHome();
         }
     } catch (err) {
-        toast('关闭标签页失败：' + err.message, 'error');
+        toast(I18n.t('main.closeTabFailedMsg', { message: err.message }), 'error');
     }
 }
 
@@ -655,7 +683,32 @@ $('#tab-home')?.addEventListener('click', () => goHome());
 
 async function bootstrap() {
     sendMessage('GET_VERSION');
-    I18n.load('zh-CN'); // fire-and-forget, non-blocking
+    await I18n.setLang(localStorage.getItem('sts-lang') || 'zh-CN');
+
+    // sync language dropdown with current language
+    const langSelect = $('#settings-language');
+    if (langSelect) langSelect.value = I18n.getLang();
+
+    // language change handler
+    if (langSelect) {
+        langSelect.addEventListener('change', () => {
+            I18n.setLang(langSelect.value);
+        });
+    }
+
+    // re-render dynamic UI when language changes
+    I18n.onChange(() => {
+        renderTabBar();
+        renderWorkspaceGrid();
+        // refresh status-dependent UI if a workspace is active
+        if (AppState.activeWorkspaceId) {
+            const ws = getWsState();
+            updateSyncStatusLine();
+            updateActionButtons();
+            updateSaveBackupCard();
+            if (ws.capabilities) updateDashboardForCapabilities(ws.capabilities);
+        }
+    });
 
     // fetch available game types
     try {
@@ -667,7 +720,7 @@ async function bootstrap() {
     try {
         const res = await ipcCall('GET_WORKSPACES');
         if (res.status !== 'success' || !res.payload) {
-            throw new Error(res.message || '获取工作区失败');
+            throw new Error(res.message || I18n.t('home.loadFailed'));
         }
         const { workspaces, openTabs, activeWorkspace } = res.payload;
 
@@ -692,7 +745,7 @@ async function bootstrap() {
             goHome();
         }
     } catch (err) {
-        toast('加载工作区失败：' + err.message, 'error');
+        toast(I18n.t('home.loadFailedMsg', { message: err.message }), 'error');
         initHomePage();
         goHome();
     }

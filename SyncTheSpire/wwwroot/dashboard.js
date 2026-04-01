@@ -34,28 +34,28 @@ function updateStatusCard(data) {
     ws.needsBranchSelection = !!data.needsBranchSelection;
 
     if (ws.needsBranchSelection) {
-        branch.textContent = '未选择';
+        branch.textContent = I18n.t('status.notSelected');
         dot.className = 'w-2 h-2 rounded-full bg-spire-muted';
-        label.textContent = '请通过下方选择一个分支开始';
+        label.textContent = I18n.t('status.noBranch');
         modCheckbox.checked = false;
         modCheckbox.disabled = true;
         modDot.className = 'w-2 h-2 rounded-full bg-gray-500';
-        modLabel.textContent = '请先选择分支';
+        modLabel.textContent = I18n.t('modToggle.selectBranchFirst');
     } else {
         branch.textContent = ws.currentBranch || '—';
         modCheckbox.disabled = false;
         if (data.isJunctionActive || !hasModToggle) {
             dot.className = 'w-2 h-2 rounded-full bg-spire-success';
-            label.textContent = hasModToggle ? 'Mod 已连接' : '已连接';
+            label.textContent = hasModToggle ? I18n.t('status.modConnected') : I18n.t('status.connected');
             modCheckbox.checked = true;
             modDot.className = 'w-2 h-2 rounded-full bg-spire-success';
-            modLabel.textContent = '已连接';
+            modLabel.textContent = I18n.t('modToggle.connected');
         } else {
             dot.className = 'w-2 h-2 rounded-full bg-spire-warn';
-            label.textContent = '纯净模式 (Mod 未连接)';
+            label.textContent = I18n.t('status.pureMode');
             modCheckbox.checked = false;
             modDot.className = 'w-2 h-2 rounded-full bg-spire-warn';
-            modLabel.textContent = '未连接';
+            modLabel.textContent = I18n.t('modToggle.disconnected');
         }
     }
 
@@ -90,7 +90,7 @@ function updateSyncStatusLine() {
     const s = ws.lastSyncStatus;
 
     if (!s.hasRemoteBranch) {
-        text.textContent = '新分支，尚未推送到远端';
+        text.textContent = I18n.t('sync.newBranch');
         text.className = 'text-xs text-spire-warn';
         return;
     }
@@ -100,7 +100,7 @@ function updateSyncStatusLine() {
     const hasRemote = s.behind > 0;
 
     if (!hasLocal && !hasRemote) {
-        text.textContent = '✓ 已是最新';
+        text.textContent = I18n.t('sync.upToDate');
         text.className = 'text-xs text-spire-success';
         // fade out after 3s, then collapse
         syncFadeTimer = setTimeout(() => {
@@ -114,8 +114,8 @@ function updateSyncStatusLine() {
     }
 
     const parts = [];
-    if (hasRemote) parts.push(`↓ 远端有 ${s.behind} 处新改动`);
-    if (hasLocal) parts.push('↑ 有本地改动未上传');
+    if (hasRemote) parts.push(I18n.t('sync.remoteChanges', { count: s.behind }));
+    if (hasLocal) parts.push(I18n.t('sync.localChanges'));
     text.textContent = parts.join('，');
     text.className = hasRemote ? 'text-xs text-spire-warn' : 'text-xs text-spire-accentHover';
 }
@@ -135,7 +135,7 @@ function updateDashboardForCapabilities(capabilities) {
     const folderMod = $('#folder-item-mod');
     const folderSave = $('#folder-item-save');
     if (folderGame) {
-        folderGame.textContent = capabilities.supportsModToggle ? '游戏文件夹' : '同步文件夹';
+        folderGame.textContent = capabilities.supportsModToggle ? I18n.t('main.gameFolder') : I18n.t('main.syncFolder');
     }
     if (folderMod) folderMod.classList.toggle('hidden', !capabilities.supportsModToggle);
     if (folderSave) folderSave.classList.toggle('hidden', !capabilities.supportsSaveBackup);
@@ -150,7 +150,7 @@ function updateRedirectCard(data) {
 
     if (!data.isJunctionActive) {
         dot.className = 'w-2 h-2 rounded-full bg-gray-500';
-        label.textContent = '需要先连接 Mod';
+        label.textContent = I18n.t('redirect.needMod');
         checkbox.checked = false;
         checkbox.disabled = true;
         return;
@@ -160,11 +160,11 @@ function updateRedirectCard(data) {
 
     if (data.isEnabled) {
         dot.className = 'w-2 h-2 rounded-full bg-spire-success';
-        label.textContent = '已启用';
+        label.textContent = I18n.t('redirect.enabled');
         checkbox.checked = true;
     } else {
         dot.className = 'w-2 h-2 rounded-full bg-spire-muted';
-        label.textContent = '未启用';
+        label.textContent = I18n.t('redirect.disabled');
         checkbox.checked = false;
     }
 }
@@ -178,9 +178,9 @@ function updateSaveBackupCard() {
 
     if (ws.savePathConfigured) {
         btns.forEach(b => { b.disabled = false; b.classList.remove('opacity-50', 'cursor-not-allowed'); });
-        if (desc) desc.textContent = '手动备份或恢复游戏存档';
+        if (desc) desc.textContent = I18n.t('saveBackup.description');
     } else {
         btns.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
-        if (desc) desc.textContent = '未配置存档路径，请在 Settings 中设置后使用';
+        if (desc) desc.textContent = I18n.t('saveBackup.notConfigured');
     }
 }

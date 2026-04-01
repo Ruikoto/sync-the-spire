@@ -67,7 +67,7 @@ function closeBranchModal() {
 }
 
 function nsfwTooltip(reasons) {
-    const lines = ['此分支的 MOD 可能包含 NSFW 内容。', '原因：', ...(reasons || []).map(r => '• ' + r)];
+    const lines = [I18n.t('branch.nsfwWarning'), I18n.t('branch.nsfwReason'), ...(reasons || []).map(r => '• ' + r)];
     return lines.map(l => escAttr(l)).join('&#10;');
 }
 
@@ -94,7 +94,7 @@ function renderBranchTable() {
     tbody.innerHTML = sorted.map(b => {
         const isCurrent = b.name === branchCurrentName;
         const rowHighlight = isCurrent ? 'bg-spire-accent/10' : 'hover:bg-spire-bg/50';
-        const tag = isCurrent ? ' <span class="text-spire-accent text-[10px] ml-1">(当前)</span>' : '';
+        const tag = isCurrent ? ` <span class="text-spire-accent text-[10px] ml-1">${esc(I18n.t('branch.current'))}</span>` : '';
         const nsfwBadge = b.isNsfw ? `<span class="nsfw-badge" title="${nsfwTooltip(b.nsfwReasons)}">NSFW</span>` : '';
         return `<tr class="branch-row border-b border-spire-border/50 cursor-pointer transition-colors ${rowHighlight}" data-branch="${escAttr(b.name)}">
             <td class="px-4 py-2.5 font-mono text-xs">${nsfwBadge}${esc(b.name)}${tag}</td>
@@ -162,7 +162,7 @@ function openBranchPreview(branchName) {
     $('#branch-preview-body').innerHTML = `
         <div class="flex flex-col items-center justify-center py-8">
             <div class="spinner"></div>
-            <p class="text-xs text-spire-muted mt-3">正在读取 Mod 列表...</p>
+            <p class="text-xs text-spire-muted mt-3">${esc(I18n.t('branch.loadingMods'))}</p>
         </div>`;
 
     sendMessage('GET_BRANCH_MODS', { branchName });
@@ -181,7 +181,7 @@ on('GET_BRANCH_MODS', data => {
     } else if (data.status === 'error') {
         $('#branch-preview-body').innerHTML = `
             <div class="text-center py-8">
-                <p class="text-xs text-spire-danger">读取失败，请返回重试</p>
+                <p class="text-xs text-spire-danger">${esc(I18n.t('branch.loadFailed'))}</p>
             </div>`;
     }
 });
@@ -219,7 +219,7 @@ function renderModCards() {
     if (mods.length === 0) {
         body.innerHTML = `
             <div class="text-center py-8">
-                <p class="text-xs text-spire-muted">该分支没有检测到 Mod</p>
+                <p class="text-xs text-spire-muted">${esc(I18n.t('branch.noMods'))}</p>
             </div>`;
         return;
     }
@@ -237,7 +237,7 @@ function renderModCards() {
     if (filtered.length === 0) {
         body.innerHTML = `
             <div class="text-center py-8">
-                <p class="text-xs text-spire-muted">没有匹配的 Mod</p>
+                <p class="text-xs text-spire-muted">${esc(I18n.t('branch.noMatch'))}</p>
             </div>`;
         return;
     }
@@ -255,8 +255,8 @@ function renderModCards() {
         </div>`;
 
     const countText = regex
-        ? `${filtered.length} / ${mods.length} 个 Mod`
-        : `${mods.length} 个 Mod`;
+        ? I18n.t('branch.modCountFiltered', { filtered: filtered.length, total: mods.length })
+        : I18n.t('branch.modCount', { count: mods.length });
 
     body.innerHTML = `
         <div class="text-xs text-spire-muted mb-3">${countText}</div>
@@ -286,8 +286,8 @@ $('#branch-preview-close').addEventListener('click', closeBranchModal);
 $('#branch-preview-sync').addEventListener('click', async () => {
     const name = branchPreviewName;
     const ok = await showConfirm(
-        `确定要强制同步到「${name}」？本地改动将被覆盖。`,
-        '同步分支'
+        I18n.t('branch.syncConfirmMessage', { name }),
+        I18n.t('branch.syncConfirmTitle')
     );
     if (ok) {
         closeBranchModal();
@@ -322,8 +322,8 @@ function renderBackupList(backups) {
 
     container.innerHTML = backups.map(b => {
         const typeBadge = b.type === 'save'
-            ? '<span class="text-[10px] bg-spire-accent/20 text-spire-accent rounded px-1.5 py-0.5">存档</span>'
-            : '<span class="text-[10px] bg-spire-warn/20 text-spire-warn rounded px-1.5 py-0.5">Mod</span>';
+            ? `<span class="text-[10px] bg-spire-accent/20 text-spire-accent rounded px-1.5 py-0.5">${esc(I18n.t('backup.typeSave'))}</span>`
+            : `<span class="text-[10px] bg-spire-warn/20 text-spire-warn rounded px-1.5 py-0.5">${esc(I18n.t('backup.typeMod'))}</span>`;
 
         const isSave = b.type === 'save';
         const safeName = esc(b.name);
@@ -337,9 +337,9 @@ function renderBackupList(backups) {
                         <div class="text-xs font-mono truncate">${safeName}</div>
                         <div class="text-[10px] text-spire-muted">${formatSize(b.sizeBytes)} · ${formatRelativeTime(b.createdAt)}</div>
                     </div>
-                    ${isSave ? '<span class="text-[10px] text-spire-muted ml-auto shrink-0">点击恢复 →</span>' : ''}
+                    ${isSave ? `<span class="text-[10px] text-spire-muted ml-auto shrink-0">${esc(I18n.t('backup.clickToRestore'))}</span>` : ''}
                 </div>
-                <button class="backup-delete-btn text-spire-muted hover:text-spire-danger text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-name="${safeAttrName}" title="删除备份">
+                <button class="backup-delete-btn text-spire-muted hover:text-spire-danger text-xs ml-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" data-name="${safeAttrName}" title="${escAttr(I18n.t('backup.deleteTooltip'))}">
                     <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
                 </button>
             </div>
@@ -351,8 +351,8 @@ function renderBackupList(backups) {
         row.addEventListener('click', async () => {
             const name = row.dataset.backup;
             const ok = await showConfirm(
-                `确定要恢复备份「${name}」？\n当前存档将被自动备份后替换。`,
-                '恢复存档备份'
+                I18n.t('backup.restoreConfirm', { name }),
+                I18n.t('backup.restoreTitle')
             );
             if (ok) {
                 sendMessage('RESTORE_BACKUP', { backupName: name });
@@ -366,8 +366,8 @@ function renderBackupList(backups) {
             e.stopPropagation();
             const name = btn.dataset.name;
             const ok = await showConfirm(
-                `确定要删除备份「${name}」？\n此操作不可撤销。`,
-                '删除备份'
+                I18n.t('backup.deleteConfirm', { name }),
+                I18n.t('backup.deleteTitle')
             );
             if (ok) {
                 sendMessage('DELETE_BACKUP', { backupName: name });
@@ -391,83 +391,9 @@ $('#backup-list-modal').addEventListener('click', e => {
 const REPO_URL = 'https://github.com/Ruikoto/sync-the-spire';
 const AUTHOR_URL = 'https://github.com/Ruikoto';
 
-const QUOTES_STS2 = [
-    '此事已成',
-    '咔咔！',
-    '咕嗷。。。',
-    '你管这叫武器？',
-    '败北？不可能的！！',
-    '为什么你还在这里？',
-    '永远别放弃！',
-    '小的们，给我上！',
-    '我们还没完呢！',
-    '逃命哇！',
-    '啊嗷嗷呜嗷！！',
-    '在蓄能啦！',
-    '要来咯！！',
-    '把钱交出来！',
-    '我的烟雾弹在哪儿呢……我找找……',
-    '多谢你的钱啦，嘿嘿',
-    '给我交出来！',
-    '我可溜了！',
-    '史莱姆撞击！！',
-    '侦测到外来者',
-    '你是我的了！',
-    '啊……居然有人来了…',
-    '愚蠢……何等愚蠢！',
-    '一直……都不…喜欢你……',
-    '嘎！哑！',
-    '重生中……',
-    '是时候了',
-    '滴 答 滴 答',
-    '撤退 撤退啊！',
-    '你好啊！买点什么吧！买买买！',
-    '你的发型很不错哦',
-    '看起来你还挺闲？',
-    '你是狗党还是猫党？',
-    '你看起来很~危险~啊，嘿嘿……',
-    '慢慢看…… 不慢也行',
-    '你喜欢这张地毯吗？可惜这个不卖',
-    '要支持我这样的小店啊！',
-    '面具就是酷，我也是同党啊！',
-    '多留会儿，听听音乐啊！',
-    '一个人前进太危险了！把你的钱都给我吧！',
-    '买点儿啥吧',
-    '我喜欢金币。',
-    '我最喜欢的颜色是蓝色。你呢？',
-    '这可是最后一次买东西的机会咯！ *挤眼* *挤眼*',
-    '其实呢，我是个猫党。',
-    '不用着急，不用着急。',
-    '曾经我也和你一样。',
-    '唷，还往上爬呢？',
-    '你好…… 我是… 涅奥……',
-    '你又… 来啦……',
-    '还想 再来……？',
-    '见到 Boss... 就能获得 更多… 祝福……',
-    '至少… 也要见到 第一个 Boss 吧……',
-    '我把你 带回来了……',
-    '选择……',
-    '实现了……',
-    '风险…… 与回报……',
-    '来试试 挑战 吧……',
-    '哎呀呀，这点金币可不够啊。',
-    '嘿兄弟，你没钱啊！',
-    '这个你买不起。',
-    '我这儿不是做慈善的。',
-    '谢 啦~',
-    '又一笔买卖…… 嚯嚯嚯！有得赚！',
-    '成交！',
-    '概不退换。',
-    '祝你顺利啊。',
-    '你有没有看见我的送货员？',
-    '这是… 怎么了…？…难道…真的… …做到了吗…？',
-    '…高塔沉睡了… 那么… 我也… …该睡了……',
-    '启程去屠戮这座高塔。',
-];
-
-// per-game quote lists — add new games here
+// per-game quote lists — dynamically read from I18n
 const QUOTES_BY_GAME = {
-    sts2: QUOTES_STS2,
+    sts2: 'quotes.sts2',
     // generic and other game types: no quotes
 };
 
@@ -475,8 +401,9 @@ function setRandomQuote(animate) {
     const el = $('#header-quote');
     const wsInfo = AppState.workspaces[AppState.activeWorkspaceId];
     const gameType = wsInfo?.gameType || '';
-    const quotes = QUOTES_BY_GAME[gameType] || [];
-    if (quotes.length === 0) { el.textContent = ''; return; }
+    const quotesKey = QUOTES_BY_GAME[gameType];
+    const quotes = quotesKey ? I18n.t(quotesKey) : [];
+    if (!Array.isArray(quotes) || quotes.length === 0) { el.textContent = ''; return; }
     const pick = () => {
         let q;
         do { q = quotes[Math.floor(Math.random() * quotes.length)]; } while (q === el.textContent && quotes.length > 1);
@@ -494,7 +421,7 @@ function setRandomQuote(animate) {
 $('#header-quote').addEventListener('click', () => setRandomQuote(true));
 
 $('#about-repo').textContent = 'GitHub';
-$('#about-author').textContent = 'Ruikoto（泡菜）';
+$('#about-author').textContent = I18n.t('settings.authorName');
 
 $('#about-repo').addEventListener('click', e => { e.preventDefault(); openExternal(REPO_URL); });
 $('#about-author').addEventListener('click', e => { e.preventDefault(); openExternal(AUTHOR_URL); });
@@ -577,7 +504,7 @@ function updateAboutVersionStatus() {
         latestEl.className = 'font-mono text-xs text-spire-success';
         dlBtn.classList.remove('hidden');
     } else {
-        latestEl.textContent = latestVersionInfo.latest_version + '（已是最新）';
+        latestEl.textContent = latestVersionInfo.latest_version + I18n.t('settings.upToDate');
         latestEl.className = 'font-mono text-xs text-spire-muted';
         dlBtn.classList.add('hidden');
     }
@@ -600,7 +527,7 @@ function showUpdateModal(isForced) {
     const storeBtn = $('#update-store');
     const downloadBtn = $('#update-download');
 
-    titleEl.textContent = '发现新版本';
+    titleEl.textContent = I18n.t('modals.update.title');
 
     // show version comparison
     $('#update-version-info').textContent = `${AppState.appVersion} → ${latestVersionInfo.latest_version}`;
@@ -626,14 +553,14 @@ function showUpdateModal(isForced) {
     // adjust buttons based on distribution channel
     if (AppState.appDistribution === 'store') {
         // store: use the primary store button for in-app update, hide zip download
-        storeBtn.textContent = '立即更新';
+        storeBtn.textContent = I18n.t('modals.update.storeUpdate');
         storeBtn.classList.remove('hidden');
         downloadBtn.classList.add('hidden');
     } else {
         // direct exe: show both — zip download (secondary) + store link (primary)
-        storeBtn.textContent = '从应用商店获取';
+        storeBtn.textContent = I18n.t('modals.update.storeGet');
         storeBtn.classList.remove('hidden');
-        downloadBtn.textContent = '立即下载';
+        downloadBtn.textContent = I18n.t('modals.update.download');
         downloadBtn.classList.remove('hidden');
     }
 
@@ -705,10 +632,10 @@ async function checkForUpdates(silent = true) {
                 showUpdateBadge();
             }
         } else if (!silent) {
-            toast('当前已是最新版本', 'success');
+            toast(I18n.t('toast.upToDate'), 'success');
         }
     } catch (e) {
-        if (!silent) toast('检查更新失败，请检查网络连接', 'error');
+        if (!silent) toast(I18n.t('toast.updateCheckFailed'), 'error');
     } finally {
         clearTimeout(timeout);
     }
@@ -729,7 +656,7 @@ async function checkForStoreUpdates(silent) {
     // we intentionally skip any version.json fallback here to avoid confusing users
     // who'd see an update prompt but find nothing in the Store.
     if (!result || !result.available) {
-        if (!silent) toast('当前已是最新版本', 'success');
+        if (!silent) toast(I18n.t('toast.upToDate'), 'success');
         return;
     }
 
@@ -759,12 +686,12 @@ on('INSTALL_STORE_UPDATE', data => {
     }
     const result = data.payload?.result;
     if (result === 'completed') {
-        toast('更新已完成，重启应用后生效', 'success');
+        toast(I18n.t('toast.updateDone'), 'success');
         closeUpdateModal();
     } else if (result === 'canceled') {
-        toast('更新已取消', 'info');
+        toast(I18n.t('toast.updateCanceled'), 'info');
     } else if (result === 'no_updates') {
-        toast('当前已是最新版本', 'success');
+        toast(I18n.t('toast.upToDate'), 'success');
         closeUpdateModal();
     } else {
         // error — fallback to store page

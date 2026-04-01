@@ -155,10 +155,6 @@ public class StS2Adapter : IGameAdapter
     public string[] SaveProfileNames => ["profile1", "profile2", "profile3"];
     public string ModdedSaveSubfolder => "modded";
 
-    // ── git exclude rules ────────────────────────────────────────────────
-
-    public IReadOnlyList<string> GetExcludeRules() => [];
-
     // ── Steam helpers (moved from SteamFinderService) ────────────────────
 
     private static string? GetSteamPath()

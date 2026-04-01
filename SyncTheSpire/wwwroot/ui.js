@@ -74,7 +74,7 @@ function showLoading(text, percent) {
     clearTimeout(showLoading._timer);
     showLoading._timer = setTimeout(() => {
         hideLoading();
-        toast('操作超时，请重试', 'error');
+        toast(I18n.t('common.operationTimeout'), 'error');
     }, 120_000);
 }
 
@@ -148,7 +148,7 @@ hideLoading = function () {
 // themed confirm dialog — returns a Promise<boolean>
 function showConfirm(message, title) {
     return new Promise(resolve => {
-        $('#confirm-title').textContent = title || '确认';
+        $('#confirm-title').textContent = title || I18n.t('common.confirm');
         $('#confirm-message').textContent = message;
         const modal = $('#confirm-modal');
         modal.classList.remove('hidden');
@@ -214,15 +214,15 @@ function formatSize(bytes) {
 
 function formatRelativeTime(ms) {
     const diff = Date.now() - ms;
-    if (diff < 0) return '刚刚'; // clock skew guard
+    if (diff < 0) return I18n.t('time.justNow'); // clock skew guard
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return '刚刚';
-    if (mins < 60) return `${mins} 分钟前`;
+    if (mins < 1) return I18n.t('time.justNow');
+    if (mins < 60) return I18n.t('time.minutesAgo', { n: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} 小时前`;
+    if (hours < 24) return I18n.t('time.hoursAgo', { n: hours });
     const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} 天前`;
-    return new Date(ms).toLocaleDateString('zh-CN');
+    if (days < 30) return I18n.t('time.daysAgo', { n: days });
+    return new Date(ms).toLocaleDateString(I18n.getLang());
 }
 
 // open external links via WebView2's built-in navigation handler

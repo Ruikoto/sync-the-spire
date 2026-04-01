@@ -238,7 +238,17 @@ public class ConfigHandler : HandlerBase
 
             FileSystemHelper.ForceDeleteDirectory(_configService.GitDirPath);
 
-            _gitService.CloneRepo();
+            try
+            {
+                _gitService.CloneRepo();
+            }
+            catch
+            {
+                // clone failed — restore stashed mod files so they aren't lost
+                if (Directory.Exists(stashPath) && !Directory.Exists(_configService.RepoPath))
+                    Directory.Move(stashPath, _configService.RepoPath);
+                throw;
+            }
 
             // restore mod files into the fresh Repo/ so the user's mods survive
             if (Directory.Exists(stashPath))

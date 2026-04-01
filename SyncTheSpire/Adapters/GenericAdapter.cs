@@ -49,7 +49,4 @@ public class GenericAdapter : IGameAdapter
     public string[] SaveProfileNames => [];
     public string ModdedSaveSubfolder => string.Empty;
 
-    // ── git exclude rules ────────────────────────────────────────────────
-
-    public IReadOnlyList<string> GetExcludeRules() => [];
 }

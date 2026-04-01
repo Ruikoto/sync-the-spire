@@ -316,6 +316,27 @@ public class WorkspaceManager
                 try { junctionService.RemoveJunction(ws.GameModPath); }
                 catch (Exception ex) { LogService.Warn($"Failed to remove junction on workspace delete: {ex.Message}"); }
             }
+
+            // clean up save-folder junctions (modded/profileN) that point into this workspace's Repo
+            if (!string.IsNullOrWhiteSpace(ws.SaveFolderPath) && Directory.Exists(ws.SaveFolderPath))
+            {
+                var adapter = Adapters.GameAdapterRegistry.Get(ws.GameType);
+                var moddedSub = adapter.ModdedSaveSubfolder;
+                if (!string.IsNullOrEmpty(moddedSub))
+                {
+                    var moddedDir = Path.Combine(ws.SaveFolderPath, moddedSub);
+                    foreach (var profileName in adapter.SaveProfileNames)
+                    {
+                        var jPath = Path.Combine(moddedDir, profileName);
+                        try
+                        {
+                            if (junctionService.IsJunction(jPath))
+                                junctionService.RemoveJunction(jPath);
+                        }
+                        catch (Exception ex) { LogService.Warn($"Failed to remove save junction {jPath}: {ex.Message}"); }
+                    }
+                }
+            }
         }
 
         if (Directory.Exists(wsDir))

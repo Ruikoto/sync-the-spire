@@ -86,13 +86,6 @@ public interface IGameAdapter
     /// </summary>
     string ModdedSaveSubfolder { get; }
 
-    // ── git exclude rules (game-specific ignores) ────────────────────────
-
-    /// <summary>
-    /// extra lines to append to info/exclude beyond the default OS/IDE rules.
-    /// return empty if no game-specific exclusions needed.
-    /// </summary>
-    IReadOnlyList<string> GetExcludeRules();
 }
 
 // ── shared result types ──────────────────────────────────────────────────
