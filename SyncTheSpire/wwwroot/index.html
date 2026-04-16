@@ -9,19 +9,30 @@
 </head>
 <body class="bg-spire-bg text-spire-text h-screen overflow-hidden flex flex-col select-none">
 
-    <!-- custom title bar -->
-    <div id="titlebar" class="flex items-center justify-between bg-spire-card border-b border-spire-border h-9 shrink-0">
-        <div id="titlebar-drag" class="flex-1 h-full flex items-center pl-3 cursor-default">
-            <span class="text-xs font-medium text-spire-muted">Sync the Spire</span>
-        </div>
-        <div class="flex h-full">
-            <button id="btn-minimize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最小化">
+    <!-- custom title bar / tab bar -->
+    <div id="titlebar" class="flex items-center bg-spire-card border-b border-spire-border h-9 shrink-0">
+        <!-- home tab (always visible) -->
+        <button id="tab-home" class="tab-item active no-drag w-9 h-full flex items-center justify-center text-xs text-spire-muted hover:text-spire-text transition-colors shrink-0" data-tab="home">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>
+        </button>
+        <!-- dynamic workspace tabs -->
+        <div id="tab-bar" class="tab-bar-scroll flex items-center h-full overflow-x-auto min-w-0 shrink"></div>
+        <!-- drag area (fills remaining space, min width for usability) -->
+        <div id="titlebar-drag" class="flex-1 h-full min-w-[40px] cursor-default"></div>
+        <!-- global settings (sliders icon, distinct from workspace gear) -->
+        <button id="btn-titlebar-settings" class="relative no-drag w-9 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" title="设置" data-i18n-title="titlebar.settings">
+            <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5" style="width:14px;height:14px;"></i>
+            <span id="settings-update-dot" class="hidden absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
+        </button>
+        <!-- window controls -->
+        <div class="flex h-full shrink-0">
+            <button id="btn-minimize" class="titlebar-btn no-drag w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最小化" data-i18n-aria="titlebar.minimize">
                 <svg width="10" height="1" viewBox="0 0 10 1"><rect fill="currentColor" width="10" height="1"/></svg>
             </button>
-            <button id="btn-maximize" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最大化">
+            <button id="btn-maximize" class="titlebar-btn no-drag w-11 h-full flex items-center justify-center text-spire-muted hover:bg-white/10 hover:text-spire-text transition-colors" aria-label="最大化" data-i18n-aria="titlebar.maximize">
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
             </button>
-            <button id="btn-close" class="titlebar-btn w-11 h-full flex items-center justify-center text-spire-muted hover:bg-spire-danger hover:text-white transition-colors" aria-label="关闭">
+            <button id="btn-close" class="titlebar-btn no-drag w-11 h-full flex items-center justify-center text-spire-muted hover:bg-spire-danger hover:text-white transition-colors" aria-label="关闭" data-i18n-aria="titlebar.close">
                 <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
             </button>
         </div>
@@ -49,17 +60,18 @@
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
             <div class="flex items-center gap-2 mb-3">
                 <i data-lucide="triangle-alert" class="w-5 h-5 text-spire-danger shrink-0"></i>
-                <h3 class="text-sm font-medium">存档合并功能已下线</h3>
+                <h3 class="text-sm font-medium" data-i18n="saveBackup.unlinkTitle">存档合并功能已下线</h3>
             </div>
-            <p class="text-xs text-spire-muted mb-2 leading-relaxed">
-                检测到你的存档处于合并状态。该功能存在严重问题，会导致<span class="text-spire-danger font-medium">最新游玩记录丢失（被回档）</span>。
+            <p class="text-xs text-spire-muted mb-2 leading-relaxed" data-i18n="saveBackup.unlinkWarning">
+                检测到你的存档处于合并状态。该功能存在严重问题，会导致<span class="text-spire-danger font-medium" data-i18n="saveBackup.unlinkWarningHighlight">最新游玩记录丢失（被回档）</span>。
             </p>
-            <p class="text-xs text-spire-muted mb-5 leading-relaxed">
+            <p class="text-xs text-spire-muted mb-5 leading-relaxed" data-i18n="saveBackup.unlinkHint">
                 请点击下方按钮关闭存档合并，操作前会自动备份所有存档。
             </p>
             <p id="save-unlink-error" class="hidden text-xs text-spire-danger mb-3 leading-relaxed"></p>
             <button id="btn-do-unlink"
-                class="w-full text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-4 py-2 transition-colors font-medium">
+                class="w-full text-xs bg-spire-danger hover:bg-spire-dangerHover text-white rounded-lg px-4 py-2 transition-colors font-medium"
+                data-i18n="saveBackup.unlinkButton">
                 关闭存档合并
             </button>
         </div>
@@ -72,11 +84,13 @@
             <p id="confirm-message" class="text-xs text-spire-muted mb-5 leading-relaxed"></p>
             <div class="flex justify-end gap-2">
                 <button id="confirm-cancel"
-                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                    data-i18n="common.cancel">
                     取消
                 </button>
                 <button id="confirm-ok"
-                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors"
+                    data-i18n="common.confirm">
                     确认
                 </button>
             </div>
@@ -86,21 +100,53 @@
     <!-- conflict resolution dialog -->
     <div id="conflict-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
-            <h3 class="text-sm font-medium mb-2">检测到冲突</h3>
+            <h3 class="text-sm font-medium mb-2" data-i18n="modals.conflict.title">检测到冲突</h3>
             <p id="conflict-message" class="text-xs text-spire-muted mb-5 leading-relaxed"></p>
             <div class="flex flex-col gap-2">
                 <button id="conflict-use-local"
-                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors">
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors"
+                    data-i18n="modals.conflict.useLocal">
                     使用本地版本（覆盖云端）
                 </button>
                 <button id="conflict-use-remote"
-                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors">
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors"
+                    data-i18n="modals.conflict.useRemote">
                     使用云端版本（覆盖本地）
                 </button>
                 <button id="conflict-cancel"
-                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                    data-i18n="common.cancel">
                     取消
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- mod diff preview modal -->
+    <div id="mod-diff-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 flex flex-col" style="max-height:80vh">
+            <!-- header -->
+            <div class="flex items-center justify-between px-5 pt-5 pb-3">
+                <div class="flex items-center gap-2">
+                    <i id="mod-diff-icon" class="w-4 h-4 text-spire-accent" data-lucide="arrow-up-circle" style="width:16px;height:16px"></i>
+                    <h3 id="mod-diff-title" class="text-sm font-medium">Mod 差异预览</h3>
+                </div>
+                <button id="mod-diff-close" class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+            </div>
+            <!-- scrollable body -->
+            <div id="mod-diff-body" class="flex-1 overflow-y-auto px-5 min-h-0">
+                <!-- dynamically rendered diff sections -->
+            </div>
+            <!-- footer -->
+            <div class="flex items-center justify-between px-5 py-4">
+                <span id="mod-diff-unchanged" class="text-[11px] text-spire-muted"></span>
+                <div class="flex gap-2">
+                    <button id="mod-diff-cancel"
+                        class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                        data-i18n="common.cancel">取消</button>
+                    <button id="mod-diff-confirm"
+                        class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">确认</button>
+                </div>
             </div>
         </div>
     </div>
@@ -108,12 +154,13 @@
     <!-- steam account selection modal (for save path auto-find) -->
     <div id="steam-account-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
-            <h3 class="text-sm font-medium mb-1">选择 Steam 账号</h3>
-            <p class="text-xs text-spire-muted mb-4">检测到多个 Steam 账号，请选择要使用的存档：</p>
+            <h3 class="text-sm font-medium mb-1" data-i18n="modals.steam.title">选择 Steam 账号</h3>
+            <p class="text-xs text-spire-muted mb-4" data-i18n="modals.steam.description">检测到多个 Steam 账号，请选择要使用的存档：</p>
             <div id="steam-account-list" class="flex flex-col gap-1.5 max-h-48 overflow-y-auto mb-4"></div>
             <div class="flex justify-end">
                 <button id="steam-account-cancel"
-                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                    data-i18n="common.cancel">
                     取消
                 </button>
             </div>
@@ -126,21 +173,24 @@
             <div class="flex items-center justify-between mb-3">
                 <h3 id="update-title" class="text-sm font-medium"></h3>
                 <button id="update-modal-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭" data-i18n-aria="common.close">&times;</button>
             </div>
             <p id="update-version-info" class="text-xs text-spire-muted mb-3"></p>
             <div id="update-changelog" class="text-xs text-spire-muted mb-4 leading-relaxed max-h-48 overflow-y-auto update-changelog"></div>
             <div class="flex justify-end gap-2">
                 <button id="update-cancel"
-                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                    data-i18n="modals.update.later">
                     稍后
                 </button>
                 <button id="update-download"
-                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors">
+                    class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                    data-i18n="modals.update.download">
                     立即下载
                 </button>
                 <button id="update-store"
-                    class="hidden text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">
+                    class="hidden text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors"
+                    data-i18n="modals.update.storeGet">
                     从应用商店获取
                 </button>
             </div>
@@ -154,25 +204,25 @@
             <!-- LIST VIEW (branch table) -->
             <div id="branch-list-view" class="flex flex-col flex-1 min-h-0">
                 <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border shrink-0">
-                    <h2 class="text-sm font-medium">选择分支</h2>
+                    <h2 class="text-sm font-medium" data-i18n="branch.selectBranch">选择分支</h2>
                     <button id="branch-modal-close"
-                        class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+                        class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭" data-i18n-aria="common.close">&times;</button>
                 </div>
                 <div class="overflow-auto flex-1">
                     <table class="w-full text-sm">
                         <thead class="sticky top-0 bg-spire-card z-10">
                             <tr class="border-b border-spire-border text-spire-muted text-xs">
                                 <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
-                                    data-key="name">分支名称</th>
+                                    data-key="name" data-i18n="branch.branchName">分支名称</th>
                                 <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors"
-                                    data-key="author">修改人</th>
+                                    data-key="author" data-i18n="branch.author">修改人</th>
                                 <th class="branch-sort-th text-left px-4 py-2 cursor-pointer hover:text-spire-text transition-colors active-sort"
-                                    data-key="lastModified">最近修改 <span class="sort-arrow">▼</span></th>
+                                    data-key="lastModified" data-i18n="branch.lastModified">最近修改 <span class="sort-arrow">▼</span></th>
                             </tr>
                         </thead>
                         <tbody id="branch-table-body"></tbody>
                     </table>
-                    <p id="branch-empty" class="hidden text-center text-spire-muted text-xs py-8">暂无可用分支</p>
+                    <p id="branch-empty" class="hidden text-center text-spire-muted text-xs py-8" data-i18n="branch.empty">暂无可用分支</p>
                 </div>
             </div>
 
@@ -180,19 +230,19 @@
             <div id="branch-preview-view" class="hidden flex flex-col flex-1 min-h-0">
                 <div class="flex items-center gap-3 px-4 py-3 border-b border-spire-border shrink-0">
                     <button id="branch-preview-back"
-                        class="text-spire-muted hover:text-spire-text transition-colors shrink-0" aria-label="返回">
+                        class="text-spire-muted hover:text-spire-text transition-colors shrink-0" aria-label="返回" data-i18n-aria="common.back">
                         <i data-lucide="chevron-left" class="w-4 h-4"></i>
                     </button>
                     <h2 id="branch-preview-name" class="text-sm font-medium font-mono truncate flex-1"></h2>
                     <button id="branch-preview-close"
-                        class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1 shrink-0" aria-label="关闭">&times;</button>
+                        class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1 shrink-0" aria-label="关闭" data-i18n-aria="common.close">&times;</button>
                 </div>
                 <div class="px-4 py-2 border-b border-spire-border shrink-0">
                     <div class="flex items-center gap-2">
-                        <input id="mod-search-input" type="text" placeholder="搜索 Mod..."
+                        <input id="mod-search-input" type="text" placeholder="搜索 Mod..." data-i18n-placeholder="branch.searchPlaceholder"
                             class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-spire-accent" />
-                        <button id="mod-search-case" class="mod-search-toggle text-[10px] border border-spire-border rounded px-1.5 py-1 text-spire-muted hover:text-spire-text transition-colors" title="区分大小写">Aa</button>
-                        <button id="mod-search-word" class="mod-search-toggle text-[10px] border border-spire-border rounded px-1.5 py-1 text-spire-muted hover:text-spire-text transition-colors" title="全字匹配">W</button>
+                        <button id="mod-search-case" class="mod-search-toggle text-[10px] border border-spire-border rounded px-1.5 py-1 text-spire-muted hover:text-spire-text transition-colors" title="区分大小写" data-i18n-title="branch.caseSensitive">Aa</button>
+                        <button id="mod-search-word" class="mod-search-toggle text-[10px] border border-spire-border rounded px-1.5 py-1 text-spire-muted hover:text-spire-text transition-colors" title="全字匹配" data-i18n-title="branch.wholeWord">W</button>
                     </div>
                 </div>
                 <div id="branch-preview-body" class="overflow-auto flex-1 p-4">
@@ -200,7 +250,8 @@
                 </div>
                 <div class="px-4 py-3 border-t border-spire-border shrink-0">
                     <button id="branch-preview-sync"
-                        class="w-full text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors font-medium">
+                        class="w-full text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-2 transition-colors font-medium"
+                        data-i18n="branch.syncBranch">
                         同步此分支
                     </button>
                 </div>
@@ -210,9 +261,9 @@
     </div>
 
     <!-- ============ WELCOME MODAL ============ -->
-    <div id="welcome-modal" class="hidden fixed inset-0 z-35 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+    <div id="welcome-modal" class="hidden fixed inset-0 z-[35] bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border max-w-md w-full mx-4 p-6">
-            <h2 class="text-lg font-bold mb-5">欢迎来到 Sync the Spire</h2>
+            <h2 class="text-lg font-bold mb-5" data-i18n="modals.welcome.title">欢迎来到 Sync the Spire</h2>
             <div class="flex flex-col gap-4 mb-6">
                 <!-- git sync -->
                 <div class="flex items-start gap-3">
@@ -220,8 +271,8 @@
                         <i data-lucide="git-branch" class="w-5 h-5 text-spire-accent"></i>
                     </div>
                     <div>
-                        <p class="text-sm font-medium mb-0.5">基于 Git 实现同步</p>
-                        <p class="text-xs text-spire-muted leading-relaxed">本应用不内置提供任何云存储，因此你需要拥有一个远程仓库。你可以自己创建一个，或者使用你联机队友创建的仓库。</p>
+                        <p class="text-sm font-medium mb-0.5" data-i18n="modals.welcome.gitSyncTitle">基于 Git 实现同步</p>
+                        <p class="text-xs text-spire-muted leading-relaxed" data-i18n="modals.welcome.gitSyncDesc">本应用不内置提供任何云存储，因此你需要拥有一个远程仓库。你可以自己创建一个，或者使用你联机队友创建的仓库。</p>
                     </div>
                 </div>
                 <!-- create repo -->
@@ -230,8 +281,8 @@
                         <i data-lucide="globe" class="w-5 h-5 text-spire-accent"></i>
                     </div>
                     <div>
-                        <p class="text-sm font-medium mb-0.5">创建远程仓库</p>
-                        <p class="text-xs text-spire-muted leading-relaxed">你可以使用
+                        <p class="text-sm font-medium mb-0.5" data-i18n="modals.welcome.createRepoTitle">创建远程仓库</p>
+                        <p class="text-xs text-spire-muted leading-relaxed" data-i18n-html="modals.welcome.createRepoDesc">你可以使用
                             <a href="#" onclick="openExternal('https://sts.rkto.cc/guide/gitee');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">Gitee</a>、<a href="#" onclick="openExternal('https://sts.rkto.cc/guide/github');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">GitHub</a>
                             等平台创建免费的远程仓库。<br>不会操作？我们为你准备了<a href="#" onclick="openExternal('https://sts.rkto.cc/guide/getting-started');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">使用教程</a>！
                         </p>
@@ -243,12 +294,88 @@
                         <i data-lucide="users" class="w-5 h-5 text-spire-accent"></i>
                     </div>
                     <div>
-                        <p class="text-sm font-medium mb-0.5">跟随联机队友</p>
-                        <p class="text-xs text-spire-muted leading-relaxed">使用队友提供的远程仓库，来跟随使用队友的Mod文件，或创建自己的分支，分享自己的Mod配置。<br>不会操作？我们为你准备了<a href="#" onclick="openExternal('https://sts.rkto.cc/guide/getting-started');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">使用教程</a>！</p>
+                        <p class="text-sm font-medium mb-0.5" data-i18n="modals.welcome.followTitle">跟随联机队友</p>
+                        <p class="text-xs text-spire-muted leading-relaxed" data-i18n-html="modals.welcome.followDesc">使用队友提供的远程仓库，来跟随使用队友的Mod文件，或创建自己的分支，分享自己的Mod配置。<br>不会操作？我们为你准备了<a href="#" onclick="openExternal('https://sts.rkto.cc/guide/getting-started');return false;" class="text-spire-accent hover:text-spire-accentHover underline transition-colors">使用教程</a>！</p>
                     </div>
                 </div>
             </div>
-            <button id="btn-welcome-continue" class="w-full bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2.5 transition-colors text-sm cursor-pointer">继续</button>
+            <button id="btn-welcome-continue" class="w-full bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2.5 transition-colors text-sm cursor-pointer" data-i18n="modals.welcome.continue">继续</button>
+        </div>
+    </div>
+
+    <!-- ============ HOME PAGE ============ -->
+    <div id="page-home" class="hidden flex-col flex-1 overflow-y-auto p-4 gap-4">
+        <!-- app title -->
+        <h1 class="text-xl font-bold">Sync the Spire</h1>
+        <!-- workspace section -->
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-medium text-spire-muted" data-i18n="home.workspaces">工作区</h2>
+            <button id="btn-create-workspace"
+                class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors flex items-center gap-1.5"
+                data-i18n="home.createWorkspace">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                新建工作区
+            </button>
+        </div>
+        <input id="workspace-search" type="text" placeholder="搜索工作区..." data-i18n-placeholder="home.searchPlaceholder"
+            class="w-full bg-spire-card border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+        <div id="workspace-grid" class="flex flex-col gap-3"></div>
+        <div id="workspace-empty" class="hidden flex flex-col items-center justify-center py-16 text-spire-muted">
+            <svg class="w-12 h-12 mb-3 opacity-30" style="width:48px;height:48px;" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/></svg>
+            <p class="text-sm mb-1" data-i18n="home.emptyTitle">还没有工作区</p>
+            <p class="text-xs" data-i18n="home.emptyDescription">点击上方按钮创建你的第一个工作区</p>
+        </div>
+    </div>
+
+    <!-- create workspace wizard modal -->
+    <div id="create-workspace-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 p-5 flex flex-col" style="animation: fadeIn 0.25s ease-out;">
+            <!-- wizard body -->
+            <div id="wizard-body" class="overflow-hidden">
+                <!-- step 1: game type selection -->
+                <div id="wizard-step-1" class="wizard-step p-1">
+                    <h3 class="text-sm font-medium mb-1" data-i18n="home.createWizard.step1Title">选择游戏</h3>
+                    <p class="text-xs text-spire-muted mb-4" data-i18n="home.createWizard.step1Desc">选择你要同步的游戏类型</p>
+                    <div id="wizard-game-grid" class="grid grid-cols-2 gap-3">
+                        <!-- dynamically populated by home.js -->
+                    </div>
+                </div>
+                <!-- step 2: name + create -->
+                <div id="wizard-step-2" class="wizard-step hidden p-1">
+                    <div class="flex items-center gap-2 mb-4">
+                        <button id="wizard-back" class="text-spire-muted hover:text-spire-text transition-colors p-1 -ml-1" type="button">
+                            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                        </button>
+                        <h3 class="text-sm font-medium" data-i18n="home.createWizard.step2Title">创建工作区</h3>
+                    </div>
+                    <div id="wizard-selected-game" class="flex items-center gap-2 mb-4">
+                        <span id="wizard-selected-icon" class="flex items-center"></span>
+                        <span id="wizard-selected-name" class="game-badge text-xs"></span>
+                    </div>
+                    <div class="mb-4">
+                        <label for="new-ws-name" class="block text-xs text-spire-muted mb-1.5" data-i18n="home.createWizard.nameLabel">工作区名称</label>
+                        <input id="new-ws-name" type="text" placeholder="为你的工作区起个名字" data-i18n-placeholder="home.createWizard.namePlaceholder"
+                            class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
+                    </div>
+                    <div class="flex justify-end gap-2 mt-auto">
+                        <button id="create-ws-cancel"
+                            class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                            data-i18n="common.cancel" type="button">
+                            取消
+                        </button>
+                        <button id="create-ws-confirm"
+                            class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors"
+                            data-i18n="common.create" type="button">
+                            创建
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- progress dots -->
+            <div id="wizard-dots" class="flex justify-center gap-2 mt-4">
+                <span class="wizard-dot active"></span>
+                <span class="wizard-dot"></span>
+            </div>
         </div>
     </div>
 
@@ -256,11 +383,20 @@
     <div id="page-setup" class="hidden flex-col flex-1 overflow-y-auto">
         <div class="flex justify-center p-6">
             <div class="w-full max-w-md bg-spire-card rounded-xl border border-spire-border p-6">
-                <h1 class="text-xl font-bold mb-0.5">Sync the Spire</h1>
+                <div class="flex items-center gap-2 mb-2">
+                    <span id="setup-game-icon" class="flex items-center"></span>
+                    <div id="setup-ws-name-display" class="group flex items-center gap-1.5 cursor-pointer rounded-md px-1 -ml-1 hover:bg-white/5 transition-colors" title="点击重命名工作区" data-i18n-title="setup.renameTooltip">
+                        <h1 id="setup-ws-name" class="text-xl font-bold">Sync the Spire</h1>
+                        <svg class="w-3.5 h-3.5 text-spire-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" style="width:14px;height:14px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                    </div>
+                    <input id="setup-ws-name-input" type="text"
+                        class="hidden text-xl font-bold bg-spire-bg border border-spire-accent rounded-lg px-2 py-0.5 focus:outline-none flex-1 min-w-0" />
+                </div>
                 <div class="flex items-center justify-between mb-4">
-                    <p id="setup-subtitle" class="text-spire-muted text-sm">首次配置 — 填写以下信息开始同步</p>
+                    <p id="setup-subtitle" class="text-spire-muted text-sm" data-i18n="setup.firstTimeSubtitle">首次配置 — 填写以下信息开始同步</p>
                     <a id="setup-guide-link" href="#" onclick="showWelcomeModal();return false;"
-                        class="inline-flex items-center gap-1 text-xs text-spire-accent hover:text-spire-accentHover transition-colors shrink-0">
+                        class="inline-flex items-center gap-1 text-xs text-spire-accent hover:text-spire-accentHover transition-colors shrink-0"
+                        data-i18n="setup.guideLink">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/>
                         </svg>
@@ -270,107 +406,117 @@
 
                 <form id="setup-form" class="flex flex-col gap-4" autocomplete="off">
                     <div>
-                        <label for="cfg-repo" class="block text-sm mb-1">远程仓库 URL</label>
-                        <input id="cfg-repo" type="text" placeholder="https://github.com/user/mods.git"
+                        <label for="cfg-repo" class="block text-sm mb-1" data-i18n="setup.repoUrlLabel">远程仓库 URL</label>
+                        <input id="cfg-repo" type="text" placeholder="https://github.com/user/mods.git" data-i18n-placeholder="setup.repoUrlPlaceholder"
                             class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
-                            <label for="cfg-nickname" class="block text-sm">用户昵称</label>
-                            <span class="help-tip" data-tip="用于同步Mod文件时的署名">?</span>
+                            <label for="cfg-nickname" class="block text-sm" data-i18n="setup.nicknameLabel">用户昵称</label>
+                            <span class="help-tip" data-tip="用于同步Mod文件时的署名" data-i18n-tip="setup.nicknameTip">?</span>
                         </div>
-                        <input id="cfg-nickname" type="text" placeholder="填写你的昵称"
+                        <input id="cfg-nickname" type="text" placeholder="填写你的昵称" data-i18n-placeholder="setup.nicknamePlaceholder"
                             class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5 mb-2">
-                            <label class="block text-sm">鉴权方式</label>
-                            <span class="help-tip" data-tip="Gitee 平台请使用免密认证方式">?</span>
+                            <label class="block text-sm" data-i18n="setup.authTypeLabel">鉴权方式</label>
+                            <span class="help-tip" data-tip="Gitee 平台请使用免密认证方式" data-i18n-tip="setup.authTypeTip">?</span>
                         </div>
                         <div class="flex bg-spire-bg rounded-lg border border-spire-border p-0.5">
                             <label class="auth-tab active flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150">
                                 <input type="radio" name="authType" value="anonymous" checked class="hidden" />
-                                免密
+                                <span data-i18n="setup.authAnonymous">免密</span>
                             </label>
                             <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
                                 <input type="radio" name="authType" value="https" class="hidden" />
-                                HTTPS
+                                <span data-i18n="setup.authHttps">HTTPS</span>
                             </label>
                             <label class="auth-tab flex-1 text-center text-sm py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
                                 <input type="radio" name="authType" value="ssh" class="hidden" />
-                                SSH
+                                <span data-i18n="setup.authSsh">SSH</span>
                             </label>
                         </div>
                     </div>
                     <!-- HTTPS auth fields -->
                     <div id="auth-https" class="hidden flex flex-col gap-4">
                         <div>
-                            <label for="cfg-user" class="block text-sm mb-1">用户名</label>
-                            <input id="cfg-user" type="text" placeholder="your-username"
+                            <label for="cfg-user" class="block text-sm mb-1" data-i18n="setup.usernameLabel">用户名</label>
+                            <input id="cfg-user" type="text" placeholder="your-username" data-i18n-placeholder="setup.usernamePlaceholder"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                         <div>
-                            <label for="cfg-token" class="block text-sm mb-1">密码 / Token</label>
-                            <input id="cfg-token" type="password" placeholder="未修改则保持原值"
+                            <label for="cfg-token" class="block text-sm mb-1" data-i18n="setup.tokenLabel">密码 / Token</label>
+                            <input id="cfg-token" type="password" placeholder="未修改则保持原值" data-i18n-placeholder="setup.tokenPlaceholder"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                     </div>
                     <!-- SSH auth fields -->
                     <div id="auth-ssh" class="hidden flex flex-col gap-4">
                         <div>
-                            <label for="cfg-ssh-key" class="block text-sm mb-1">SSH 私钥路径</label>
-                            <input id="cfg-ssh-key" type="text" placeholder="C:\Users\you\.ssh\id_ed25519"
+                            <label for="cfg-ssh-key" class="block text-sm mb-1" data-i18n="setup.sshKeyLabel">SSH 私钥路径</label>
+                            <input id="cfg-ssh-key" type="text" placeholder="C:\Users\you\.ssh\id_ed25519" data-i18n-placeholder="setup.sshKeyPlaceholder"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                         <div>
-                            <label for="cfg-ssh-pass" class="block text-sm mb-1">私钥密码 <span class="text-spire-muted">(可选)</span></label>
-                            <input id="cfg-ssh-pass" type="password" placeholder="未修改则保持原值"
+                            <label for="cfg-ssh-pass" class="block text-sm mb-1" data-i18n="setup.sshPassLabel">私钥密码 <span class="text-spire-muted" data-i18n="setup.sshPassOptional">(可选)</span></label>
+                            <input id="cfg-ssh-pass" type="password" placeholder="未修改则保持原值" data-i18n-placeholder="setup.sshPassPlaceholder"
                                 class="w-full bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                         </div>
                     </div>
+                    <div id="game-path-group">
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
-                            <label for="cfg-path" class="block text-sm">游戏安装路径</label>
-                            <span class="help-tip" data-tip="在 Steam 中右键游戏 → 管理 → 浏览本地文件，打开的路径即为游戏安装路径。自动查找仅支持 Steam 平台。">?</span>
+                            <label for="cfg-path" class="block text-sm" id="label-game-path" data-i18n="setup.gamePathLabel">游戏安装路径</label>
+                            <span class="help-tip" data-tip="在 Steam 中右键游戏 → 管理 → 浏览本地文件，打开的路径即为游戏安装路径。自动查找仅支持 Steam 平台。" data-i18n-tip="setup.gamePathTip">?</span>
                         </div>
                         <div class="flex gap-2">
-                            <input id="cfg-path" type="text" placeholder="直接粘贴路径或点击右侧按钮选择"
+                            <input id="cfg-path" type="text" placeholder="直接粘贴路径或点击右侧按钮选择" data-i18n-placeholder="setup.pathPlaceholder"
                                 class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                             <button type="button" id="btn-find-game"
-                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0">
+                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0"
+                                data-i18n="setup.autoFind">
                                 自动查找
                             </button>
                             <button type="button" id="btn-pick-game"
-                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0">
+                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0"
+                                data-i18n="setup.browse">
                                 浏览...
                             </button>
                         </div>
                     </div>
+                    </div>
+                    <div id="save-path-group">
                     <div>
                         <div class="flex items-center gap-1.5 mb-1">
-                            <label for="cfg-save" class="block text-sm">存档文件夹路径 <span class="text-spire-muted">(可选)</span></label>
-                            <span class="help-tip" data-tip="启动游戏后，按键盘数字 1 左侧的 ` 键打开控制台，输入 open saves 后按回车，打开的文件夹即是存档路径。不填写则无法使用存档备份与恢复功能，其他功能不受影响。自动查找仅支持 Steam 平台。">?</span>
+                            <label for="cfg-save" class="block text-sm" data-i18n="setup.savePathLabel">存档文件夹路径 <span class="text-spire-muted" data-i18n="setup.savePathOptional">(可选)</span></label>
+                            <span class="help-tip" data-tip="启动游戏后，按键盘数字 1 左侧的 ` 键打开控制台，输入 open saves 后按回车，打开的文件夹即是存档路径。不填写则无法使用存档备份与恢复功能，其他功能不受影响。自动查找仅支持 Steam 平台。" data-i18n-tip="setup.savePathTip">?</span>
                         </div>
                         <div class="flex gap-2">
-                            <input id="cfg-save" type="text" placeholder="直接粘贴路径或点击右侧按钮选择"
+                            <input id="cfg-save" type="text" placeholder="直接粘贴路径或点击右侧按钮选择" data-i18n-placeholder="setup.pathPlaceholder"
                                 class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-spire-accent" />
                             <button type="button" id="btn-find-save"
-                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0">
+                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0"
+                                data-i18n="setup.autoFind">
                                 自动查找
                             </button>
                             <button type="button" id="btn-pick-save"
-                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0">
+                                class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-2 transition-colors shrink-0"
+                                data-i18n="setup.browse">
                                 浏览...
                             </button>
                         </div>
                     </div>
+                    </div>
                     <div class="mt-2 flex gap-2">
                         <button id="btn-setup-back" type="button"
-                            class="hidden text-sm text-spire-muted hover:text-spire-text border border-spire-border font-medium rounded-lg py-2 px-4 transition-colors">
+                            class="text-sm text-spire-muted hover:text-spire-text border border-spire-border font-medium rounded-lg py-2 px-4 transition-colors"
+                            data-i18n="common.back">
                             返回
                         </button>
                         <button type="submit"
-                            class="flex-1 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 transition-colors">
+                            class="flex-1 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 transition-colors"
+                            data-i18n="setup.saveAndInit">
                             保存并初始化
                         </button>
                     </div>
@@ -384,16 +530,15 @@
 
         <!-- header bar -->
         <div class="flex items-center justify-between">
-            <div class="flex items-end gap-3">
-                <h1 class="text-lg font-bold">Sync the Spire</h1>
-                <span id="header-quote" class="text-xs text-spire-muted"></span>
+            <div class="flex items-center gap-2.5">
+                <span id="header-game-icon" class="flex items-center"></span>
+                <div class="flex items-baseline gap-2">
+                    <h1 id="header-ws-name" class="text-lg font-bold leading-tight"></h1>
+                    <span id="header-quote" class="text-xs text-spire-muted"></span>
+                </div>
             </div>
             <div class="flex items-center gap-1.5">
-                <button id="btn-about" class="relative w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="关于">
-                    <i data-lucide="info" class="w-4 h-4"></i>
-                    <span id="about-update-dot" class="hidden absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-spire-danger update-badge-dot"></span>
-                </button>
-                <button id="btn-settings" class="w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="设置">
+                <button id="btn-settings" class="w-7 h-7 flex items-center justify-center rounded-lg text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" title="设置" data-i18n-title="main.settingsTooltip">
                     <i data-lucide="settings" class="w-4 h-4"></i>
                 </button>
             </div>
@@ -405,12 +550,12 @@
         <!-- status card -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center gap-2 mb-1">
-                <span class="text-sm text-spire-muted">当前分支</span>
+                <span class="text-sm text-spire-muted" data-i18n="main.currentBranch">当前分支</span>
                 <span id="status-branch" class="text-sm font-mono font-medium text-spire-accent">—</span>
             </div>
             <div class="flex items-center gap-2">
                 <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                <span id="status-label" class="text-xs text-spire-muted">未知</span>
+                <span id="status-label" class="text-xs text-spire-muted" data-i18n="main.unknown">未知</span>
             </div>
             <div id="sync-status-line" class="hidden mt-1 cursor-pointer select-none">
                 <span id="sync-status-text" class="text-xs text-spire-muted"></span>
@@ -418,65 +563,104 @@
             <!-- action buttons -->
             <div class="flex items-center gap-2 mt-3">
                 <button id="btn-push"
-                    class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-accent/15 text-spire-accentHover hover:bg-spire-accent/25">
+                    class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-accent/15 text-spire-accentHover hover:bg-spire-accent/25"
+                    data-i18n="main.upload">
                     <i data-lucide="upload" class="w-3 h-3"></i>
                     上传
                 </button>
                 <button id="btn-pull"
-                    class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-success/10 text-spire-success hover:bg-spire-success/20">
+                    class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-spire-success/10 text-spire-success hover:bg-spire-success/20"
+                    data-i18n="main.pull">
                     <i data-lucide="download" class="w-3 h-3"></i>
                     拉取
                 </button>
                 <div class="relative flex-1 flex">
                     <button id="btn-open-folder"
-                        class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-amber-500/[.07] text-amber-500/80 hover:bg-amber-500/[.12] hover:text-amber-500">
+                        class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 bg-amber-500/[.07] text-amber-500/80 hover:bg-amber-500/[.12] hover:text-amber-500"
+                        data-i18n="main.open">
                         <i data-lucide="folder-open" class="w-3 h-3"></i>
                         打开
                     </button>
                     <!-- folder dropdown -->
                     <div id="folder-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden">
-                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="game">
+                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="game" data-i18n="main.gameFolder">
                             游戏文件夹
                         </button>
-                        <button id="folder-item-mod" class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="mod">
+                        <button id="folder-item-mod" class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="mod" data-i18n="main.modFolder">
                             Mod 文件夹
                         </button>
-                        <button id="folder-item-save" class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="save">
+                        <button id="folder-item-save" class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="save" data-i18n="main.saveFolder">
                             存档文件夹
                         </button>
-                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="config">
+                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="config" data-i18n="main.configFolder">
                             配置文件夹
                         </button>
-                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="backup">
+                        <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="backup" data-i18n="main.backupFolder">
                             备份文件夹
+                        </button>
+                    </div>
+                </div>
+                <div id="launch-container" class="relative flex flex-1">
+                    <button id="btn-launch"
+                        class="flex-1 text-xs py-2 px-3 transition-colors flex items-center justify-center gap-1.5 bg-emerald-500/[.10] text-emerald-400/90 hover:bg-emerald-500/[.18] hover:text-emerald-400"
+                        style="border-radius: 0.5rem 0 0 0.5rem"
+                        data-i18n="main.launch">
+                        <i data-lucide="play" style="width:12px;height:12px"></i>
+                        启动游戏
+                    </button>
+                    <button id="btn-launch-dropdown"
+                        class="text-xs py-2 px-1.5 transition-colors bg-emerald-500/[.10] text-emerald-400/90 hover:bg-emerald-500/[.18] hover:text-emerald-400 border-l border-emerald-500/20"
+                        style="border-radius: 0 0.5rem 0.5rem 0">
+                        <i data-lucide="chevron-down" style="width:12px;height:12px"></i>
+                    </button>
+                    <!-- launch dropdown -->
+                    <div id="launch-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden" style="min-width:200px">
+                        <div id="launch-mode-label" class="px-3 py-1.5 text-[10px] text-spire-muted/60 select-none">
+                            当前：通过 Steam 启动
+                        </div>
+                        <div class="border-t border-spire-border/30"></div>
+                        <button id="launch-set-exe" class="w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors flex items-center gap-1.5">
+                            <i data-lucide="file-cog" style="width:12px;height:12px;flex-shrink:0"></i>
+                            设置自定义路径...
+                        </button>
+                        <button id="launch-clear-exe" class="hidden w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors flex items-center gap-1.5">
+                            <i data-lucide="undo-2" style="width:12px;height:12px;flex-shrink:0"></i>
+                            恢复 Steam 启动
                         </button>
                     </div>
                 </div>
                 <button id="btn-refresh"
                     class="flex-1 text-xs rounded-lg py-2 transition-colors flex items-center justify-center gap-1.5 border border-spire-border text-spire-muted hover:text-spire-text">
                     <i data-lucide="refresh-cw" id="refresh-icon" class="w-3 h-3"></i>
-                    <span id="refresh-label">刷新</span>
+                    <span id="refresh-label" data-i18n="main.refresh">刷新</span>
                 </button>
             </div>
         </div>
 
         <!-- mod toggle -->
-        <div class="bg-spire-card rounded-xl border border-spire-border p-4">
+        <div id="card-mod-toggle" class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
                 <div>
                     <div class="flex items-center gap-2">
-                        <h2 class="text-sm font-medium">Mod 开关</h2>
-                        <span class="help-tip" data-tip="开启后将仓库中的 Mod 文件连接到游戏目录，关闭则恢复无 Mod 的纯净状态。">?</span>
+                        <h2 class="text-sm font-medium" data-i18n="modToggle.title">Mod 开关</h2>
+                        <span class="help-tip" data-tip="开启后将仓库中的 Mod 文件连接到游戏目录，关闭则恢复无 Mod 的纯净状态。" data-i18n-tip="modToggle.tip">?</span>
                     </div>
                     <div class="flex items-center gap-2 mt-1">
                         <span id="mod-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                        <span id="mod-label" class="text-xs text-spire-muted">检查中...</span>
+                        <span id="mod-label" class="text-xs text-spire-muted" data-i18n="modToggle.checking">检查中...</span>
                     </div>
                 </div>
-                <label id="mod-toggle" class="toggle-switch">
-                    <input type="checkbox" id="mod-checkbox" disabled>
-                    <span class="toggle-slider"></span>
-                </label>
+                <div class="flex items-center gap-2">
+                    <button id="btn-open-mod-manager" class="hidden text-xs px-2 py-1 rounded-md border border-spire-border text-spire-muted hover:text-spire-text hover:border-spire-accent transition-colors flex items-center gap-1"
+                        data-i18n="modToggle.manage">
+                        <i data-lucide="package" style="width:12px;height:12px"></i>
+                        管理
+                    </button>
+                    <label id="mod-toggle" class="toggle-switch">
+                        <input type="checkbox" id="mod-checkbox" disabled>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -485,12 +669,12 @@
             <div class="flex items-center justify-between">
                 <div>
                     <div class="flex items-center gap-2">
-                        <h2 class="text-sm font-medium">存档重定向</h2>
-                        <span class="help-tip" data-tip="建议开启，在 Mod 模式下使用常规存档，角色进度互通。">?</span>
+                        <h2 class="text-sm font-medium" data-i18n="redirect.title">存档重定向</h2>
+                        <span class="help-tip" data-tip="建议开启，在 Mod 模式下使用常规存档，角色进度互通。" data-i18n-tip="redirect.tip">?</span>
                     </div>
                     <div class="flex items-center gap-2 mt-1">
                         <span id="redirect-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
-                        <span id="redirect-label" class="text-xs text-spire-muted">检查中...</span>
+                        <span id="redirect-label" class="text-xs text-spire-muted" data-i18n="redirect.checking">检查中...</span>
                     </div>
                 </div>
                 <label id="redirect-toggle" class="toggle-switch">
@@ -504,11 +688,12 @@
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-sm font-medium">联机跟随</h2>
-                    <p class="text-xs text-spire-muted mt-0.5">切换到朋友的分支来同步他们的 Mod</p>
+                    <h2 class="text-sm font-medium" data-i18n="follow.title">联机跟随</h2>
+                    <p class="text-xs text-spire-muted mt-0.5" data-i18n="follow.description">切换到朋友的分支来同步他们的 Mod</p>
                 </div>
                 <button id="btn-browse-branches"
-                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors">
+                    class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-3 py-1.5 transition-colors"
+                    data-i18n="follow.switchBranch">
                     切换分支
                 </button>
             </div>
@@ -516,12 +701,13 @@
 
         <!-- create branch -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
-            <h2 class="text-sm font-medium mb-2">创建分支</h2>
-            <p class="text-xs text-spire-muted mb-3">创建自己的分支来管理和分享 Mod 配置</p>
+            <h2 class="text-sm font-medium mb-2" data-i18n="createBranch.title">创建分支</h2>
+            <p class="text-xs text-spire-muted mb-3" data-i18n="createBranch.description">创建自己的分支来管理和分享 Mod 配置</p>
             <div class="flex gap-2">
-                <input id="inp-branch" type="text" placeholder="输入新分支名..."
+                <input id="inp-branch" type="text" placeholder="输入新分支名..." data-i18n-placeholder="createBranch.placeholder"
                     class="flex-1 bg-spire-bg border border-spire-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-spire-accent" />
-                <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors">
+                <button id="btn-create" class="text-xs border border-spire-accent text-spire-accent hover:bg-spire-accent hover:text-white rounded-lg px-3 py-1.5 transition-colors"
+                    data-i18n="common.create">
                     创建
                 </button>
             </div>
@@ -531,21 +717,23 @@
         <div id="card-save-backup" class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-sm font-medium">存档备份</h2>
-                    <p id="save-backup-desc" class="text-xs text-spire-muted mt-0.5">手动备份或恢复游戏存档</p>
+                    <h2 class="text-sm font-medium" data-i18n="saveBackup.title">存档备份</h2>
+                    <p id="save-backup-desc" class="text-xs text-spire-muted mt-0.5" data-i18n="saveBackup.description">手动备份或恢复游戏存档</p>
                 </div>
                 <div class="flex gap-2">
                     <button id="btn-backup-saves"
-                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
+                        data-i18n="saveBackup.backup">
                         备份存档
                     </button>
                     <button id="btn-restore-saves"
-                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors">
+                        class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
+                        data-i18n="saveBackup.restore">
                         恢复存档
                     </button>
                     <button id="btn-open-backup"
                         class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
-                        title="打开备份文件夹">
+                        title="打开备份文件夹" data-i18n-title="saveBackup.openFolder">
                         <i data-lucide="folder-open" class="w-3 h-3"></i>
                     </button>
                 </div>
@@ -557,71 +745,199 @@
     <div id="backup-list-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-lg mx-4 max-h-[70vh] flex flex-col">
             <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
-                <h2 class="text-sm font-medium">存档备份管理</h2>
+                <h2 class="text-sm font-medium" data-i18n="backup.title">存档备份管理</h2>
                 <button id="backup-list-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭" data-i18n-aria="common.close">&times;</button>
             </div>
             <div class="px-4 py-2">
-                <p class="text-xs text-spire-muted leading-relaxed">
+                <p class="text-xs text-spire-muted leading-relaxed" data-i18n="backup.description">
                     选择一个存档备份进行恢复，恢复前会自动备份当前存档。
                 </p>
             </div>
             <div class="overflow-auto flex-1">
                 <div id="backup-list-body" class="divide-y divide-spire-border/50 px-4"></div>
-                <p id="backup-list-empty" class="hidden text-center text-spire-muted text-xs py-8">暂无可用备份</p>
+                <p id="backup-list-empty" class="hidden text-center text-spire-muted text-xs py-8" data-i18n="backup.empty">暂无可用备份</p>
             </div>
         </div>
     </div>
 
-    <!-- about modal -->
-    <div id="about-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+    <!-- settings modal (global settings + about) -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-xs mx-4 p-5">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-sm font-medium">关于</h2>
-                <button id="about-modal-close"
-                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+                <h2 class="text-sm font-medium" data-i18n="settings.title">设置</h2>
+                <button id="settings-modal-close"
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭" data-i18n-aria="common.close">&times;</button>
             </div>
+
+            <!-- language -->
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-sm text-spire-muted" data-i18n="settings.language">语言</span>
+                <select id="settings-language"
+                    class="settings-select bg-spire-bg border border-spire-border rounded-lg text-xs text-spire-muted px-2 py-1 outline-none">
+                    <option value="zh-CN" data-i18n="settings.chinese">中文</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+            <p class="text-[10px] text-spire-muted/60 mb-4" data-i18n="settings.languageHint">更多语言即将推出</p>
+
+            <!-- divider -->
+            <div class="border-t border-spire-border mb-4"></div>
+
+            <!-- about section -->
+            <h3 class="text-xs font-medium text-spire-muted mb-3" data-i18n="settings.about">关于</h3>
             <div class="flex flex-col gap-3 text-sm">
                 <div class="flex items-center justify-between">
-                    <span class="text-spire-muted">版本</span>
+                    <span class="text-spire-muted" data-i18n="settings.version">版本</span>
                     <span id="about-version" class="font-mono text-xs">—</span>
                 </div>
                 <div id="about-update-row" class="hidden flex items-center justify-between">
-                    <span class="text-spire-muted">最新版本</span>
+                    <span class="text-spire-muted" data-i18n="settings.latestVersion">最新版本</span>
                     <div class="flex items-center gap-2">
                         <span id="about-latest" class="font-mono text-xs">—</span>
                         <a id="about-download" href="#"
-                            class="hidden text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-2 py-0.5 transition-colors">
+                            class="hidden text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-2 py-0.5 transition-colors"
+                            data-i18n="settings.download">
                             下载
                         </a>
                     </div>
                 </div>
                 <div class="flex items-center justify-between">
-                    <span class="text-spire-muted">项目</span>
+                    <span class="text-spire-muted" data-i18n="settings.project">项目</span>
                     <a id="about-repo" href="#" class="text-spire-accent hover:text-spire-accentHover text-xs transition-colors">
                         GitHub
                     </a>
                 </div>
                 <div class="flex items-center justify-between">
-                    <span class="text-spire-muted">作者</span>
-                    <a id="about-author" href="#" class="text-spire-accent hover:text-spire-accentHover text-xs transition-colors">
+                    <span class="text-spire-muted" data-i18n="settings.authorLabel">作者</span>
+                    <a id="about-author" href="#" class="text-spire-accent hover:text-spire-accentHover text-xs transition-colors" data-i18n="settings.authorName">
                         Ruikoto（泡菜）
                     </a>
                 </div>
             </div>
             <button id="btn-check-update"
-                class="mt-3 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors">
+                class="mt-3 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors"
+                data-i18n="settings.checkUpdate">
                 检查更新
             </button>
             <button id="btn-open-docs"
-                class="mt-2 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors">
+                class="mt-2 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors"
+                data-i18n="settings.docs">
                 使用教程
             </button>
         </div>
     </div>
 
+    <!-- ── mod manager modal (Layer 1) ────────────────────────────────── -->
+    <div id="mod-manager-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center" style="z-index:30">
+        <div class="bg-spire-bg border border-spire-border rounded-2xl flex flex-col" style="width:90vw;max-width:1100px;height:88vh;max-height:88vh;">
+            <!-- header -->
+            <div class="flex items-center justify-between px-5 py-3 border-b border-spire-border shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="package" style="width:16px;height:16px" class="text-spire-accent"></i>
+                        <h2 class="text-sm font-semibold">Mod 管理器</h2>
+                    </div>
+                    <span id="mm-mod-count" class="text-xs text-spire-muted"></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input id="mm-search" type="text" placeholder="搜索 MOD..." class="text-xs bg-spire-card border border-spire-border rounded-lg px-3 py-1.5 w-40 focus:outline-none focus:border-spire-accent text-spire-text placeholder-spire-muted">
+                    </div>
+                    <button id="mm-btn-open-folder" class="text-spire-muted hover:text-spire-text transition-colors p-1.5 rounded-lg hover:bg-white/5" title="打开 MOD 文件夹">
+                        <i data-lucide="folder-open" style="width:15px;height:15px"></i>
+                    </button>
+                    <button id="mm-btn-refresh" class="text-spire-muted hover:text-spire-text transition-colors p-1.5 rounded-lg hover:bg-white/5" title="刷新列表">
+                        <i data-lucide="refresh-cw" style="width:15px;height:15px"></i>
+                    </button>
+                    <button id="mm-btn-branch-copy" class="text-xs px-3 py-1.5 border border-spire-border text-spire-muted hover:text-spire-text rounded-lg transition-colors flex items-center gap-1">
+                        <i data-lucide="git-branch" style="width:12px;height:12px"></i>
+                        从其他分支拷贝
+                    </button>
+                    <button id="mm-btn-close" class="text-spire-muted hover:text-spire-text transition-colors p-1">
+                        <i data-lucide="x" style="width:16px;height:16px"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- dropzone -->
+            <div id="mm-dropzone" class="mm-dropzone mx-5 mt-3 rounded-lg py-3 flex items-center justify-center gap-2 text-xs text-spire-muted">
+                <i data-lucide="upload" style="width:14px;height:14px"></i>
+                <span>点击选择或拖入 MOD 文件 / 文件夹 / 压缩包</span>
+            </div>
+            <!-- mod grid (scroll wrapper + column layout inside) -->
+            <div id="mm-grid-scroll" class="flex-1 overflow-y-auto px-5 py-3">
+                <div id="mm-grid" style="column-count:2;column-gap:12px;">
+                    <!-- cards rendered by JS -->
+                </div>
+            </div>
+            <!-- loading spinner -->
+            <div id="mm-loading" class="hidden flex-1 flex items-center justify-center">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── mod detail modal (Layer 2) ─────────────────────────────────── -->
+    <div id="mm-detail-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center" style="z-index:40">
+        <div class="bg-spire-bg border border-spire-border rounded-2xl flex flex-col" style="width:480px;max-width:92vw;max-height:80vh;">
+            <div id="mm-detail-content" class="overflow-y-auto p-5">
+                <!-- filled by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ── branch copy modal (Layer 3) ────────────────────────────────── -->
+    <div id="mm-branch-copy-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center" style="z-index:40">
+        <div class="bg-spire-bg border border-spire-border rounded-2xl flex flex-col" style="width:900px;max-width:92vw;max-height:80vh;">
+            <!-- header -->
+            <div class="flex items-center justify-between px-5 py-3 border-b border-spire-border shrink-0">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-sm font-semibold">从分支拷贝 MOD</h2>
+                    <!-- custom dropdown for branch selection -->
+                    <div id="mm-branch-picker" class="relative">
+                        <button id="mm-branch-picker-btn" class="flex items-center gap-1.5 text-xs bg-spire-card border border-spire-border rounded-lg px-3 py-1.5 text-spire-text hover:border-spire-accent transition-colors focus:outline-none focus:border-spire-accent min-w-[140px]">
+                            <span id="mm-branch-picker-label" class="truncate">选择分支...</span>
+                            <i data-lucide="chevron-down" style="width:12px;height:12px" class="shrink-0 text-spire-muted"></i>
+                        </button>
+                        <div id="mm-branch-picker-dropdown" class="hidden absolute top-full left-0 mt-1 bg-spire-card border border-spire-border rounded-lg shadow-xl overflow-hidden" style="z-index:50;min-width:200px;max-height:280px;">
+                            <div id="mm-branch-picker-list" class="overflow-y-auto" style="max-height:280px;">
+                                <!-- populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input id="mm-branch-search" type="text" placeholder="搜索..." class="text-xs bg-spire-card border border-spire-border rounded-lg px-3 py-1.5 w-32 focus:outline-none focus:border-spire-accent text-spire-text placeholder-spire-muted">
+                    <button id="mm-branch-close" class="text-spire-muted hover:text-spire-text transition-colors p-1">
+                        <i data-lucide="x" style="width:16px;height:16px"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- branch mod grid (scroll wrapper + column layout inside) -->
+            <div id="mm-branch-grid-scroll" class="flex-1 overflow-y-auto px-5 py-3">
+                <div id="mm-branch-grid" style="column-count:2;column-gap:12px;">
+                </div>
+            </div>
+            <div id="mm-branch-loading" class="hidden flex-1 flex items-center justify-center py-8">
+                <div class="spinner"></div>
+            </div>
+            <div id="mm-branch-empty" class="hidden flex-1 flex items-center justify-center py-8 text-xs text-spire-muted">
+                选择一个分支以查看可拷贝的 MOD
+            </div>
+        </div>
+    </div>
+
     <script src="lib/lucide.min.js"></script>
     <script src="lib/marked.min.js"></script>
+    <script src="ipc.js"></script>
+    <script src="i18n.js"></script>
+    <script src="ui.js"></script>
+    <script src="state.js"></script>
+    <script src="modals.js"></script>
+    <script src="mod-manager.js"></script>
+    <script src="setup.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="home.js"></script>
     <script src="app.js"></script>
     <script>lucide.createIcons();</script>
 </body>

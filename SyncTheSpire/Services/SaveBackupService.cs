@@ -2,8 +2,12 @@ namespace SyncTheSpire.Services;
 
 public class SaveBackupService
 {
-    public static readonly string BackupDir =
-        Path.Combine(ConfigService.AppDataDirPath, "Backups");
+    public string BackupDir { get; }
+
+    public SaveBackupService(string backupDir)
+    {
+        BackupDir = backupDir;
+    }
 
     // backup entire save folder, returns backup directory path
     public string BackupSaveFolder(string saveFolderPath)

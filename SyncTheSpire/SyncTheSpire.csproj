@@ -23,6 +23,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3856.49" />
     <PackageReference Include="LibGit2Sharp" Version="0.31.0" />
+    <PackageReference Include="SharpCompress" Version="0.38.0" />
   </ItemGroup>
 
   <!-- embed wwwroot as content -->
@@ -30,6 +31,9 @@
     <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\ModProfileBypass\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\sts2.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\sv.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\mc.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

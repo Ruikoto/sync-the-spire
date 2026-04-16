@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using LibGit2Sharp;
 using LibGit2Sharp.Handlers;
+using SyncTheSpire.Helpers;
 using SyncTheSpire.Models;
 
 namespace SyncTheSpire.Services;
@@ -37,6 +38,7 @@ public class GitService
 
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
+    private string WorkTreePath => _config.WorkTreePath;
 
     private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
 
@@ -83,14 +85,14 @@ public class GitService
         if (setGitDir && Directory.Exists(GitDirPath))
         {
             psi.Environment["GIT_DIR"] = GitDirPath;
-            psi.Environment["GIT_WORK_TREE"] = RepoPath;
+            psi.Environment["GIT_WORK_TREE"] = WorkTreePath;
         }
 
         var configIdx = 0;
 
-        // bypass ownership check for AppData repo path (same as GlobalSettings.SetOwnerValidation)
+        // bypass ownership check for working tree path (same as GlobalSettings.SetOwnerValidation)
         psi.Environment[$"GIT_CONFIG_KEY_{configIdx}"] = "safe.directory";
-        psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = RepoPath;
+        psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = WorkTreePath;
         configIdx++;
 
         // HTTPS auth: inject Basic auth header so git.exe works with any platform (GitHub, Gitee, etc.)
@@ -112,6 +114,7 @@ public class GitService
     /// <summary>
     /// run git.exe with proper env vars. used for SSH (always) and as fallback for HTTPS
     /// when LibGit2Sharp can't handle a platform's auth challenge.
+    /// L3 fix: parse args more carefully — split respects quoted segments
     /// </summary>
     private string RunGitCli(string args, string? workDir = null, int timeout = 120_000)
     {
@@ -119,15 +122,15 @@ public class GitService
         var psi = new ProcessStartInfo
         {
             FileName = _resolver.GetGitPath(),
-            WorkingDirectory = workDir ?? RepoPath,
+            WorkingDirectory = workDir ?? WorkTreePath,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
 
-        // use ArgumentList for safe arg passing instead of raw Arguments string
-        foreach (var arg in args.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        // split aware of double-quoted segments so paths with spaces work
+        foreach (var arg in SplitArgs(args))
             psi.ArgumentList.Add(arg);
 
         ConfigureGitEnv(psi);
@@ -303,6 +306,41 @@ public class GitService
     };
 
     /// <summary>
+    /// scan the local working tree for mod definitions (filesystem equivalent of GetBranchMods).
+    /// walks all .json files under WorkTreePath and keeps entries with a valid "id" field.
+    /// </summary>
+    public List<ModInfo> GetLocalMods()
+    {
+        return ScanLocalModManifests(WorkTreePath);
+    }
+
+    /// <summary>
+    /// shared helper: recursively walk a directory for .json mod manifests.
+    /// returns one ModInfo per valid manifest found.
+    /// </summary>
+    private static List<ModInfo> ScanLocalModManifests(string rootPath)
+    {
+        var mods = new List<ModInfo>();
+        if (!Directory.Exists(rootPath)) return mods;
+
+        foreach (var file in Directory.EnumerateFiles(rootPath, "*.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var mod = JsonSerializer.Deserialize<ModInfo>(json, ModJsonOpts);
+                if (!string.IsNullOrEmpty(mod?.Id))
+                    mods.Add(mod);
+            }
+            catch
+            {
+                // not a mod definition or malformed json, skip
+            }
+        }
+        return mods;
+    }
+
+    /// <summary>
     /// read all mod definitions from a remote branch's file tree without checkout.
     /// walks the commit tree recursively, tries to deserialize every .json blob,
     /// and keeps entries that have a valid "id" field.
@@ -342,6 +380,239 @@ public class GitService
                 }
             }
         }
+    }
+
+    // ── mod manager: detailed local scan + dependency analysis ─────────
+
+    /// <summary>
+    /// deep scan of local working tree — enriched ModInfo with folder, file list, size, integrity.
+    /// reuses the same recursive .json scan as GetLocalMods, then augments each mod
+    /// with its containing folder info, file list, and integrity checks.
+    /// </summary>
+    public List<ModInfo> GetLocalModsDetailed()
+    {
+        if (!Directory.Exists(WorkTreePath)) return [];
+
+        // id -> (manifest, jsonFilePath) — deduplicate by id, first match wins
+        var found = new Dictionary<string, (ModInfo Mod, string JsonPath)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var file in Directory.EnumerateFiles(WorkTreePath, "*.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var mod = JsonSerializer.Deserialize<ModInfo>(json, ModJsonOpts);
+                if (!string.IsNullOrEmpty(mod?.Id) && !found.ContainsKey(mod.Id))
+                    found[mod.Id] = (mod, file);
+            }
+            catch { /* not a valid manifest, skip */ }
+        }
+
+        var result = new List<ModInfo>();
+        foreach (var (mod, jsonPath) in found.Values)
+        {
+            // the mod's "folder" is the directory containing its manifest json
+            var modDir = Path.GetDirectoryName(jsonPath)!;
+            var folderName = Path.GetRelativePath(WorkTreePath, modDir).Replace('\\', '/');
+            // if manifest is at the WorkTreePath root itself, use the file name as identifier
+            if (folderName == ".") folderName = Path.GetFileNameWithoutExtension(jsonPath);
+
+            // collect all files relative to the mod folder
+            var files = new List<string>();
+            long totalSize = 0;
+            foreach (var f in Directory.EnumerateFiles(modDir, "*", SearchOption.AllDirectories))
+            {
+                files.Add(Path.GetRelativePath(modDir, f));
+                try { totalSize += new FileInfo(f).Length; } catch { /* access denied etc */ }
+            }
+
+            // integrity check
+            var missingFiles = new List<string>();
+            if (mod.HasDll && !files.Any(f => f.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+                missingFiles.Add(".dll");
+            if (mod.HasPck && !files.Any(f => f.EndsWith(".pck", StringComparison.OrdinalIgnoreCase)))
+                missingFiles.Add(".pck");
+
+            result.Add(mod with
+            {
+                FolderName = folderName,
+                FolderPath = modDir,
+                Files = files,
+                SizeBytes = totalSize,
+                MissingFiles = missingFiles,
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// cross-reference dependencies across all mods and produce ghost entries for missing ones.
+    /// enriches each mod's DependedBy list and returns (realMods, ghostMods).
+    /// </summary>
+    public static (List<ModInfo> Mods, List<ModInfo> Ghosts) AnalyzeDependencies(List<ModInfo> allMods)
+    {
+        var byId = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in allMods)
+            if (!string.IsNullOrEmpty(m.Id))
+                byId.TryAdd(m.Id, m);
+
+        // temporary lookup for building DependedBy lists
+        var dependedByMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var ghostIds = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mod in allMods)
+        {
+            foreach (var depId in mod.Dependencies)
+            {
+                if (string.IsNullOrWhiteSpace(depId)) continue;
+
+                if (byId.ContainsKey(depId))
+                {
+                    if (!dependedByMap.ContainsKey(depId))
+                        dependedByMap[depId] = [];
+                    dependedByMap[depId].Add(mod.Id!);
+                }
+                else
+                {
+                    // missing dependency -> ghost
+                    if (!ghostIds.ContainsKey(depId))
+                        ghostIds[depId] = [];
+                    ghostIds[depId].Add(mod.Id!);
+                }
+            }
+        }
+
+        // enrich real mods with DependedBy
+        var enriched = allMods.Select(m =>
+        {
+            var db = dependedByMap.GetValueOrDefault(m.Id ?? "", []);
+            return db.Count > 0 ? m with { DependedBy = db } : m;
+        }).ToList();
+
+        // create ghost mod entries for missing dependencies
+        var ghosts = ghostIds.Select(kv => new ModInfo
+        {
+            Id = kv.Key,
+            Name = kv.Key,
+            DependedBy = kv.Value,
+        }).ToList();
+
+        return (enriched, ghosts);
+    }
+
+    /// <summary>
+    /// read mods from a remote branch with folder name info (for branch copy feature).
+    /// recursively scans all subtrees for manifest .json files, same approach as local scan.
+    /// each mod's FolderName = the top-level directory it belongs to.
+    /// </summary>
+    public List<ModInfo> GetBranchModsForCopy(string branchName)
+    {
+        using var repo = OpenRepo();
+        var branch = repo.Branches[$"origin/{branchName}"];
+        if (branch is null) return [];
+
+        var tree = branch.Tip.Tree;
+        // id -> (mod, topLevelFolder) — deduplicate by id, first match wins
+        var found = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in tree)
+        {
+            if (entry.TargetType != TreeEntryTargetType.Tree) continue;
+            var topFolder = entry.Name;
+            // recursively scan this subtree for manifest jsons
+            ScanTreeForManifests((Tree)entry.Target, topFolder, found);
+        }
+
+        return found.Values.ToList();
+    }
+
+    /// <summary>
+    /// recursively walk a git tree looking for .json files that are valid mod manifests.
+    /// each discovered mod gets FolderName set to topLevelFolder (the root dir it lives under).
+    /// </summary>
+    private void ScanTreeForManifests(Tree tree, string topLevelFolder, Dictionary<string, ModInfo> found)
+    {
+        foreach (var entry in tree)
+        {
+            if (entry.TargetType == TreeEntryTargetType.Tree)
+            {
+                ScanTreeForManifests((Tree)entry.Target, topLevelFolder, found);
+            }
+            else if (entry.TargetType == TreeEntryTargetType.Blob
+                     && entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var blob = (Blob)entry.Target;
+                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
+                    if (!string.IsNullOrEmpty(mod?.Id) && !found.ContainsKey(mod.Id))
+                        found[mod.Id] = mod with { FolderName = topLevelFolder };
+                }
+                catch { /* not a valid manifest */ }
+            }
+        }
+    }
+
+    /// <summary>
+    /// extract a mod folder from a remote branch's git tree into local working tree.
+    /// reads blobs from git objects — no checkout needed.
+    /// </summary>
+    public void CopyModFromBranch(string branchName, string modFolderName)
+    {
+        using var repo = OpenRepo();
+        var branch = repo.Branches[$"origin/{branchName}"];
+        if (branch is null)
+            throw new InvalidOperationException($"分支不存在：{branchName}");
+
+        var rootTree = branch.Tip.Tree;
+        var modEntry = rootTree[modFolderName];
+        if (modEntry is null || modEntry.TargetType != TreeEntryTargetType.Tree)
+            throw new InvalidOperationException($"分支 {branchName} 中未找到 MOD 文件夹：{modFolderName}");
+
+        var destDir = Path.Combine(WorkTreePath, modFolderName);
+        ExtractTreeToDir((Tree)modEntry.Target, destDir);
+    }
+
+    private static void ExtractTreeToDir(Tree tree, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+        foreach (var entry in tree)
+        {
+            var targetPath = Path.Combine(destDir, entry.Name);
+            if (entry.TargetType == TreeEntryTargetType.Tree)
+            {
+                ExtractTreeToDir((Tree)entry.Target, targetPath);
+            }
+            else if (entry.TargetType == TreeEntryTargetType.Blob)
+            {
+                var blob = (Blob)entry.Target;
+                using var stream = blob.GetContentStream();
+                using var fs = File.Create(targetPath);
+                stream.CopyTo(fs);
+            }
+        }
+    }
+
+    /// <summary>
+    /// safely delete a mod folder from the working tree.
+    /// validates path to prevent directory traversal attacks.
+    /// </summary>
+    public void DeleteModFolder(string folderName)
+    {
+        // path traversal guard
+        if (folderName.Contains("..") || folderName.Contains('/') || folderName.Contains('\\'))
+            throw new InvalidOperationException($"非法文件夹名：{folderName}");
+
+        var fullPath = Path.Combine(WorkTreePath, folderName);
+        var resolved = Path.GetFullPath(fullPath);
+        if (!resolved.StartsWith(Path.GetFullPath(WorkTreePath), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("路径越界");
+
+        if (!Directory.Exists(resolved))
+            throw new InvalidOperationException($"文件夹不存在：{folderName}");
+
+        FileSystemHelper.ForceDeleteDirectory(resolved);
     }
 
     // ── NSFW detection ──────────────────────────────────────────────────
@@ -547,8 +818,9 @@ public class GitService
         {
             var cfg = _config.LoadConfig();
             var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
-            repo.Commit("Auto-save", sig, sig);
-            LogService.Info("Auto-committed local changes");
+            var msg = BuildCommitMessage(status);
+            repo.Commit(msg, sig, sig);
+            LogService.Info($"Committed: {msg}");
         }
 
         // fetch first so we can detect divergence before pushing
@@ -611,11 +883,60 @@ public class GitService
 
         var cfg = _config.LoadConfig();
         var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
-        repo.Commit("Auto-save (before switch)", sig, sig);
+        repo.Commit("Snapshot before branch switch", sig, sig);
         LogService.Info("Silent auto-commit before branch switch");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// build a human-readable commit message from staged changes.
+    /// summarizes top-level folders (mods) that were added/updated/removed.
+    /// </summary>
+    private static string BuildCommitMessage(RepositoryStatus status)
+    {
+        var added = new HashSet<string>();
+        var modified = new HashSet<string>();
+        var removed = new HashSet<string>();
+
+        foreach (var entry in status)
+        {
+            var s = entry.State;
+            // top-level folder name (or filename if at root)
+            var key = entry.FilePath.Contains('/')
+                ? entry.FilePath[..entry.FilePath.IndexOf('/')]
+                : entry.FilePath;
+
+            if (s.HasFlag(FileStatus.NewInIndex) || s.HasFlag(FileStatus.NewInWorkdir))
+                added.Add(key);
+            else if (s.HasFlag(FileStatus.DeletedFromIndex) || s.HasFlag(FileStatus.DeletedFromWorkdir))
+                removed.Add(key);
+            else if (s.HasFlag(FileStatus.ModifiedInIndex) || s.HasFlag(FileStatus.ModifiedInWorkdir)
+                  || s.HasFlag(FileStatus.RenamedInIndex) || s.HasFlag(FileStatus.RenamedInWorkdir)
+                  || s.HasFlag(FileStatus.TypeChangeInIndex) || s.HasFlag(FileStatus.TypeChangeInWorkdir))
+                modified.Add(key);
+        }
+
+        // remove overlap: if something shows up in both added and modified, keep added
+        modified.ExceptWith(added);
+        modified.ExceptWith(removed);
+
+        var parts = new List<string>();
+        if (added.Count > 0) parts.Add($"Add {FormatNames(added)}");
+        if (modified.Count > 0) parts.Add($"Update {FormatNames(modified)}");
+        if (removed.Count > 0) parts.Add($"Remove {FormatNames(removed)}");
+
+        return parts.Count > 0 ? string.Join("; ", parts) : "Sync changes";
+    }
+
+    private static string FormatNames(HashSet<string> names)
+    {
+        const int maxShow = 3;
+        var sorted = names.OrderBy(n => n).ToList();
+        if (sorted.Count <= maxShow)
+            return string.Join(", ", sorted);
+        return $"{string.Join(", ", sorted.Take(maxShow))} (+{sorted.Count - maxShow} more)";
+    }
 
     /// <summary>
     /// compare local HEAD with origin tracking branch to see if they've diverged
@@ -668,7 +989,8 @@ public class GitService
         var branch = repo.Branches[InitBranch]!;
         Commands.Checkout(repo, branch, new CheckoutOptions { CheckoutModifiers = CheckoutModifiers.Force });
 
-        // wipe all files from working tree so junction stays clean
+        // wipe all files from the clone dir so junction stays clean
+        // (for non-junction mode, RepoPath is separate from WorkTreePath — clean it up too)
         foreach (var f in Directory.GetFiles(RepoPath))
             File.Delete(f);
         foreach (var d in Directory.GetDirectories(RepoPath))
@@ -876,7 +1198,7 @@ public class GitService
 
         // tell git where the working tree lives
         using var repo = new Repository(GitDirPath);
-        repo.Config.Set("core.worktree", RepoPath);
+        repo.Config.Set("core.worktree", WorkTreePath);
     }
 
     /// <summary>
@@ -898,7 +1220,7 @@ public class GitService
         string[] artifacts = [".gitignore", ".gitattributes"];
         foreach (var name in artifacts)
         {
-            var path = Path.Combine(RepoPath, name);
+            var path = Path.Combine(WorkTreePath, name);
             if (File.Exists(path))
                 File.Delete(path);
         }
@@ -926,5 +1248,31 @@ public class GitService
             if (Directory.GetFileSystemEntries(dir).Length == 0)
                 Directory.Delete(dir);
         }
+    }
+
+    // L3: split a command string respecting double-quoted segments
+    private static List<string> SplitArgs(string input)
+    {
+        var result = new List<string>();
+        var i = 0;
+        while (i < input.Length)
+        {
+            if (char.IsWhiteSpace(input[i])) { i++; continue; }
+            if (input[i] == '"')
+            {
+                var end = input.IndexOf('"', i + 1);
+                if (end == -1) end = input.Length;
+                result.Add(input[(i + 1)..end]);
+                i = end + 1;
+            }
+            else
+            {
+                var end = input.IndexOf(' ', i);
+                if (end == -1) end = input.Length;
+                result.Add(input[i..end]);
+                i = end;
+            }
+        }
+        return result;
     }
 }

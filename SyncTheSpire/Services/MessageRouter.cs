@@ -1,46 +1,73 @@
-using System.Diagnostics;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
+using SyncTheSpire.Adapters;
+using SyncTheSpire.Handlers;
+using SyncTheSpire.Helpers;
 using SyncTheSpire.Models;
+using SyncTheSpire.Services;
 
 namespace SyncTheSpire.Services;
 
 public class MessageRouter
 {
     private readonly CoreWebView2 _webView;
-    private readonly ConfigService _configService;
-    private readonly GitService _gitService;
-    private readonly JunctionService _junctionService;
-    private readonly SaveBackupService _backupService;
-    private readonly SaveMergeService _mergeService;
-    private readonly StoreUpdateService _storeUpdateService;
-    private readonly SteamFinderService _steamFinder = new();
+    private readonly WorkspaceManager _workspaceManager;
     private readonly MainForm _form;
     private readonly SynchronizationContext _uiContext;
+    private readonly GitResolver _gitResolver;
+    private readonly JunctionService _junctionService;
+    private readonly StoreUpdateService _storeUpdateService;
     // only one IPC operation at a time to prevent concurrent access to git/config/filesystem
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    // workspace handler — lives outside the per-workspace lifecycle
+    private WorkspaceHandler _workspaceHandler = null!;
+    private SettingsHandler _settingsHandler = null!;
+
+    // domain handlers — rebuilt when workspace changes
+    private ConfigHandler _configHandler = null!;
+    private GitBranchHandler _gitBranchHandler = null!;
+    private SaveHandler _saveHandler = null!;
+    private RedirectHandler _redirectHandler = null!;
+    private AnnouncementHandler _announcementHandler = null!;
+    private StoreUpdateHandler _storeUpdateHandler = null!;
+    private SteamFinderHandler _steamFinderHandler = null!;
+    private FilesystemHandler _filesystemHandler = null!;
+    private ModManagerHandler _modManagerHandler = null!;
+
+    // A3: actions that require an active workspace context — unified null guard
+    private static readonly HashSet<string> WorkspaceScopedActions =
+    [
+        "GET_STATUS", "REFRESH_SYNC", "GET_CONFIG", "INIT_CONFIG",
+        "GET_BRANCHES", "SWITCH_TO_VANILLA", "SYNC_OTHER_BRANCH",
+        "CREATE_MY_BRANCH", "SAVE_AND_PUSH_MY_BRANCH", "FORCE_PUSH", "RESET_TO_REMOTE",
+        "GET_SAVE_STATUS", "UNLINK_SAVES", "BACKUP_SAVES", "GET_BACKUP_LIST", "RESTORE_BACKUP", "DELETE_BACKUP",
+        "GET_REDIRECT_STATUS", "SET_REDIRECT",
+        "RESTORE_JUNCTION", "OPEN_FOLDER",
+        "LAUNCH_GAME", "SET_CUSTOM_EXE",
+        "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES", "INSTALL_MOD_DROPPED",
+        "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH",
+    ];
+
+    // current workspace context (null if no workspace active yet)
+    private WorkspaceContext? _currentContext;
+
     public MessageRouter(
         CoreWebView2 webView,
-        ConfigService configService,
-        GitService gitService,
+        WorkspaceManager workspaceManager,
+        WorkspaceContext? initialContext,
         GitResolver gitResolver,
         JunctionService junctionService,
-        SaveBackupService backupService,
-        SaveMergeService mergeService,
         StoreUpdateService storeUpdateService,
         MainForm form)
     {
         _webView = webView;
-        _configService = configService;
-        _gitService = gitService;
-        _junctionService = junctionService;
-        _backupService = backupService;
-        _mergeService = mergeService;
-        _storeUpdateService = storeUpdateService;
+        _workspaceManager = workspaceManager;
         _form = form;
+        _gitResolver = gitResolver;
+        _junctionService = junctionService;
+        _storeUpdateService = storeUpdateService;
         // capture the UI SynchronizationContext so background threads can post back
         _uiContext = SynchronizationContext.Current
                      ?? throw new InvalidOperationException("MessageRouter must be created on the UI thread");
@@ -48,6 +75,58 @@ public class MessageRouter
         // wire up MinGit download progress to IPC loading overlay
         gitResolver.OnProgress = p =>
             Send(IpcResponse.Progress("GIT_DOWNLOAD", p.Message, p.Percent));
+
+        // init handlers with current workspace context (may be null for fresh install)
+        _currentContext = initialContext;
+        BuildHandlers();
+    }
+
+    /// <summary>
+    /// Rebuild all domain handlers for the current workspace context.
+    /// Called on init and whenever the active workspace changes.
+    /// </summary>
+    private void BuildHandlers()
+    {
+        var ctx = _currentContext;
+
+        // these don't need workspace context
+        _workspaceHandler = new WorkspaceHandler(_webView, _uiContext, _workspaceManager);
+        _settingsHandler = new SettingsHandler(_webView, _uiContext, _workspaceManager);
+        _storeUpdateHandler = new StoreUpdateHandler(_webView, _uiContext, _storeUpdateService);
+
+        if (ctx != null)
+        {
+            var adapter = ctx.GameAdapter;
+            var junctionHelper = new JunctionHelper(_junctionService, ctx.BackupService, Send);
+
+            _configHandler = new ConfigHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter, _workspaceManager);
+            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter);
+            _saveHandler = new SaveHandler(_webView, _uiContext, ctx.ConfigService, ctx.BackupService, ctx.MergeService, _junctionService);
+            _redirectHandler = new RedirectHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, adapter);
+            _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
+            _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, adapter);
+            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, adapter, _form);
+            _modManagerHandler = new ModManagerHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, new ModInstallService(), _form);
+        }
+        else
+        {
+            // no workspace active — create stub handlers with a temporary config service
+            // so GET_STATUS can report "not configured" and GET_VERSION still works
+            var stubWs = new WorkspaceConfig();
+            var stubCs = new ConfigService(stubWs, _workspaceManager, "", "", "");
+            var stubBackup = new SaveBackupService(Path.Combine(WorkspaceManager.AppDataDir, "Backups"));
+            var stubJH = new JunctionHelper(_junctionService, stubBackup, Send);
+            var stubAdapter = GameAdapterRegistry.Get("sts2");
+
+            _configHandler = new ConfigHandler(_webView, _uiContext, stubCs, null!, _junctionService, stubJH, stubAdapter, _workspaceManager);
+            _gitBranchHandler = null!;
+            _saveHandler = null!;
+            _redirectHandler = new RedirectHandler(_webView, _uiContext, stubCs, _junctionService, stubAdapter);
+            _announcementHandler = new AnnouncementHandler(_webView, _uiContext, stubCs);
+            _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, stubAdapter);
+            _filesystemHandler = new FilesystemHandler(_webView, _uiContext, stubCs, _junctionService, stubBackup, stubJH, stubAdapter, _form);
+            _modManagerHandler = null!;
+        }
     }
 
     public void HandleMessage(string rawJson)
@@ -83,7 +162,7 @@ public class MessageRouter
             return;
         }
 
-        if (req.Action != "WINDOW_DRAG")
+        if (req.Action != "WINDOW_DRAG" && req.Action != "WINDOW_RESIZE")
             LogService.Info($"IPC <- {req.Action}");
 
         // run everything off the UI thread so we don't freeze the window
@@ -97,6 +176,10 @@ public class MessageRouter
         {
             case "WINDOW_DRAG":
                 _uiContext.Post(_ => _form.BeginDrag(), null);
+                return;
+            case "WINDOW_RESIZE":
+                var edge = req.Payload?.GetProperty("edge").GetString() ?? "";
+                _uiContext.Post(_ => _form.BeginResize(edge), null);
                 return;
             case "WINDOW_MINIMIZE":
                 _uiContext.Post(_ => _form.WindowState = FormWindowState.Minimized, null);
@@ -112,129 +195,236 @@ public class MessageRouter
                 return;
             // PICK_FOLDER needs UI dialog — handle outside the gate to avoid blocking other IPC
             case "PICK_FOLDER":
-                HandlePickFolder();
+                _filesystemHandler.HandlePickFolder();
+                return;
+            case "PICK_GAME_EXE":
+                _filesystemHandler.HandlePickGameExe();
+                return;
+            // mod manager: file picker needs UI thread — handle outside the gate
+            case "PICK_MOD_ARCHIVE":
+                if (_modManagerHandler is null)
+                {
+                    Send(IpcResponse.Error("PICK_MOD_ARCHIVE", "当前没有活跃的工作区"));
+                    return;
+                }
+                _modManagerHandler.HandlePickModArchive();
                 return;
             // Store update actions use system UI / network calls — don't hold the gate
             case "CHECK_STORE_UPDATE":
-                _ = HandleCheckStoreUpdate();
+                _ = _storeUpdateHandler.HandleCheckStoreUpdate();
                 return;
             case "INSTALL_STORE_UPDATE":
-                _ = HandleInstallStoreUpdate();
+                _ = _storeUpdateHandler.HandleInstallStoreUpdate();
                 return;
             // mod preview reads immutable git objects — safe outside the gate
             case "GET_BRANCH_MODS":
-                HandleGetBranchMods(req.Payload);
+                // H2 fix: send error instead of silently dropping when no workspace
+                if (_gitBranchHandler is null)
+                {
+                    Send(IpcResponse.Error("GET_BRANCH_MODS", "当前没有活跃的工作区"));
+                    return;
+                }
+                _gitBranchHandler.HandleGetBranchMods(req.Payload);
+                return;
+            case "GET_MOD_DIFF":
+                if (_gitBranchHandler is null)
+                {
+                    Send(IpcResponse.Error("GET_MOD_DIFF", "当前没有活跃的工作区"));
+                    return;
+                }
+                _gitBranchHandler.HandleGetModDiff();
                 return;
             // steam auto-find — read-only filesystem/registry, no need for the gate
             case "FIND_GAME_PATH":
-                HandleFindGamePath();
+                _steamFinderHandler.HandleFindGamePath();
                 return;
             case "FIND_SAVE_PATH":
-                HandleFindSavePath();
+                _steamFinderHandler.HandleFindSavePath();
+                return;
+            // workspace queries — read-only, no gate needed
+            case "GET_WORKSPACES":
+                _workspaceHandler.HandleGetWorkspaces();
+                return;
+            case "GET_GAME_TYPES":
+                _workspaceHandler.HandleGetGameTypes();
                 return;
         }
 
         _gate.Wait();
         try
         {
+            // A3: unified null-workspace interception — INIT_CONFIG is exempt (creates workspace)
+            if (_currentContext == null && req.Action != "INIT_CONFIG" && WorkspaceScopedActions.Contains(req.Action))
+            {
+                Send(IpcResponse.Error(req.Action, "请先选择一个工作区"));
+                return;
+            }
+
             switch (req.Action)
             {
                 case "GET_STATUS":
-                    HandleGetStatus();
+                    _configHandler.HandleGetStatus();
                     break;
 
                 case "REFRESH_SYNC":
-                    HandleRefreshSync();
+                    _configHandler.HandleRefreshSync();
                     break;
 
                 case "GET_VERSION":
-                    HandleGetVersion();
+                    _configHandler.HandleGetVersion();
                     break;
 
                 case "GET_CONFIG":
-                    HandleGetConfig();
+                    _configHandler.HandleGetConfig();
                     break;
 
                 case "INIT_CONFIG":
-                    HandleInitConfig(req.Payload);
+                    HandleInitConfigWithWorkspace(req.Payload);
                     break;
 
                 case "GET_BRANCHES":
-                    HandleGetBranches();
+                    _gitBranchHandler.HandleGetBranches();
                     break;
 
                 case "SWITCH_TO_VANILLA":
-                    HandleSwitchToVanilla();
+                    _gitBranchHandler.HandleSwitchToVanilla();
                     break;
 
                 case "SYNC_OTHER_BRANCH":
-                    HandleSyncOtherBranch(req.Payload);
+                    _gitBranchHandler.HandleSyncOtherBranch(req.Payload);
                     break;
 
                 case "CREATE_MY_BRANCH":
-                    HandleCreateMyBranch(req.Payload);
+                    _gitBranchHandler.HandleCreateMyBranch(req.Payload);
                     break;
 
                 case "SAVE_AND_PUSH_MY_BRANCH":
-                    HandleSaveAndPush();
+                    _gitBranchHandler.HandleSaveAndPush();
                     break;
 
                 case "FORCE_PUSH":
-                    HandleForcePush();
+                    _gitBranchHandler.HandleForcePush();
                     break;
 
                 case "RESET_TO_REMOTE":
-                    HandleResetToRemote();
+                    _gitBranchHandler.HandleResetToRemote();
                     break;
 
                 case "RESTORE_JUNCTION":
-                    HandleRestoreJunction();
+                    _filesystemHandler.HandleRestoreJunction();
                     break;
 
                 case "OPEN_FOLDER":
-                    HandleOpenFolder(req.Payload);
+                    _filesystemHandler.HandleOpenFolder(req.Payload);
+                    break;
+
+                case "LAUNCH_GAME":
+                    _filesystemHandler.HandleLaunchGame();
+                    break;
+
+                case "SET_CUSTOM_EXE":
+                    _filesystemHandler.HandleSetCustomExe(req.Payload);
                     break;
 
                 // ── save management ──────────────────────────────────
                 case "GET_SAVE_STATUS":
-                    HandleGetSaveStatus();
+                    _saveHandler.HandleGetSaveStatus();
                     break;
 
                 case "UNLINK_SAVES":
-                    HandleUnlinkSaves();
+                    _saveHandler.HandleUnlinkSaves();
                     break;
 
                 case "BACKUP_SAVES":
-                    HandleBackupSaves();
+                    _saveHandler.HandleBackupSaves();
                     break;
 
                 case "GET_BACKUP_LIST":
-                    HandleGetBackupList();
+                    _saveHandler.HandleGetBackupList();
                     break;
 
                 case "RESTORE_BACKUP":
-                    HandleRestoreBackup(req.Payload);
+                    _saveHandler.HandleRestoreBackup(req.Payload);
                     break;
 
                 case "DELETE_BACKUP":
-                    HandleDeleteBackup(req.Payload);
+                    _saveHandler.HandleDeleteBackup(req.Payload);
                     break;
 
                 // ── save redirect ─────────────────────────────────────
                 case "GET_REDIRECT_STATUS":
-                    HandleGetRedirectStatus();
+                    _redirectHandler.HandleGetRedirectStatus();
                     break;
 
                 case "SET_REDIRECT":
-                    HandleSetRedirect(req.Payload);
+                    _redirectHandler.HandleSetRedirect(req.Payload);
                     break;
 
                 case "GET_DISMISSED_ANNOUNCEMENTS":
-                    HandleGetDismissedAnnouncements();
+                    _announcementHandler.HandleGetDismissedAnnouncements();
                     break;
 
                 case "DISMISS_ANNOUNCEMENT":
-                    HandleDismissAnnouncement(req.Payload);
+                    _announcementHandler.HandleDismissAnnouncement(req.Payload);
+                    break;
+
+                // ── workspace management ─────────────────────────────
+                case "CREATE_WORKSPACE":
+                    HandleCreateWorkspaceAndSwitch(req.Payload);
+                    break;
+
+                case "DELETE_WORKSPACE":
+                    HandleDeleteWorkspaceAndSwitch(req.Payload);
+                    break;
+
+                case "SWITCH_WORKSPACE":
+                    HandleSwitchWorkspace(req.Payload);
+                    break;
+
+                case "OPEN_WORKSPACE_TAB":
+                    _workspaceHandler.HandleOpenTab(req.Payload);
+                    break;
+
+                case "CLOSE_WORKSPACE_TAB":
+                    HandleCloseTabAndMaybeSwitch(req.Payload);
+                    break;
+
+                case "RENAME_WORKSPACE":
+                    _workspaceHandler.HandleRenameWorkspace(req.Payload);
+                    break;
+
+                // ── global settings ───────────────────────────────
+                case "GET_SETTINGS":
+                    _settingsHandler.HandleGetSettings();
+                    break;
+
+                case "SAVE_SETTINGS":
+                    _settingsHandler.HandleSaveSettings(req.Payload);
+                    break;
+
+                // ── mod manager ─────────────────────────────────────
+                case "GET_LOCAL_MODS_DETAILED":
+                    _modManagerHandler.HandleGetLocalModsDetailed();
+                    break;
+
+                case "DELETE_MOD":
+                    _modManagerHandler.HandleDeleteMod(req.Payload);
+                    break;
+
+                case "INSTALL_MOD_FILES":
+                    _modManagerHandler.HandleInstallModFiles(req.Payload);
+                    break;
+
+                case "GET_BRANCH_MODS_FOR_COPY":
+                    _modManagerHandler.HandleGetBranchModsForCopy(req.Payload);
+                    break;
+
+                case "COPY_MOD_FROM_BRANCH":
+                    _modManagerHandler.HandleCopyModFromBranch(req.Payload);
+                    break;
+
+                case "INSTALL_MOD_DROPPED":
+                    _modManagerHandler.HandleInstallModDropped(req.Payload);
                     break;
 
                 default:
@@ -259,7 +449,7 @@ public class MessageRouter
             ex.Message.Contains("401") || ex.Message.Contains("403"))
         {
             LogService.Error($"[{req.Action}] Auth failure", ex);
-            var authType = _configService.LoadConfig().AuthType;
+            var authType = _currentContext?.ConfigService.LoadConfig().AuthType ?? "anonymous";
             var msg = authType switch
             {
                 "anonymous" =>
@@ -287,763 +477,169 @@ public class MessageRouter
         }
     }
 
-    // ── action handlers ──────────────────────────────────────────────────
-
-    private void HandleGetVersion()
+    /// <summary>
+    /// Intercepts INIT_CONFIG: if no workspace exists yet, create one first,
+    /// then rebuild handlers with the new workspace context before delegating.
+    /// </summary>
+    private void HandleInitConfigWithWorkspace(JsonElement? payload)
     {
-        var version = Assembly.GetExecutingAssembly()
+        if (_currentContext == null)
+        {
+            // first-time setup — create a default workspace
+            var ws = _workspaceManager.CreateWorkspace("Slay the Spire 2", "sts2");
+            _workspaceManager.SetActiveWorkspace(ws.Id);
+
+            _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+            BuildHandlers();
+        }
+
+        _configHandler.HandleInitConfig(payload);
+    }
+
+    // CREATE_WORKSPACE — create, switch context, notify
+    private void HandleCreateWorkspaceAndSwitch(JsonElement? payload)
+    {
+        // M2 fix: safe property access
+        string? name = null, gameType = "sts2";
+        if (payload is not null)
+        {
+            if (payload.Value.TryGetProperty("name", out var nameEl)) name = nameEl.GetString();
+            if (payload.Value.TryGetProperty("gameType", out var gtEl)) gameType = gtEl.GetString() ?? "sts2";
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Send(IpcResponse.Error("CREATE_WORKSPACE", "工作区名称不能为空"));
+            return;
+        }
+
+        // block coming-soon game types in release builds
+        var adapter = GameAdapterRegistry.Get(gameType);
+        var ver = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
-        var arch = RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant(); // x64, arm64, etc.
-        var distribution = DistributionHelper.IsMsixPackaged ? "store" : "direct";
-        Send(IpcResponse.Success("GET_VERSION", new { version, arch, distribution }));
-    }
-
-    private void HandleGetStatus()
-    {
-        var cfg = _configService.LoadConfig();
-        var repoExists = _gitService.IsRepoValid;
-
-        object data;
-        if (!cfg.IsConfigured || !repoExists)
+        if (!ver.StartsWith("nightly-") && adapter.ComingSoon)
         {
-            data = new
-            {
-                isConfigured = false,
-                currentBranch = (string?)null,
-                isJunctionActive = false,
-                hasLocalChanges = false
-            };
-        }
-        else
-        {
-            var isJunction = _junctionService.IsJunction(cfg.GameModPath);
-            var branch = _gitService.GetCurrentBranch();
-            var isInit = branch == GitService.InitBranch;
-            data = new
-            {
-                isConfigured = true,
-                currentBranch = isInit ? (string?)null : branch,
-                isJunctionActive = isJunction,
-                hasLocalChanges = isInit ? false : _gitService.HasLocalChanges(),
-                needsBranchSelection = isInit
-            };
-        }
-
-        Send(IpcResponse.Success("GET_STATUS", data));
-    }
-
-    /// <summary>
-    /// fetch from remote and return ahead/behind counts -- used by the refresh button
-    /// </summary>
-    private void HandleRefreshSync()
-    {
-        var cfg = _configService.LoadConfig();
-        if (!cfg.IsConfigured || !_gitService.IsRepoValid || _gitService.IsOnInitBranch)
-        {
-            // nothing useful to fetch, just return basic status
-            HandleGetStatus();
+            Send(IpcResponse.Error("CREATE_WORKSPACE", "该游戏类型尚未开放"));
             return;
         }
 
-        var sync = _gitService.FetchAndGetSyncStatus();
-        var isJunction = _junctionService.IsJunction(cfg.GameModPath);
-        var branch = _gitService.GetCurrentBranch();
+        var ws = _workspaceManager.CreateWorkspace(name, gameType);
+        _workspaceManager.SetActiveWorkspace(ws.Id);
 
-        Send(IpcResponse.Success("REFRESH_SYNC", new
+        // switch context to the new workspace
+        _currentContext?.Dispose();
+        _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+        BuildHandlers();
+
+        Send(IpcResponse.Success("CREATE_WORKSPACE", new
         {
-            currentBranch = branch,
-            isJunctionActive = isJunction,
-            hasLocalChanges = _gitService.HasLocalChanges(),
-            ahead = sync.Ahead,
-            behind = sync.Behind,
-            hasRemoteBranch = sync.HasRemoteBranch
+            id = ws.Id,
+            name = ws.Name,
+            gameType = ws.GameType,
+            gameDisplayName = GameAdapterRegistry.Get(ws.GameType).DisplayName,
+            openTabs = _workspaceManager.Config.OpenTabs,
+            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
         }));
     }
 
-    /// <summary>
-    /// return saved config to frontend for pre-filling the settings form
-    /// strips sensitive fields (token, ssh passphrase)
-    /// </summary>
-    private void HandleGetConfig()
+    // SWITCH_WORKSPACE — dispose old context, create new one, rebuild handlers
+    private void HandleSwitchWorkspace(JsonElement? payload)
     {
-        var cfg = _configService.LoadConfig();
-        var gitUserName = _gitService.ReadGitGlobalConfig("user.name");
-        Send(IpcResponse.Success("GET_CONFIG", new
+        string? id = null;
+        if (payload is not null && payload.Value.TryGetProperty("id", out var idEl))
+            id = idEl.GetString();
+        var ws = string.IsNullOrWhiteSpace(id) ? null : _workspaceManager.GetWorkspace(id);
+        if (ws == null)
         {
-            nickname = cfg.Nickname,
-            repoUrl = cfg.RepoUrl,
-            authType = cfg.AuthType,
-            username = cfg.Username,
-            sshKeyPath = cfg.SshKeyPath,
-            gameInstallPath = cfg.GameInstallPath,
-            saveFolderPath = cfg.SaveFolderPath,
-            gitUserName,
-            // don't return token or sshPassphrase
+            Send(IpcResponse.Error("SWITCH_WORKSPACE", "工作区不存在"));
+            return;
+        }
+
+        _currentContext?.Dispose();
+        _workspaceManager.SetActiveWorkspace(id!);
+        _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+        BuildHandlers();
+
+        Send(IpcResponse.Success("SWITCH_WORKSPACE", new
+        {
+            id = ws.Id,
+            name = ws.Name,
+            gameType = ws.GameType,
+            gameDisplayName = GameAdapterRegistry.Get(ws.GameType).DisplayName,
         }));
     }
 
-    private void HandleInitConfig(JsonElement? payload)
+    // DELETE_WORKSPACE — dispose context if active, delete, rebuild if needed
+    private void HandleDeleteWorkspaceAndSwitch(JsonElement? payload)
     {
-        if (payload is null)
+        string? id = null;
+        if (payload is not null && payload.Value.TryGetProperty("id", out var idEl))
+            id = idEl.GetString();
+        if (string.IsNullOrWhiteSpace(id))
         {
-            Send(IpcResponse.Error("INIT_CONFIG", "Missing payload"));
+            Send(IpcResponse.Error("DELETE_WORKSPACE", "缺少工作区 ID"));
             return;
         }
 
-        var raw = payload.Value.GetRawText();
-        var cfg = JsonSerializer.Deserialize<AppConfig>(raw);
-        if (cfg is null)
+        // if deleting the active workspace, tear down context first
+        if (_workspaceManager.Config.ActiveWorkspace == id)
         {
-            Send(IpcResponse.Error("INIT_CONFIG", "请填写所有配置项"));
-            return;
+            _currentContext?.Dispose();
+            _currentContext = null;
         }
 
-        // validate game install path: must contain SlayTheSpire2.exe
-        // if the user picked a subdirectory, walk up to find the correct root
-        if (!string.IsNullOrWhiteSpace(cfg.GameInstallPath))
+        _workspaceManager.DeleteWorkspace(id);
+
+        // if there's a new active workspace after deletion, spin up its context
+        var newActive = _workspaceManager.Config.ActiveWorkspace;
+        if (newActive != null)
         {
-            var resolved = FindAncestorContaining(cfg.GameInstallPath, "SlayTheSpire2.exe", isFile: true);
-            if (resolved is null)
+            var ws = _workspaceManager.GetWorkspace(newActive);
+            if (ws != null)
             {
-                Send(IpcResponse.Error("INIT_CONFIG",
-                    $"游戏安装路径无效：未找到 SlayTheSpire2.exe\n请确认路径是否正确：{cfg.GameInstallPath}"));
-                return;
-            }
-            cfg.GameInstallPath = resolved;
-        }
-
-        // validate save folder: must contain profile1/ dir and profile.save file
-        // walk up if necessary so the user can pick e.g. saves/profile1 and we still find saves/
-        if (!string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
-        {
-            var resolved = FindAncestorContaining(cfg.SaveFolderPath,
-                dir => Directory.Exists(Path.Combine(dir, "profile1"))
-                    && File.Exists(Path.Combine(dir, "profile.save")));
-            if (resolved is null)
-            {
-                Send(IpcResponse.Error("INIT_CONFIG",
-                    $"存档路径无效：未找到 profile1 文件夹或 profile.save 文件\n请确认路径是否正确：{cfg.SaveFolderPath}"));
-                return;
-            }
-            cfg.SaveFolderPath = resolved;
-        }
-
-        // merge sensitive fields from existing config if user left them blank
-        var existing = _configService.LoadConfig();
-        if (string.IsNullOrWhiteSpace(cfg.Token) && !string.IsNullOrWhiteSpace(existing.Token))
-            cfg.Token = existing.Token;
-        if (string.IsNullOrWhiteSpace(cfg.SshPassphrase) && !string.IsNullOrWhiteSpace(existing.SshPassphrase))
-            cfg.SshPassphrase = existing.SshPassphrase;
-
-        if (!cfg.IsConfigured)
-        {
-            Send(IpcResponse.Error("INIT_CONFIG", "请填写所有配置项"));
-            return;
-        }
-
-        // invalidate cache so we re-read fresh after save
-        _configService.InvalidateCache();
-        _configService.SaveConfig(cfg);
-
-        // check if remote URL changed — if so, nuke the old repo and re-clone
-        // (could be a completely different repo, can't just update the remote)
-        var needsClone = !_gitService.IsRepoValid;
-        if (!needsClone)
-        {
-            var currentUrl = _gitService.GetCurrentRemoteUrl();
-            if (!string.Equals(currentUrl, cfg.RepoUrl, StringComparison.Ordinal))
-                needsClone = true;
-        }
-
-        if (needsClone)
-        {
-            Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
-
-            // detach junction so deleting Repo/ doesn't wipe the user's mods
-            if (_junctionService.IsJunction(cfg.GameModPath))
-                _junctionService.RemoveJunction(cfg.GameModPath);
-
-            // stash mod files before nuking Repo/ — we'll put them back after clone
-            var stashPath = _configService.RepoPath + "_stash";
-            ForceDeleteDirectory(stashPath);
-            if (Directory.Exists(_configService.RepoPath))
-                Directory.Move(_configService.RepoPath, stashPath);
-
-            ForceDeleteDirectory(_configService.GitDirPath);
-
-            _gitService.CloneRepo();
-
-            // restore mod files into the fresh Repo/ so the user's mods survive
-            if (Directory.Exists(stashPath))
-            {
-                _junctionService.FallbackCopy(stashPath, _configService.RepoPath);
-                ForceDeleteDirectory(stashPath);
+                _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
             }
         }
+        BuildHandlers();
 
-        // set up junction: backup existing game mod folder, then create junction
-        EnsureJunction(cfg.GameModPath);
-
-        Send(IpcResponse.Success("INIT_CONFIG", new { message = "配置完成，仓库已就绪！" }));
-    }
-
-    private void HandleGetBranches()
-    {
-        Send(IpcResponse.Progress("GET_BRANCHES", "正在获取分支列表..."));
-
-        var branches = _gitService.GetRemoteBranches();
-        var current = _gitService.GetCurrentBranch();
-
-        // scan all branches for NSFW signals (folder names, mod names, etc.)
-        var nsfwMap = _gitService.CheckBranchesNsfw(branches.Select(b => b.Name));
-
-        // flatten BranchInfo to plain objects so JSON stays predictable
-        var list = branches.Select(b =>
+        Send(IpcResponse.Success("DELETE_WORKSPACE", new
         {
-            var nsfw = nsfwMap.GetValueOrDefault(b.Name);
-            return new
-            {
-                name = b.Name,
-                author = b.Author,
-                lastModified = b.LastModified.ToUnixTimeMilliseconds(),
-                isNsfw = nsfw?.IsNsfw ?? false,
-                nsfwReasons = nsfw?.Reasons ?? []
-            };
-        });
-
-        Send(IpcResponse.Success("GET_BRANCHES", new { branches = list, currentBranch = current }));
-    }
-
-    private void HandleGetBranchMods(JsonElement? payload)
-    {
-        var branchName = payload?.GetProperty("branchName").GetString();
-        if (string.IsNullOrWhiteSpace(branchName))
-        {
-            Send(IpcResponse.Error("GET_BRANCH_MODS", "Missing branch name"));
-            return;
-        }
-
-        try
-        {
-            var mods = _gitService.GetBranchMods(branchName);
-            var sorted = mods
-                .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(m => new
-                {
-                    id = m.Id,
-                    name = m.Name,
-                    author = m.Author,
-                    description = m.Description,
-                    version = m.Version
-                });
-
-            Send(IpcResponse.Success("GET_BRANCH_MODS", new { branchName, mods = sorted }));
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[GET_BRANCH_MODS] Failed to scan branch {branchName}", ex);
-            Send(IpcResponse.Error("GET_BRANCH_MODS", $"读取 Mod 列表失败：{ex.Message}"));
-        }
-    }
-
-    private void HandleSwitchToVanilla()
-    {
-        var cfg = _configService.LoadConfig();
-
-        // silently save any local changes first
-        _gitService.SilentCommitIfDirty();
-
-        // just remove the junction, real files stay safe in AppData
-        _junctionService.RemoveJunction(cfg.GameModPath);
-
-        Send(IpcResponse.Success("SWITCH_TO_VANILLA", new { message = "已切换到纯净模式，Mod 文件夹已断开。" }));
-    }
-
-    private void HandleSyncOtherBranch(JsonElement? payload)
-    {
-        var branchName = payload?.GetProperty("branchName").GetString();
-        if (string.IsNullOrWhiteSpace(branchName))
-        {
-            Send(IpcResponse.Error("SYNC_OTHER_BRANCH", "请选择一个分支"));
-            return;
-        }
-
-        Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}..."));
-
-        // save current work first
-        _gitService.SilentCommitIfDirty();
-
-        _gitService.ForceCheckoutBranch(branchName);
-
-        // make sure junction is pointing correctly
-        var cfg = _configService.LoadConfig();
-        EnsureJunction(cfg.GameModPath);
-
-        Send(IpcResponse.Success("SYNC_OTHER_BRANCH", new { message = $"已同步到 {branchName}" }));
-    }
-
-    private void HandleCreateMyBranch(JsonElement? payload)
-    {
-        var branchName = payload?.GetProperty("branchName").GetString();
-        if (string.IsNullOrWhiteSpace(branchName))
-        {
-            Send(IpcResponse.Error("CREATE_MY_BRANCH", "请输入分支名称"));
-            return;
-        }
-
-        Send(IpcResponse.Progress("CREATE_MY_BRANCH", $"正在创建分支 {branchName}..."));
-
-        _gitService.SilentCommitIfDirty();
-        _gitService.CreateBranch(branchName);
-
-        var cfg = _configService.LoadConfig();
-        EnsureJunction(cfg.GameModPath);
-
-        Send(IpcResponse.Success("CREATE_MY_BRANCH", new { message = $"分支 {branchName} 已创建" }));
-    }
-
-    private void HandleSaveAndPush()
-    {
-        if (_gitService.IsOnInitBranch)
-        {
-            Send(IpcResponse.Error("SAVE_AND_PUSH_MY_BRANCH", "请先选择或创建一个分支"));
-            return;
-        }
-
-        Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
-
-        var pushed = _gitService.CommitAndPush();
-
-        if (!pushed)
-        {
-            // branches diverged — let the user pick a resolution
-            Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH", new
-            {
-                message = "云端存在更新的配置，与本地改动冲突。"
-            }));
-            return;
-        }
-
-        Send(IpcResponse.Success("SAVE_AND_PUSH_MY_BRANCH", new { message = "已保存并上传！" }));
-    }
-
-    private void HandleForcePush()
-    {
-        Send(IpcResponse.Progress("FORCE_PUSH", "正在覆盖云端..."));
-        _gitService.ForcePush();
-        Send(IpcResponse.Success("FORCE_PUSH", new { message = "已覆盖云端配置！" }));
-    }
-
-    private void HandleResetToRemote()
-    {
-        Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
-        _gitService.ResetToRemote();
-
-        var cfg = _configService.LoadConfig();
-        EnsureJunction(cfg.GameModPath);
-
-        Send(IpcResponse.Success("RESET_TO_REMOTE", new { message = "已同步为云端配置！" }));
-    }
-
-    private void HandleRestoreJunction()
-    {
-        var cfg = _configService.LoadConfig();
-        EnsureJunction(cfg.GameModPath);
-
-        Send(IpcResponse.Success("RESTORE_JUNCTION", new { message = "Mod 文件夹已恢复连接。" }));
-    }
-
-    private void HandleOpenFolder(JsonElement? payload)
-    {
-        var folderType = payload?.GetProperty("folderType").GetString();
-        var cfg = _configService.LoadConfig();
-
-        var path = folderType switch
-        {
-            "game" => cfg.GameInstallPath,
-            "mod" => cfg.GameModPath,
-            "save" => cfg.SaveFolderPath,
-            "config" => ConfigService.AppDataDirPath,
-            "backup" => SaveBackupService.BackupDir,
-            _ => null
-        };
-
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-        {
-            Send(IpcResponse.Error("OPEN_FOLDER", "文件夹路径不存在或未配置"));
-            return;
-        }
-
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "explorer.exe",
-            Arguments = $"\"{path}\"",
-            UseShellExecute = false
-        });
-
-        Send(IpcResponse.Success("OPEN_FOLDER"));
-    }
-
-    /// <summary>
-    /// open native folder browser dialog, return selected path
-    /// </summary>
-    private void HandlePickFolder()
-    {
-        string? selectedPath = null;
-
-        // FolderBrowserDialog must run on STA thread
-        var tcs = new TaskCompletionSource<string?>();
-        _uiContext.Post(_ =>
-        {
-            using var dialog = new FolderBrowserDialog
-            {
-                Description = "选择文件夹",
-                UseDescriptionForTitle = true,
-                ShowNewFolderButton = false
-            };
-            if (dialog.ShowDialog(_form) == DialogResult.OK)
-                selectedPath = dialog.SelectedPath;
-
-            tcs.SetResult(selectedPath);
-        }, null);
-
-        var result = tcs.Task.GetAwaiter().GetResult();
-
-        if (!string.IsNullOrWhiteSpace(result))
-            Send(IpcResponse.Success("PICK_FOLDER", new { path = result }));
-        else
-            Send(IpcResponse.Success("PICK_FOLDER", new { path = (string?)null }));
-    }
-
-    // ── helpers ──────────────────────────────────────────────────────────
-
-    private void EnsureJunction(string gameModPath)
-    {
-        if (_junctionService.IsJunction(gameModPath))
-            return; // already good
-
-        // backup existing real folder using the backup service
-        if (Directory.Exists(gameModPath))
-        {
-            _backupService.BackupModFolder(gameModPath);
-            Directory.Delete(gameModPath, true);
-        }
-
-        var ok = _junctionService.CreateJunction(gameModPath, _configService.RepoPath);
-        if (!ok)
-        {
-            // fallback: copy files instead
-            Send(IpcResponse.Progress("JUNCTION_FALLBACK", "Junction 创建失败，降级为复制模式..."));
-            _junctionService.FallbackCopy(_configService.RepoPath, gameModPath);
-        }
-    }
-
-    // ── save management handlers ─────────────────────────────────────
-
-    private void HandleGetSaveStatus()
-    {
-        var cfg = _configService.LoadConfig();
-
-        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath) || !Directory.Exists(cfg.SaveFolderPath))
-        {
-            Send(IpcResponse.Success("GET_SAVE_STATUS", new { isConfigured = false }));
-            return;
-        }
-
-        var status = _mergeService.GetStatus(cfg.SaveFolderPath);
-
-        var mergeState = status.IsFullyLinked ? "linked"
-                       : status.IsPartiallyLinked ? "partial"
-                       : status.HasModdedFolder ? "unlinked"
-                       : "no_modded";
-
-        Send(IpcResponse.Success("GET_SAVE_STATUS", new
-        {
-            isConfigured = true,
-            mergeState,
-            profiles = status.Profiles.Select(p => new
-            {
-                name = p.Name,
-                normalExists = p.NormalExists,
-                moddedExists = p.ModdedExists,
-                isJunction = p.IsJunction
-            })
+            openTabs = _workspaceManager.Config.OpenTabs,
+            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
         }));
     }
 
-    private void HandleUnlinkSaves()
+    // CLOSE_WORKSPACE_TAB — close tab, switch if it was the active one
+    private void HandleCloseTabAndMaybeSwitch(JsonElement? payload)
     {
-        var cfg = _configService.LoadConfig();
-        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
+        string? id = null;
+        if (payload is not null && payload.Value.TryGetProperty("id", out var idEl))
+            id = idEl.GetString() ?? "";
+        var wasActive = _workspaceManager.Config.ActiveWorkspace == id;
+
+        _workspaceManager.CloseTab(id ?? "");
+
+        // if closed tab was active, we need to switch context
+        if (wasActive)
         {
-            Send(IpcResponse.Error("UNLINK_SAVES", "存档路径未配置"));
-            return;
-        }
+            _currentContext?.Dispose();
+            _currentContext = null;
 
-        Send(IpcResponse.Progress("UNLINK_SAVES", "正在取消合并..."));
-
-        var backupPath = _mergeService.Unlink(cfg.SaveFolderPath);
-
-        Send(IpcResponse.Success("UNLINK_SAVES", new
-        {
-            message = "存档已取消合并，Mod 存档恢复为独立副本。",
-            backupName = Path.GetFileName(backupPath)
-        }));
-    }
-
-    private void HandleBackupSaves()
-    {
-        var cfg = _configService.LoadConfig();
-        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
-        {
-            Send(IpcResponse.Error("BACKUP_SAVES", "存档路径未配置"));
-            return;
-        }
-
-        Send(IpcResponse.Progress("BACKUP_SAVES", "正在备份存档..."));
-
-        var backupPath = _backupService.BackupSaveFolder(cfg.SaveFolderPath);
-
-        Send(IpcResponse.Success("BACKUP_SAVES", new
-        {
-            message = $"存档已备份到 {Path.GetFileName(backupPath)}"
-        }));
-    }
-
-    private void HandleGetBackupList()
-    {
-        var backups = _backupService.ListBackups();
-
-        Send(IpcResponse.Success("GET_BACKUP_LIST", new
-        {
-            backups = backups.Select(b => new
+            var newActive = _workspaceManager.Config.ActiveWorkspace;
+            if (newActive != null)
             {
-                name = b.Name,
-                createdAt = new DateTimeOffset(b.CreatedAt).ToUnixTimeMilliseconds(),
-                sizeBytes = b.SizeBytes,
-                type = b.Type
-            })
-        }));
-    }
-
-    private void HandleRestoreBackup(JsonElement? payload)
-    {
-        var backupName = payload?.GetProperty("backupName").GetString();
-        if (string.IsNullOrWhiteSpace(backupName))
-        {
-            Send(IpcResponse.Error("RESTORE_BACKUP", "未指定备份名称"));
-            return;
-        }
-
-        // sanitize: prevent path traversal (same check as DeleteBackup)
-        if (backupName.Contains("..") || backupName.Contains('/') || backupName.Contains('\\'))
-        {
-            Send(IpcResponse.Error("RESTORE_BACKUP", "备份名称无效"));
-            return;
-        }
-
-        var cfg = _configService.LoadConfig();
-        if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
-        {
-            Send(IpcResponse.Error("RESTORE_BACKUP", "存档路径未配置"));
-            return;
-        }
-
-        var backupPath = Path.Combine(SaveBackupService.BackupDir, backupName);
-        if (!Directory.Exists(backupPath))
-        {
-            Send(IpcResponse.Error("RESTORE_BACKUP", "备份不存在或已被删除"));
-            return;
-        }
-
-        Send(IpcResponse.Progress("RESTORE_BACKUP", "正在备份当前存档并恢复..."));
-
-        // auto-backup current state before restoring
-        _backupService.BackupSaveFolder(cfg.SaveFolderPath);
-
-        _backupService.RestoreSaveBackup(backupPath, cfg.SaveFolderPath, _junctionService);
-
-        Send(IpcResponse.Success("RESTORE_BACKUP", new
-        {
-            message = "存档已恢复！恢复前的状态已自动备份。"
-        }));
-    }
-
-    private void HandleDeleteBackup(JsonElement? payload)
-    {
-        var backupName = payload?.GetProperty("backupName").GetString();
-        if (string.IsNullOrWhiteSpace(backupName))
-        {
-            Send(IpcResponse.Error("DELETE_BACKUP", "未指定备份名称"));
-            return;
-        }
-
-        _backupService.DeleteBackup(backupName);
-
-        Send(IpcResponse.Success("DELETE_BACKUP", new
-        {
-            message = "备份已删除"
-        }));
-    }
-
-    // ── save redirect handlers ────────────────────────────────────
-
-    private const string RedirectModId = "ModProfileBypass";
-    // only these files belong to the redirect mod — delete precisely, nothing else
-    private static readonly string[] RedirectModFiles = ["ModProfileBypass.dll", "ModProfileBypass.json"];
-
-    private void HandleGetRedirectStatus()
-    {
-        var cfg = _configService.LoadConfig();
-        var isJunction = cfg.IsConfigured && _junctionService.IsJunction(cfg.GameModPath);
-
-        if (!isJunction)
-        {
-            Send(IpcResponse.Success("GET_REDIRECT_STATUS", new
-            {
-                isJunctionActive = false,
-                isEnabled = false
-            }));
-            return;
-        }
-
-        // mod is "enabled" when both files exist in the game mods dir
-        var modDir = Path.Combine(cfg.GameModPath, RedirectModId);
-        var isEnabled = RedirectModFiles.All(f => File.Exists(Path.Combine(modDir, f)));
-
-        Send(IpcResponse.Success("GET_REDIRECT_STATUS", new
-        {
-            isJunctionActive = true,
-            isEnabled
-        }));
-    }
-
-    private void HandleSetRedirect(JsonElement? payload)
-    {
-        var cfg = _configService.LoadConfig();
-        if (!cfg.IsConfigured || !_junctionService.IsJunction(cfg.GameModPath))
-        {
-            Send(IpcResponse.Error("SET_REDIRECT", "Mod 未连接，请先连接 Mod"));
-            return;
-        }
-
-        var enabled = payload?.GetProperty("enabled").GetBoolean() ?? true;
-        var modDir = Path.Combine(cfg.GameModPath, RedirectModId);
-
-        if (enabled)
-        {
-            // deploy: copy mod files from bundled assets
-            var assetsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", RedirectModId);
-            if (!Directory.Exists(assetsDir))
-            {
-                Send(IpcResponse.Error("SET_REDIRECT", "重定向 Mod 资源缺失，请重新安装软件"));
-                return;
+                var ws = _workspaceManager.GetWorkspace(newActive);
+                if (ws != null)
+                    _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
             }
-            Directory.CreateDirectory(modDir);
-            foreach (var file in RedirectModFiles)
-                File.Copy(Path.Combine(assetsDir, file), Path.Combine(modDir, file), overwrite: true);
-        }
-        else
-        {
-            // remove: delete only the exact mod files, leave the folder if other stuff exists
-            foreach (var file in RedirectModFiles)
-            {
-                var path = Path.Combine(modDir, file);
-                if (File.Exists(path))
-                    File.Delete(path);
-            }
-
-            // clean up empty folder
-            if (Directory.Exists(modDir) && !Directory.EnumerateFileSystemEntries(modDir).Any())
-                Directory.Delete(modDir);
+            BuildHandlers();
         }
 
-        Send(IpcResponse.Success("SET_REDIRECT", new
+        Send(IpcResponse.Success("CLOSE_WORKSPACE_TAB", new
         {
-            isEnabled = enabled,
-            message = enabled ? "存档重定向已启用" : "存档重定向已关闭"
+            openTabs = _workspaceManager.Config.OpenTabs,
+            activeWorkspace = _workspaceManager.Config.ActiveWorkspace,
         }));
-    }
-
-    // ── dismissed announcements ─────────────────────────────────────
-
-    private void HandleGetDismissedAnnouncements()
-    {
-        var ids = _configService.GetDismissedAnnouncements();
-        Send(IpcResponse.Success("GET_DISMISSED_ANNOUNCEMENTS", new { ids }));
-    }
-
-    private void HandleDismissAnnouncement(JsonElement? payload)
-    {
-        if (payload is null) return;
-        if (!payload.Value.TryGetProperty("id", out var idEl)) return;
-        var id = idEl.GetString();
-        if (!string.IsNullOrEmpty(id))
-            _configService.DismissAnnouncement(id);
-    }
-
-    // ── steam auto-find handlers ──────────────────────────────────
-
-    private void HandleFindGamePath()
-    {
-        var result = _steamFinder.FindGamePath();
-        if (result.Path is not null)
-            Send(IpcResponse.Success("FIND_GAME_PATH", new { path = result.Path }));
-        else
-            Send(IpcResponse.Error("FIND_GAME_PATH", result.Error ?? "未找到游戏安装路径"));
-    }
-
-    private void HandleFindSavePath()
-    {
-        var result = _steamFinder.FindSaveAccounts();
-        if (result.Accounts is not null)
-        {
-            Send(IpcResponse.Success("FIND_SAVE_PATH", new
-            {
-                basePath = result.BasePath,
-                accounts = result.Accounts.Select(a => new
-                {
-                    steamId = a.SteamId64,
-                    personaName = a.PersonaName,
-                    mostRecent = a.MostRecent,
-                    hasSave = a.HasSaveFolder
-                })
-            }));
-        }
-        else
-        {
-            Send(IpcResponse.Error("FIND_SAVE_PATH", result.Error ?? "未找到存档目录"));
-        }
-    }
-
-    // ── store update handlers ─────────────────────────────────────
-
-    private async Task HandleCheckStoreUpdate()
-    {
-        try
-        {
-            var (hasUpdate, isMandatory) = await _storeUpdateService.CheckForUpdatesAsync();
-            Send(IpcResponse.Success("CHECK_STORE_UPDATE", new { available = hasUpdate, mandatory = isMandatory }));
-        }
-        catch (Exception ex)
-        {
-            LogService.Error("CHECK_STORE_UPDATE failed", ex);
-            Send(IpcResponse.Error("CHECK_STORE_UPDATE", ex.Message));
-        }
-    }
-
-    private async Task HandleInstallStoreUpdate()
-    {
-        try
-        {
-            var result = await _storeUpdateService.DownloadAndInstallAsync();
-            Send(IpcResponse.Success("INSTALL_STORE_UPDATE", new { result }));
-        }
-        catch (Exception ex)
-        {
-            LogService.Error("INSTALL_STORE_UPDATE failed", ex);
-            Send(IpcResponse.Error("INSTALL_STORE_UPDATE", ex.Message));
-        }
     }
 
     private void Send(IpcResponse response)
@@ -1051,54 +647,5 @@ public class MessageRouter
         var json = response.ToJson();
         // PostWebMessageAsString must be called on the UI thread
         _uiContext.Post(_ => _webView.PostWebMessageAsString(json), null);
-    }
-
-    /// <summary>
-    /// git marks object files as read-only, so Directory.Delete chokes on Windows.
-    /// strip the flag first, then nuke the whole tree.
-    /// </summary>
-    // walk up from startPath looking for a file/dir by name
-    private static string? FindAncestorContaining(string startPath, string childName, bool isFile)
-    {
-        var dir = startPath;
-        while (!string.IsNullOrEmpty(dir))
-        {
-            var candidate = Path.Combine(dir, childName);
-            if (isFile ? File.Exists(candidate) : Directory.Exists(candidate))
-                return dir;
-            var parent = Directory.GetParent(dir)?.FullName;
-            if (parent == dir) break;
-            dir = parent;
-        }
-        return null;
-    }
-
-    // walk up from startPath using a custom predicate
-    private static string? FindAncestorContaining(string startPath, Func<string, bool> predicate)
-    {
-        var dir = startPath;
-        while (!string.IsNullOrEmpty(dir))
-        {
-            if (predicate(dir))
-                return dir;
-            var parent = Directory.GetParent(dir)?.FullName;
-            if (parent == dir) break;
-            dir = parent;
-        }
-        return null;
-    }
-
-    private static void ForceDeleteDirectory(string path)
-    {
-        if (!Directory.Exists(path)) return;
-
-        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-        {
-            var attr = File.GetAttributes(file);
-            if (attr.HasFlag(FileAttributes.ReadOnly))
-                File.SetAttributes(file, attr & ~FileAttributes.ReadOnly);
-        }
-
-        Directory.Delete(path, true);
     }
 }

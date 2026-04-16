@@ -12,8 +12,8 @@ public class MainForm : Form
     private MessageRouter? _router;
 
     // base sizes designed at 96 DPI (100% scaling)
-    private const int DesignWidth = 650;
-    private const int DesignHeight = 600;
+    private const int DesignWidth = 700;
+    private const int DesignHeight = 650;
     private const int MinWidth = 640;
     private const int MinHeight = 480;
 
@@ -80,7 +80,7 @@ public class MainForm : Form
         try
         {
             // use a dedicated user-data folder so we don't pollute the default profile
-            var udFolder = Path.Combine(ConfigService.AppDataDirPath, "WebView2Data");
+            var udFolder = Path.Combine(WorkspaceManager.AppDataDir, "WebView2Data");
 
             var env = await CoreWebView2Environment.CreateAsync(null, udFolder);
             await _webView.EnsureCoreWebView2Async(env);
@@ -100,19 +100,29 @@ public class MainForm : Form
         var wwwroot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
         _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             "app.local", wwwroot, CoreWebView2HostResourceAccessKind.Allow);
+        var assetsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
+        _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            "assets.local", assetsDir, CoreWebView2HostResourceAccessKind.Allow);
 
         // wire up services & router (pass Form reference for window controls)
-        var configService = new ConfigService();
+        var workspaceManager = new WorkspaceManager();
         var junctionService = new JunctionService();
         var gitResolver = new GitResolver();
-        var gitService = new GitService(configService, gitResolver);
-        var backupService = new SaveBackupService();
-        var mergeService = new SaveMergeService(junctionService, backupService);
         var storeUpdateService = new StoreUpdateService();
         storeUpdateService.Initialize(this.Handle);
+
+        // resolve active workspace — create context if one exists
+        WorkspaceContext? wsContext = null;
+        var activeId = workspaceManager.Config.ActiveWorkspace;
+        if (activeId != null && workspaceManager.GetWorkspace(activeId) != null)
+        {
+            wsContext = new WorkspaceContext(
+                workspaceManager.GetWorkspace(activeId)!, workspaceManager, gitResolver, junctionService);
+        }
+
         _router = new MessageRouter(
-            _webView.CoreWebView2, configService, gitService, gitResolver,
-            junctionService, backupService, mergeService, storeUpdateService, this);
+            _webView.CoreWebView2, workspaceManager, wsContext,
+            gitResolver, junctionService, storeUpdateService, this);
 
         _webView.CoreWebView2.WebMessageReceived += (_, e) =>
         {
@@ -143,7 +153,7 @@ public class MainForm : Form
         MinimumSize = new System.Drawing.Size((int)(MinWidth * scale), (int)(MinHeight * scale));
     }
 
-    // ── native drag support ─────────────────────────────────────────────
+    // ── native drag + resize support ────────────────────────────────────
 
     [DllImport("user32.dll")]
     private static extern bool ReleaseCapture();
@@ -161,6 +171,33 @@ public class MainForm : Form
     {
         ReleaseCapture();
         SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+    }
+
+    // SC_SIZE direction constants (WMSZ_*)
+    private const int WM_SYSCOMMAND = 0x0112;
+    private const int SC_SIZE = 0xF000;
+
+    private static readonly Dictionary<string, int> ResizeDirections = new()
+    {
+        ["w"]  = 1, // WMSZ_LEFT
+        ["e"]  = 2, // WMSZ_RIGHT
+        ["n"]  = 3, // WMSZ_TOP
+        ["nw"] = 4, // WMSZ_TOPLEFT
+        ["ne"] = 5, // WMSZ_TOPRIGHT
+        ["s"]  = 6, // WMSZ_BOTTOM
+        ["sw"] = 7, // WMSZ_BOTTOMLEFT
+        ["se"] = 8, // WMSZ_BOTTOMRIGHT
+    };
+
+    /// <summary>
+    /// called from MessageRouter when JS detects mousedown on a window edge
+    /// </summary>
+    public void BeginResize(string edge)
+    {
+        if (WindowState == FormWindowState.Maximized) return;
+        if (!ResizeDirections.TryGetValue(edge, out var dir)) return;
+        ReleaseCapture();
+        SendMessage(Handle, WM_SYSCOMMAND, SC_SIZE + dir, 0);
     }
 
     // ── WndProc: borderless frame + maximize bounds ────────
