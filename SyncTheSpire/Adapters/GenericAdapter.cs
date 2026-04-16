@@ -39,6 +39,7 @@ public class GenericAdapter : IGameAdapter
     public bool SupportsModScanning => false;
     public bool SupportsJunction => false;
     public bool ComingSoon => false;
+    public int? SteamAppId => null;
 
     // ── save redirect (no-op) ────────────────────────────────────────────
 

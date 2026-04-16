@@ -34,6 +34,10 @@ on('GET_STATUS', data => {
         if (payload.capabilities) {
             ws.capabilities = payload.capabilities;
         }
+        // stash custom exe path for launch button
+        if (payload.customExePath !== undefined) {
+            ws.customExePath = payload.customExePath || '';
+        }
 
         if (!payload.isConfigured) {
             // setup page: request saved config for pre-fill
@@ -391,12 +395,52 @@ $('#btn-open-folder').addEventListener('click', (e) => {
 });
 document.addEventListener('click', () => {
     $('#folder-dropdown').classList.add('hidden');
+    $('#launch-dropdown').classList.add('hidden');
 });
 $('#folder-dropdown').addEventListener('click', (e) => {
     const item = e.target.closest('.folder-item');
     if (!item) return;
     sendMessage('OPEN_FOLDER', { folderType: item.dataset.folder });
     $('#folder-dropdown').classList.add('hidden');
+});
+
+// launch game button
+$('#btn-launch').addEventListener('click', () => {
+    sendMessage('LAUNCH_GAME');
+});
+$('#btn-launch-dropdown').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const dd = $('#launch-dropdown');
+    dd.classList.toggle('hidden');
+    // update dropdown state
+    const ws = getWsState();
+    const hasCustom = !!ws.customExePath;
+    $('#launch-clear-exe').classList.toggle('hidden', !hasCustom);
+    const label = $('#launch-mode-label');
+    if (hasCustom) {
+        // show filename only for brevity
+        const fname = ws.customExePath.split(/[/\\]/).pop();
+        label.textContent = `当前：${fname}`;
+        label.title = ws.customExePath;
+    } else {
+        label.textContent = '当前：通过 Steam 启动';
+        label.title = '';
+    }
+});
+$('#launch-set-exe').addEventListener('click', async () => {
+    $('#launch-dropdown').classList.add('hidden');
+    const result = await ipcCall('PICK_GAME_EXE');
+    if (result?.payload?.path) {
+        await ipcCall('SET_CUSTOM_EXE', { path: result.payload.path });
+        getWsState().customExePath = result.payload.path;
+        toast(I18n.t('main.launchCustomSet'), 'success');
+    }
+});
+$('#launch-clear-exe').addEventListener('click', async () => {
+    $('#launch-dropdown').classList.add('hidden');
+    await ipcCall('SET_CUSTOM_EXE', { path: '' });
+    getWsState().customExePath = '';
+    toast(I18n.t('main.launchSteamRestored'), 'success');
 });
 
 // mod toggle — disable during pending IPC to prevent rapid clicks

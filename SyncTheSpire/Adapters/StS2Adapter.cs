@@ -116,6 +116,7 @@ public class StS2Adapter : IGameAdapter
     public bool SupportsModScanning => true;
     public bool SupportsJunction => true;
     public bool ComingSoon => false;
+    public int? SteamAppId => AppId;
 
     // ── save redirect (ModProfileBypass) ─────────────────────────────────
 

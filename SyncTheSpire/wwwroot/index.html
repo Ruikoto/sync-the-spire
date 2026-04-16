@@ -16,7 +16,7 @@
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>
         </button>
         <!-- dynamic workspace tabs -->
-        <div id="tab-bar" class="tab-bar-scroll flex items-center h-full overflow-x-auto min-w-0 shrink-0"></div>
+        <div id="tab-bar" class="tab-bar-scroll flex items-center h-full overflow-x-auto min-w-0 shrink"></div>
         <!-- drag area (fills remaining space, min width for usability) -->
         <div id="titlebar-drag" class="flex-1 h-full min-w-[40px] cursor-default"></div>
         <!-- global settings (sliders icon, distinct from workspace gear) -->
@@ -568,6 +568,35 @@
                         </button>
                         <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="backup" data-i18n="main.backupFolder">
                             备份文件夹
+                        </button>
+                    </div>
+                </div>
+                <div id="launch-container" class="relative flex">
+                    <button id="btn-launch"
+                        class="text-xs py-2 px-3 transition-colors flex items-center justify-center gap-1.5 bg-emerald-500/[.10] text-emerald-400/90 hover:bg-emerald-500/[.18] hover:text-emerald-400"
+                        style="border-radius: 0.5rem 0 0 0.5rem"
+                        data-i18n="main.launch">
+                        <i data-lucide="play" style="width:12px;height:12px"></i>
+                        启动游戏
+                    </button>
+                    <button id="btn-launch-dropdown"
+                        class="text-xs py-2 px-1.5 transition-colors bg-emerald-500/[.10] text-emerald-400/90 hover:bg-emerald-500/[.18] hover:text-emerald-400 border-l border-emerald-500/20"
+                        style="border-radius: 0 0.5rem 0.5rem 0">
+                        <i data-lucide="chevron-down" style="width:12px;height:12px"></i>
+                    </button>
+                    <!-- launch dropdown -->
+                    <div id="launch-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden" style="min-width:200px">
+                        <div id="launch-mode-label" class="px-3 py-1.5 text-[10px] text-spire-muted/60 select-none">
+                            当前：通过 Steam 启动
+                        </div>
+                        <div class="border-t border-spire-border/30"></div>
+                        <button id="launch-set-exe" class="w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors flex items-center gap-1.5">
+                            <i data-lucide="file-cog" style="width:12px;height:12px;flex-shrink:0"></i>
+                            设置自定义路径...
+                        </button>
+                        <button id="launch-clear-exe" class="hidden w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors flex items-center gap-1.5">
+                            <i data-lucide="undo-2" style="width:12px;height:12px;flex-shrink:0"></i>
+                            恢复 Steam 启动
                         </button>
                     </div>
                 </div>

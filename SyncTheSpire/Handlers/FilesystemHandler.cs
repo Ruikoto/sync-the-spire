@@ -110,4 +110,87 @@ public class FilesystemHandler : HandlerBase
 
         Send(IpcResponse.Success("RESTORE_JUNCTION", new { message = "Mod 文件夹已恢复连接。" }));
     }
+
+    /// <summary>
+    /// launch the game via custom exe or steam:// URL scheme
+    /// </summary>
+    public void HandleLaunchGame()
+    {
+        var customExe = _configService.Workspace.CustomExePath;
+        LogService.Info($"LaunchGame: customExe='{customExe}'");
+
+        if (!string.IsNullOrWhiteSpace(customExe))
+        {
+            if (!File.Exists(customExe))
+            {
+                Send(IpcResponse.Error("LAUNCH_GAME", $"自定义路径不存在：{customExe}"));
+                return;
+            }
+            using var proc = Process.Start(new ProcessStartInfo
+            {
+                FileName = customExe,
+                UseShellExecute = true
+            });
+            Send(IpcResponse.Success("LAUNCH_GAME"));
+            return;
+        }
+
+        if (_adapter.SteamAppId is { } appId)
+        {
+            using var proc = Process.Start(new ProcessStartInfo
+            {
+                FileName = $"steam://rungameid/{appId}",
+                UseShellExecute = true
+            });
+            Send(IpcResponse.Success("LAUNCH_GAME"));
+            return;
+        }
+
+        Send(IpcResponse.Error("LAUNCH_GAME", "未配置自定义启动路径且无 Steam 支持"));
+    }
+
+    /// <summary>
+    /// open native file picker for exe selection
+    /// </summary>
+    public void HandlePickGameExe()
+    {
+        string? selectedPath = null;
+        var tcs = new TaskCompletionSource<string?>();
+        UiContext.Post(_ =>
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Title = "选择游戏可执行文件",
+                Filter = "可执行文件 (*.exe)|*.exe|所有文件 (*.*)|*.*",
+                CheckFileExists = true
+            };
+            if (dialog.ShowDialog(_form) == DialogResult.OK)
+                selectedPath = dialog.FileName;
+            tcs.SetResult(selectedPath);
+        }, null);
+
+        var result = tcs.Task.GetAwaiter().GetResult();
+        LogService.Info($"PICK_GAME_EXE result: '{result}'");
+        Send(IpcResponse.Success("PICK_GAME_EXE", new { path = result ?? "" }));
+    }
+
+    /// <summary>
+    /// save or clear custom exe path for game launch
+    /// </summary>
+    public void HandleSetCustomExe(JsonElement? payload)
+    {
+        string path = string.Empty;
+        if (payload is not null && payload.Value.TryGetProperty("path", out var pathEl))
+            path = pathEl.GetString() ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(path) && !File.Exists(path))
+        {
+            Send(IpcResponse.Error("SET_CUSTOM_EXE", $"文件不存在：{path}"));
+            return;
+        }
+
+        _configService.Workspace.CustomExePath = path;
+        _configService.SaveWorkspace();
+        Send(IpcResponse.Success("SET_CUSTOM_EXE", new { customExePath = path }));
+    }
 }

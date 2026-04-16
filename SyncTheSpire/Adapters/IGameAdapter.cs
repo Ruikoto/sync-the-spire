@@ -54,6 +54,7 @@ public interface IGameAdapter
     bool SupportsModScanning { get; }
     bool SupportsJunction { get; }     // true = uses junction (game folder -> Repo/); false = git worktree is user's folder directly
     bool ComingSoon { get; }           // true = not yet ready for release builds
+    int? SteamAppId { get; }            // non-null = can launch via steam:// URL scheme
 
     // ── save redirect (ModProfileBypass for StS2, no-op for others) ──────
 

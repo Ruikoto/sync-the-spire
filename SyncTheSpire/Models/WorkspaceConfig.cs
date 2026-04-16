@@ -56,6 +56,9 @@ public class WorkspaceConfig
     [JsonPropertyName("gitDirPathOverride")]
     public string GitDirPathOverride { get; set; } = string.Empty;
 
+    [JsonPropertyName("customExePath")]
+    public string CustomExePath { get; set; } = string.Empty;
+
     /// <summary>
     /// resolved mod/sync folder: StS2 = {GameInstallPath}\Mods, generic = GameInstallPath itself
     /// </summary>

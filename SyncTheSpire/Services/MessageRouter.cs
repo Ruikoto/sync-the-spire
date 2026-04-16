@@ -44,6 +44,7 @@ public class MessageRouter
         "GET_SAVE_STATUS", "UNLINK_SAVES", "BACKUP_SAVES", "GET_BACKUP_LIST", "RESTORE_BACKUP", "DELETE_BACKUP",
         "GET_REDIRECT_STATUS", "SET_REDIRECT",
         "RESTORE_JUNCTION", "OPEN_FOLDER",
+        "LAUNCH_GAME", "SET_CUSTOM_EXE",
     ];
 
     // current workspace context (null if no workspace active yet)
@@ -187,6 +188,9 @@ public class MessageRouter
             case "PICK_FOLDER":
                 _filesystemHandler.HandlePickFolder();
                 return;
+            case "PICK_GAME_EXE":
+                _filesystemHandler.HandlePickGameExe();
+                return;
             // Store update actions use system UI / network calls — don't hold the gate
             case "CHECK_STORE_UPDATE":
                 _ = _storeUpdateHandler.HandleCheckStoreUpdate();
@@ -286,6 +290,14 @@ public class MessageRouter
 
                 case "OPEN_FOLDER":
                     _filesystemHandler.HandleOpenFolder(req.Payload);
+                    break;
+
+                case "LAUNCH_GAME":
+                    _filesystemHandler.HandleLaunchGame();
+                    break;
+
+                case "SET_CUSTOM_EXE":
+                    _filesystemHandler.HandleSetCustomExe(req.Payload);
                     break;
 
                 // ── save management ──────────────────────────────────

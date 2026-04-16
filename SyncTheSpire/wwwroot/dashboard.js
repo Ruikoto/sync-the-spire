@@ -139,6 +139,13 @@ function updateDashboardForCapabilities(capabilities) {
     }
     if (folderMod) folderMod.classList.toggle('hidden', !capabilities.supportsModToggle);
     if (folderSave) folderSave.classList.toggle('hidden', !capabilities.supportsSaveBackup);
+
+    // show launch button when Steam launch or custom exe is available
+    const launchContainer = $('#launch-container');
+    if (launchContainer) {
+        const canLaunch = capabilities.supportsLaunch || !!getWsState().customExePath;
+        launchContainer.classList.toggle('hidden', !canLaunch);
+    }
 }
 
 // ── save redirect ────────────────────────────────────────────────────────────

@@ -61,6 +61,7 @@ public class ConfigHandler : HandlerBase
             supportsAutoFind = _adapter.SupportsAutoFind,
             // generic adapter: junction is always on, no toggle needed
             supportsModToggle = _adapter.TypeKey != "generic",
+            supportsLaunch = _adapter.SteamAppId != null,
         };
 
         // C3 fix: short-circuit when no real workspace context
@@ -75,6 +76,7 @@ public class ConfigHandler : HandlerBase
                 currentBranch = (string?)null,
                 isJunctionActive = false,
                 hasLocalChanges = false,
+                customExePath = ws.CustomExePath,
                 capabilities
             };
         }
@@ -92,6 +94,7 @@ public class ConfigHandler : HandlerBase
                 isJunctionActive = isJunction,
                 hasLocalChanges = isInit ? false : _gitService.HasLocalChanges(),
                 needsBranchSelection = isInit,
+                customExePath = ws.CustomExePath,
                 capabilities
             };
         }

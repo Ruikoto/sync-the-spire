@@ -39,7 +39,7 @@ public class StardewValleyAdapter : IGameAdapter
     public bool SupportsModScanning => false;
     public bool SupportsJunction => true;
     public bool ComingSoon => true;
-
+    public int? SteamAppId => 413150;
     // ── save redirect (no-op) ────────────────────────────────────────────
 
     public bool IsSaveRedirectEnabled(string gameModPath) => false;

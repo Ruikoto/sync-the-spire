@@ -42,10 +42,20 @@ const I18n = (() => {
     // walk the DOM and apply data-i18n* attributes
     function applyDom(root) {
         const el = root || document.body;
-        // data-i18n → textContent
+        // data-i18n → replace only the text portion, preserving child elements (icons etc.)
         el.querySelectorAll('[data-i18n]').forEach(n => {
             const v = t(n.dataset.i18n);
-            if (v !== n.dataset.i18n || _lang !== 'zh-CN') n.textContent = v;
+            if (v === n.dataset.i18n && _lang === 'zh-CN') return;
+            // if the node has child elements, only update the last text node to keep icons intact
+            if (n.children.length > 0) {
+                const walker = document.createTreeWalker(n, NodeFilter.SHOW_TEXT, null);
+                let last = null;
+                while (walker.nextNode()) last = walker.currentNode;
+                if (last) last.textContent = v;
+                else n.appendChild(document.createTextNode(v));
+            } else {
+                n.textContent = v;
+            }
         });
         // data-i18n-html → innerHTML (for strings with embedded markup)
         el.querySelectorAll('[data-i18n-html]').forEach(n => {

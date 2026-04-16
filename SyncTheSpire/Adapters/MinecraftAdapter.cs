@@ -39,7 +39,7 @@ public class MinecraftAdapter : IGameAdapter
     public bool SupportsModScanning => false;
     public bool SupportsJunction => true;
     public bool ComingSoon => true;
-
+    public int? SteamAppId => null;
     // ── save redirect (no-op) ────────────────────────────────────────────
 
     public bool IsSaveRedirectEnabled(string gameModPath) => false;

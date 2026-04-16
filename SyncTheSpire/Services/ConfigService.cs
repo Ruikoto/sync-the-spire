@@ -84,6 +84,15 @@ public class ConfigService
     /// </summary>
     public void InvalidateCache() { }
 
+    /// <summary>
+    /// persist the current workspace config to disk (for direct field modifications)
+    /// </summary>
+    public void SaveWorkspace()
+    {
+        _manager.SaveConfig();
+        LogService.Info("Workspace config saved");
+    }
+
     // ── dismissed announcements (delegate to WorkspaceManager, global) ───
 
     public List<string> GetDismissedAnnouncements() => _manager.GetDismissedAnnouncements();
