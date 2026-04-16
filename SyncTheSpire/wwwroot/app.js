@@ -769,9 +769,19 @@ async function switchToWorkspace(id) {
 }
 
 async function closeWorkspaceTab(id) {
+    // immediately null out active workspace so in-flight handlers (e.g. REFRESH_SYNC)
+    // see no active workspace and bail out before sending follow-up messages
+    const prevActiveId = AppState.activeWorkspaceId;
+    if (id === prevActiveId) {
+        AppState.activeWorkspaceId = null;
+    }
     try {
         const res = await ipcCall('CLOSE_WORKSPACE_TAB', { id });
-        if (res.status !== 'success') throw new Error(res.message || I18n.t('main.closeTabFailed'));
+        if (res.status !== 'success') {
+            // restore on failure
+            if (id === prevActiveId) AppState.activeWorkspaceId = prevActiveId;
+            throw new Error(res.message || I18n.t('main.closeTabFailed'));
+        }
         AppState.openTabs = res.payload.openTabs || [];
         AppState.activeWorkspaceId = res.payload.activeWorkspace;
         renderTabBar();
