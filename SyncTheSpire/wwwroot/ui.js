@@ -18,9 +18,9 @@ function escAttr(str) {
 
 // per-game-type icons, sized via inline style
 const GAME_ICONS = {
-    sts2: (size = 14) => `<img src="http://assets.local/sts2.png" style="width:${size}px;height:${size}px;object-fit:contain;" />`,
-    stardew: (size = 14) => `<img src="http://assets.local/sv.png" style="width:${size}px;height:${size}px;object-fit:contain;" />`,
-    minecraft: (size = 14) => `<img src="http://assets.local/mc.png" style="width:${size}px;height:${size}px;object-fit:contain;" />`,
+    sts2: (size = 14) => `<img src="http://assets.local/sts2.png" style="width:${size}px;height:${size}px;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 0 3px rgba(255,255,255,0.18)) brightness(1.15);" />`,
+    stardew: (size = 14) => `<img src="http://assets.local/sv.png" style="width:${size}px;height:${size}px;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 0 3px rgba(255,255,255,0.18)) brightness(1.15);" />`,
+    minecraft: (size = 14) => `<img src="http://assets.local/mc.png" style="width:${size}px;height:${size}px;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 0 3px rgba(255,255,255,0.18)) brightness(1.15);" />`,
     generic: (size = 14) => `<svg style="width:${size}px;height:${size}px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/><path d="M12 11v4m-2-2h4"/></svg>`,
 };
 function gameIcon(typeKey, size) { return (GAME_ICONS[typeKey] || GAME_ICONS.generic)(size); }

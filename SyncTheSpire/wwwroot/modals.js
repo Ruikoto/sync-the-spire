@@ -103,10 +103,17 @@ function renderBranchTable() {
         </tr>`;
     }).join('');
 
-    // bind row click -> open mod preview
+    // bind row click -> open mod preview (if supported) or sync directly
     tbody.querySelectorAll('.branch-row').forEach(row => {
         row.addEventListener('click', () => {
-            openBranchPreview(row.dataset.branch);
+            const branch = row.dataset.branch;
+            const ws = getWsState();
+            if (ws.capabilities?.supportsModScanning) {
+                openBranchPreview(branch);
+            } else {
+                // no mod scanning — skip preview, go straight to sync confirm
+                syncBranchDirect(branch);
+            }
         });
     });
 }
@@ -145,6 +152,18 @@ $('#branch-modal').addEventListener('click', e => {
 let modSearchCaseSensitive = false;
 let modSearchWholeWord = false;
 let currentPreviewMods = [];
+
+// directly confirm & sync a branch without mod preview
+async function syncBranchDirect(branchName) {
+    const ok = await showConfirm(
+        I18n.t('branch.syncConfirmMessage', { name: branchName }),
+        I18n.t('branch.syncConfirmTitle')
+    );
+    if (ok) {
+        closeBranchModal();
+        sendMessage('SYNC_OTHER_BRANCH', { branchName });
+    }
+}
 
 function openBranchPreview(branchName) {
     showBranchPreviewView(branchName);
