@@ -59,9 +59,9 @@
       "namePlaceholder": "Name your workspace",
       "comingSoon": "Coming Soon",
       "gameDesc": {
-        "sts2": "Save sync · Mod management · Multi-device",
-        "stardew": "Save sync · Multi-device",
-        "minecraft": "Save sync · Multi-device",
+        "sts2": "Mod sync · Save backup",
+        "stardew": "Coming Soon",
+        "minecraft": "Coming Soon",
         "generic": "General-purpose Git folder sync"
       }
     }

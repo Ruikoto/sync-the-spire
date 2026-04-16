@@ -59,9 +59,9 @@
       "namePlaceholder": "为你的工作区起个名字",
       "comingSoon": "开发中",
       "gameDesc": {
-        "sts2": "Mod 管理 · 同步 · 存档管理",
-        "stardew": "Mod 同步",
-        "minecraft": "Mod 同步",
+        "sts2": "Mod 同步 · 存档备份",
+        "stardew": "敬请期待",
+        "minecraft": "敬请期待",
         "generic": "通用文件夹同步"
       }
     }
