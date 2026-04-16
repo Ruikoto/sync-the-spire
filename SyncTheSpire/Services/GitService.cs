@@ -549,8 +549,9 @@ public class GitService
         {
             var cfg = _config.LoadConfig();
             var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
-            repo.Commit("Auto-save", sig, sig);
-            LogService.Info("Auto-committed local changes");
+            var msg = BuildCommitMessage(status);
+            repo.Commit(msg, sig, sig);
+            LogService.Info($"Committed: {msg}");
         }
 
         // fetch first so we can detect divergence before pushing
@@ -613,11 +614,60 @@ public class GitService
 
         var cfg = _config.LoadConfig();
         var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
-        repo.Commit("Auto-save (before switch)", sig, sig);
+        repo.Commit("Snapshot before branch switch", sig, sig);
         LogService.Info("Silent auto-commit before branch switch");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// build a human-readable commit message from staged changes.
+    /// summarizes top-level folders (mods) that were added/updated/removed.
+    /// </summary>
+    private static string BuildCommitMessage(RepositoryStatus status)
+    {
+        var added = new HashSet<string>();
+        var modified = new HashSet<string>();
+        var removed = new HashSet<string>();
+
+        foreach (var entry in status)
+        {
+            var s = entry.State;
+            // top-level folder name (or filename if at root)
+            var key = entry.FilePath.Contains('/')
+                ? entry.FilePath[..entry.FilePath.IndexOf('/')]
+                : entry.FilePath;
+
+            if (s.HasFlag(FileStatus.NewInIndex) || s.HasFlag(FileStatus.NewInWorkdir))
+                added.Add(key);
+            else if (s.HasFlag(FileStatus.DeletedFromIndex) || s.HasFlag(FileStatus.DeletedFromWorkdir))
+                removed.Add(key);
+            else if (s.HasFlag(FileStatus.ModifiedInIndex) || s.HasFlag(FileStatus.ModifiedInWorkdir)
+                  || s.HasFlag(FileStatus.RenamedInIndex) || s.HasFlag(FileStatus.RenamedInWorkdir)
+                  || s.HasFlag(FileStatus.TypeChangeInIndex) || s.HasFlag(FileStatus.TypeChangeInWorkdir))
+                modified.Add(key);
+        }
+
+        // remove overlap: if something shows up in both added and modified, keep added
+        modified.ExceptWith(added);
+        modified.ExceptWith(removed);
+
+        var parts = new List<string>();
+        if (added.Count > 0) parts.Add($"Add {FormatNames(added)}");
+        if (modified.Count > 0) parts.Add($"Update {FormatNames(modified)}");
+        if (removed.Count > 0) parts.Add($"Remove {FormatNames(removed)}");
+
+        return parts.Count > 0 ? string.Join("; ", parts) : "Sync changes";
+    }
+
+    private static string FormatNames(HashSet<string> names)
+    {
+        const int maxShow = 3;
+        var sorted = names.OrderBy(n => n).ToList();
+        if (sorted.Count <= maxShow)
+            return string.Join(", ", sorted);
+        return $"{string.Join(", ", sorted.Take(maxShow))} (+{sorted.Count - maxShow} more)";
+    }
 
     /// <summary>
     /// compare local HEAD with origin tracking branch to see if they've diverged
