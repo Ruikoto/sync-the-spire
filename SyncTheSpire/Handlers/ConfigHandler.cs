@@ -17,6 +17,7 @@ public class ConfigHandler : HandlerBase
     private readonly JunctionService _junctionService;
     private readonly JunctionHelper _junctionHelper;
     private readonly IGameAdapter _adapter;
+    private readonly WorkspaceManager _workspaceManager;
 
     public ConfigHandler(
         CoreWebView2 webView,
@@ -25,7 +26,8 @@ public class ConfigHandler : HandlerBase
         GitService gitService,
         JunctionService junctionService,
         JunctionHelper junctionHelper,
-        IGameAdapter adapter)
+        IGameAdapter adapter,
+        WorkspaceManager workspaceManager)
         : base(webView, uiContext)
     {
         _configService = configService;
@@ -33,6 +35,7 @@ public class ConfigHandler : HandlerBase
         _junctionService = junctionService;
         _junctionHelper = junctionHelper;
         _adapter = adapter;
+        _workspaceManager = workspaceManager;
     }
 
     public void HandleGetVersion()
@@ -196,6 +199,14 @@ public class ConfigHandler : HandlerBase
             cfg.SaveFolderPath = resolvedPath;
         }
 
+        // check for path conflicts with other workspaces
+        var conflictError = CheckPathConflicts(cfg);
+        if (conflictError is not null)
+        {
+            Send(IpcResponse.Error("INIT_CONFIG", conflictError));
+            return;
+        }
+
         // merge sensitive fields from existing config if user left them blank
         var existing = _configService.LoadConfig();
         if (string.IsNullOrWhiteSpace(cfg.Token) && !string.IsNullOrWhiteSpace(existing.Token))
@@ -279,5 +290,69 @@ public class ConfigHandler : HandlerBase
             _junctionHelper.EnsureJunction(targetModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("INIT_CONFIG", new { message = "配置完成，仓库已就绪！" }));
+    }
+
+    /// <summary>
+    /// check if the incoming config's paths conflict with any other workspace.
+    /// returns an error message if conflict found, null if clean.
+    /// </summary>
+    private string? CheckPathConflicts(AppConfig cfg)
+    {
+        var currentWsId = _configService.Workspace.Id;
+        var allWorkspaces = _workspaceManager.GetAllWorkspaces();
+
+        // resolve the effective sync path for the new config
+        var newSyncPath = NormalizePath(_adapter.ResolveModPath(cfg.GameInstallPath) ?? cfg.GameInstallPath);
+        var newSavePath = NormalizePath(cfg.SaveFolderPath);
+
+        foreach (var other in allWorkspaces)
+        {
+            if (other.Id == currentWsId) continue;
+            if (!other.IsConfigured) continue;
+
+            var otherAdapter = GameAdapterRegistry.Get(other.GameType);
+
+            // effective sync path for the other workspace
+            var otherSyncPath = NormalizePath(
+                otherAdapter.ResolveModPath(other.GameInstallPath) ?? other.GameInstallPath);
+
+            if (!string.IsNullOrEmpty(newSyncPath) && !string.IsNullOrEmpty(otherSyncPath))
+            {
+                if (PathsEqual(newSyncPath, otherSyncPath))
+                    return $"同步文件夹「{cfg.GameInstallPath}」已被工作区「{other.Name}」使用，请选择其他路径";
+
+                if (IsNestedPath(newSyncPath, otherSyncPath))
+                    return $"同步文件夹「{cfg.GameInstallPath}」与工作区「{other.Name}」的同步路径存在嵌套关系，请选择其他路径";
+            }
+
+            // save folder conflict (only when both have save paths)
+            var otherSavePath = NormalizePath(other.SaveFolderPath);
+            if (!string.IsNullOrEmpty(newSavePath) && !string.IsNullOrEmpty(otherSavePath))
+            {
+                if (PathsEqual(newSavePath, otherSavePath))
+                    return $"存档文件夹「{cfg.SaveFolderPath}」已被工作区「{other.Name}」使用，请选择其他路径";
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        // normalize to full path with consistent casing handling (Windows is case-insensitive)
+        return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private static bool PathsEqual(string a, string b)
+        => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNestedPath(string a, string b)
+    {
+        var sep = Path.DirectorySeparatorChar.ToString();
+        var aWithSep = a.EndsWith(sep) ? a : a + sep;
+        var bWithSep = b.EndsWith(sep) ? b : b + sep;
+        return aWithSep.StartsWith(bWithSep, StringComparison.OrdinalIgnoreCase)
+            || bWithSep.StartsWith(aWithSep, StringComparison.OrdinalIgnoreCase);
     }
 }
