@@ -61,12 +61,11 @@ public class FilesystemHandler : HandlerBase
             return;
         }
 
-        // L2 fix: dispose the Process handle
+        // use ShellExecute so the OS respects the user's default file manager
         using var proc = Process.Start(new ProcessStartInfo
         {
-            FileName = "explorer.exe",
-            Arguments = $"\"{path}\"",
-            UseShellExecute = false
+            FileName = path,
+            UseShellExecute = true
         });
 
         Send(IpcResponse.Success("OPEN_FOLDER"));
