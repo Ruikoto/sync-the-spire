@@ -16,11 +16,11 @@ function escAttr(str) {
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// per-game-type SVG icons (inline, sized via style for Tailwind safety)
+// per-game-type icons, sized via inline style
 const GAME_ICONS = {
-    sts2: (size = 14) => `<svg style="width:${size}px;height:${size}px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L8 10h8L12 2z"/><path d="M9 10l-3 8h12l-3-8"/><path d="M6 18l-2 4h16l-2-4"/></svg>`,
-    stardew: (size = 14) => `<svg style="width:${size}px;height:${size}px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c-4 4-7 8-7 12a7 7 0 0014 0c0-4-3-8-7-12z"/><path d="M12 10v8"/><path d="M9 14h6"/></svg>`,
-    minecraft: (size = 14) => `<svg style="width:${size}px;height:${size}px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l-4 4-6-2 2 6-4 4h8l2 6 2-6h8l-4-4 2-6-6 2z"/></svg>`,
+    sts2: (size = 14) => `<img src="http://assets.local/sts2.png" style="width:${size}px;height:${size}px;object-fit:contain;" />`,
+    stardew: (size = 14) => `<img src="http://assets.local/sv.png" style="width:${size}px;height:${size}px;object-fit:contain;" />`,
+    minecraft: (size = 14) => `<img src="http://assets.local/mc.png" style="width:${size}px;height:${size}px;object-fit:contain;" />`,
     generic: (size = 14) => `<svg style="width:${size}px;height:${size}px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/><path d="M12 11v4m-2-2h4"/></svg>`,
 };
 function gameIcon(typeKey, size) { return (GAME_ICONS[typeKey] || GAME_ICONS.generic)(size); }

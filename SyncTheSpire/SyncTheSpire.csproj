@@ -30,6 +30,9 @@
     <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\ModProfileBypass\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\sts2.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\sv.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="assets\mc.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

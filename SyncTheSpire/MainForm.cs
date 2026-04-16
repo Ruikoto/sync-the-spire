@@ -100,6 +100,9 @@ public class MainForm : Form
         var wwwroot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
         _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             "app.local", wwwroot, CoreWebView2HostResourceAccessKind.Allow);
+        var assetsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
+        _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            "assets.local", assetsDir, CoreWebView2HostResourceAccessKind.Allow);
 
         // wire up services & router (pass Form reference for window controls)
         var workspaceManager = new WorkspaceManager();
