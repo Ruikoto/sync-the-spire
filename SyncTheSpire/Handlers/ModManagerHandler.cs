@@ -224,6 +224,164 @@ public class ModManagerHandler : HandlerBase
         Send(IpcResponse.Success("COPY_MOD_FROM_BRANCH", new { message = $"已从分支 {branchName} 拷贝 MOD：{folderName}" }));
     }
 
+    /// <summary>
+    /// install mods from drag-dropped items. handles three types:
+    /// - archives: base64 → temp file → InstallFromArchive
+    /// - folders: base64 entries with relative paths → write to WorkTreePath
+    /// - loose files: find manifest → create folder by mod id → write files
+    /// WebView2 can't expose file paths to JS, so everything comes as base64.
+    /// </summary>
+    public void HandleInstallModDropped(JsonElement? payload)
+    {
+        if (payload is null)
+        {
+            Send(IpcResponse.Error("INSTALL_MOD_DROPPED", "未提供文件数据"));
+            return;
+        }
+
+        var allInstalled = new List<string>();
+        var tempFiles = new List<string>();
+
+        try
+        {
+            // 1) archives — decode to temp, run InstallFromArchive
+            if (payload.Value.TryGetProperty("archives", out var archivesEl) && archivesEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var arc in archivesEl.EnumerateArray())
+                {
+                    var name = arc.TryGetProperty("name", out var nEl) ? nEl.GetString() : null;
+                    var data = arc.TryGetProperty("data", out var dEl) ? dEl.GetString() : null;
+                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(data)) continue;
+
+                    var bytes = Convert.FromBase64String(data);
+                    var tempPath = Path.Combine(Path.GetTempPath(), $"sts_mod_{Guid.NewGuid()}{Path.GetExtension(name)}");
+                    File.WriteAllBytes(tempPath, bytes);
+                    tempFiles.Add(tempPath);
+
+                    try
+                    {
+                        var installed = _installService.InstallFromArchive(tempPath, _configService.WorkTreePath);
+                        allInstalled.AddRange(installed);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogService.Warn($"Failed to install archive {name}: {ex.Message}");
+                    }
+                }
+            }
+
+            // 2) folders — write entries preserving directory structure
+            if (payload.Value.TryGetProperty("folders", out var foldersEl) && foldersEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var folder in foldersEl.EnumerateArray())
+                {
+                    var folderName = folder.TryGetProperty("name", out var fnEl) ? fnEl.GetString() : null;
+                    if (string.IsNullOrEmpty(folderName)) continue;
+                    if (!folder.TryGetProperty("entries", out var entriesEl) || entriesEl.ValueKind != JsonValueKind.Array) continue;
+
+                    var destDir = Path.Combine(_configService.WorkTreePath, folderName);
+                    int fileCount = 0;
+
+                    foreach (var entry in entriesEl.EnumerateArray())
+                    {
+                        var path = entry.TryGetProperty("path", out var pEl) ? pEl.GetString() : null;
+                        var data = entry.TryGetProperty("data", out var dEl) ? dEl.GetString() : null;
+                        if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(data)) continue;
+
+                        // path traversal guard
+                        var normalized = path.Replace('\\', '/');
+                        if (normalized.Contains("..")) continue;
+
+                        var fileDest = Path.Combine(destDir, normalized);
+                        var resolved = Path.GetFullPath(fileDest);
+                        if (!resolved.StartsWith(Path.GetFullPath(destDir), StringComparison.OrdinalIgnoreCase)) continue;
+
+                        var fileDir = Path.GetDirectoryName(fileDest);
+                        if (fileDir != null) Directory.CreateDirectory(fileDir);
+
+                        File.WriteAllBytes(fileDest, Convert.FromBase64String(data));
+                        fileCount++;
+                    }
+
+                    if (fileCount > 0)
+                        allInstalled.Add(folderName);
+                }
+            }
+
+            // 3) loose files — find manifest, create folder by mod id, dump all files in
+            if (payload.Value.TryGetProperty("looseFiles", out var looseEl) && looseEl.ValueKind == JsonValueKind.Array)
+            {
+                var looseItems = new List<(string Name, byte[] Bytes)>();
+                string? modId = null;
+                string? modName = null;
+
+                foreach (var lf in looseEl.EnumerateArray())
+                {
+                    var name = lf.TryGetProperty("name", out var nEl) ? nEl.GetString() : null;
+                    var data = lf.TryGetProperty("data", out var dEl) ? dEl.GetString() : null;
+                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(data)) continue;
+
+                    var bytes = Convert.FromBase64String(data);
+                    looseItems.Add((name, bytes));
+
+                    // try to find a manifest among the loose files
+                    if (modId == null && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var mod = JsonSerializer.Deserialize<ModInfo>(bytes, _jsonOpts);
+                            if (!string.IsNullOrEmpty(mod?.Id))
+                            {
+                                modId = mod.Id;
+                                modName = mod.Name ?? mod.Id;
+                            }
+                        }
+                        catch { /* not a manifest */ }
+                    }
+                }
+
+                if (looseItems.Count > 0)
+                {
+                    if (string.IsNullOrEmpty(modId))
+                    {
+                        LogService.Warn("Loose files dropped without a valid manifest json");
+                        Send(IpcResponse.Error("INSTALL_MOD_DROPPED", "散落文件中未找到有效的 MOD 定义文件（需要包含 id 字段的 .json）"));
+                        return;
+                    }
+
+                    var destDir = Path.Combine(_configService.WorkTreePath, modId);
+                    Directory.CreateDirectory(destDir);
+
+                    foreach (var (name, bytes) in looseItems)
+                    {
+                        var fileDest = Path.Combine(destDir, name);
+                        File.WriteAllBytes(fileDest, bytes);
+                    }
+
+                    allInstalled.Add(modName!);
+                }
+            }
+
+            if (allInstalled.Count > 0)
+                Send(IpcResponse.Success("INSTALL_MOD_DROPPED", new { installed = allInstalled }));
+            else
+                Send(IpcResponse.Error("INSTALL_MOD_DROPPED", "没有成功安装任何 MOD"));
+        }
+        finally
+        {
+            // clean up temp archive files
+            foreach (var tmp in tempFiles)
+            {
+                try { File.Delete(tmp); } catch { /* best effort */ }
+            }
+        }
+    }
+
+    private static readonly JsonSerializerOptions _jsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private static void CopyDirectory(string source, string dest)
     {
         Directory.CreateDirectory(dest);

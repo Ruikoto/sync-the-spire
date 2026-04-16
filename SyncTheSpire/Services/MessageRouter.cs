@@ -46,7 +46,7 @@ public class MessageRouter
         "GET_REDIRECT_STATUS", "SET_REDIRECT",
         "RESTORE_JUNCTION", "OPEN_FOLDER",
         "LAUNCH_GAME", "SET_CUSTOM_EXE",
-        "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES",
+        "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES", "INSTALL_MOD_DROPPED",
         "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH",
     ];
 
@@ -421,6 +421,10 @@ public class MessageRouter
 
                 case "COPY_MOD_FROM_BRANCH":
                     _modManagerHandler.HandleCopyModFromBranch(req.Payload);
+                    break;
+
+                case "INSTALL_MOD_DROPPED":
+                    _modManagerHandler.HandleInstallModDropped(req.Payload);
                     break;
 
                 default:

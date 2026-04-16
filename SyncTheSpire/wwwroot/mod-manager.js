@@ -528,3 +528,141 @@ async function handleDeleteMod(folderName) {
         toast(`删除失败：${err.message || ''}`, 'error');
     }
 }
+
+// ── drag-drop install ───────────────────────────────────────────────────────
+// WebView2 doesn't expose file paths to JS, so we read everything as base64
+// and send structured data to C# for processing.
+// supports: archives (.zip/.rar/.7z), folders, loose files, and any mix
+
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+}
+
+// promisified file reader
+function readFileAsBase64(file) {
+    return file.arrayBuffer().then(buf => arrayBufferToBase64(buf));
+}
+
+// recursively enumerate all files in a FileSystemDirectoryEntry
+function readDirectoryEntries(dirEntry, basePath) {
+    return new Promise((resolve, reject) => {
+        const reader = dirEntry.createReader();
+        const allEntries = [];
+
+        // readEntries may return batches of <= 100, need to call until empty
+        function readBatch() {
+            reader.readEntries(entries => {
+                if (entries.length === 0) {
+                    resolve(allEntries);
+                    return;
+                }
+                allEntries.push(...entries);
+                readBatch();
+            }, reject);
+        }
+        readBatch();
+    }).then(async entries => {
+        const results = [];
+        for (const entry of entries) {
+            const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+            if (entry.isFile) {
+                const file = await new Promise((res, rej) => entry.file(res, rej));
+                results.push({ path: entryPath, file });
+            } else if (entry.isDirectory) {
+                const sub = await readDirectoryEntries(entry, entryPath);
+                results.push(...sub);
+            }
+        }
+        return results;
+    });
+}
+
+// prevent default drag behavior everywhere to stop WebView2 navigation
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => e.preventDefault());
+
+// the whole mod manager modal is a valid drop target
+const mmModal = $('#mod-manager-modal');
+const mmDropzone = $('#mm-dropzone');
+
+mmModal.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    mmDropzone.classList.add('drag-over');
+});
+mmModal.addEventListener('dragleave', e => {
+    // only remove highlight when actually leaving the modal
+    if (!mmModal.contains(e.relatedTarget)) {
+        mmDropzone.classList.remove('drag-over');
+    }
+});
+mmModal.addEventListener('drop', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    mmDropzone.classList.remove('drag-over');
+
+    const items = e.dataTransfer.items;
+    if (!items || items.length === 0) return;
+
+    showLoading('正在读取文件...');
+
+    try {
+        const archives = [];  // { name, data }
+        const folders = [];   // { name, entries: [{ path, data }] }
+        const looseFiles = []; // { name, data }
+
+        // use webkitGetAsEntry to distinguish files from folders
+        const entryList = [];
+        for (let i = 0; i < items.length; i++) {
+            const entry = items[i].webkitGetAsEntry?.();
+            if (entry) entryList.push(entry);
+        }
+
+        for (const entry of entryList) {
+            if (entry.isDirectory) {
+                // recursively read all files in the folder
+                const dirFiles = await readDirectoryEntries(entry, '');
+                if (dirFiles.length === 0) continue;
+
+                const folderEntries = [];
+                for (const { path, file } of dirFiles) {
+                    const data = await readFileAsBase64(file);
+                    folderEntries.push({ path, data });
+                }
+                folders.push({ name: entry.name, entries: folderEntries });
+            } else if (entry.isFile) {
+                const file = await new Promise((res, rej) => entry.file(res, rej));
+                const data = await readFileAsBase64(file);
+
+                if (/\.(zip|rar|7z)$/i.test(file.name)) {
+                    archives.push({ name: file.name, data });
+                } else {
+                    looseFiles.push({ name: file.name, data });
+                }
+            }
+        }
+
+        if (archives.length === 0 && folders.length === 0 && looseFiles.length === 0) {
+            toast('未检测到可安装的内容', 'error');
+            return;
+        }
+
+        showLoading('正在安装 MOD...');
+        const res = await ipcCall('INSTALL_MOD_DROPPED', { archives, folders, looseFiles }, 120000);
+        const names = res.payload?.installed || [];
+        if (names.length > 0) {
+            toast(`已安装：${names.join('、')}`, 'success');
+            refreshModList();
+        }
+    } catch (err) {
+        toast(`安装失败：${err.message || ''}`, 'error');
+    } finally {
+        hideLoading();
+    }
+});
