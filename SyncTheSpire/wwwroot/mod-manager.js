@@ -449,6 +449,27 @@ $('#mm-branch-grid').addEventListener('click', async e => {
 $('#mm-btn-close').addEventListener('click', closeModManager);
 $('#mm-btn-branch-copy').addEventListener('click', openBranchCopyModal);
 
+// open mod folder in file explorer
+$('#mm-btn-open-folder').addEventListener('click', () => {
+    sendMessage('OPEN_FOLDER', { folderType: 'mod' });
+});
+
+// refresh with spin animation
+$('#mm-btn-refresh').addEventListener('click', async () => {
+    const icon = $('#mm-btn-refresh').querySelector('i, svg');
+    if (icon) {
+        icon.style.transition = 'transform 0.5s ease';
+        icon.style.transform = 'rotate(360deg)';
+        // reset after animation completes so it can spin again next click
+        setTimeout(() => {
+            icon.style.transition = 'none';
+            icon.style.transform = 'rotate(0deg)';
+        }, 520);
+    }
+    await refreshModList();
+    toast('已刷新', 'success');
+});
+
 // dropzone click -> open file picker to install
 $('#mm-dropzone').addEventListener('click', async () => {
     try {
