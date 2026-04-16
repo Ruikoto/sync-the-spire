@@ -464,7 +464,13 @@ guardClick($('#btn-create'), () => {
 
 // push -- save local changes and upload to current branch
 guardClick($('#btn-push'), async () => {
-    if (!getWsState().currentBranch) return;
+    const ws = getWsState();
+    if (!ws.currentBranch) return;
+    // STS2: show mod diff preview before pushing
+    if (ws.capabilities?.supportsModScanning) {
+        const ok = await showModDiffModal('push');
+        if (!ok) return;
+    }
     sendMessage('SAVE_AND_PUSH_MY_BRANCH');
 });
 
@@ -472,7 +478,11 @@ guardClick($('#btn-push'), async () => {
 guardClick($('#btn-pull'), async () => {
     const ws = getWsState();
     if (!ws.currentBranch) return;
-    if (ws.lastHasLocalChanges || (ws.lastSyncStatus && ws.lastSyncStatus.ahead > 0)) {
+    // STS2: show mod diff preview (replaces generic confirm)
+    if (ws.capabilities?.supportsModScanning) {
+        const ok = await showModDiffModal('pull');
+        if (!ok) return;
+    } else if (ws.lastHasLocalChanges || (ws.lastSyncStatus && ws.lastSyncStatus.ahead > 0)) {
         const ok = await showConfirm(
             I18n.t('main.pullConfirmMessage'),
             I18n.t('main.pullConfirmTitle')

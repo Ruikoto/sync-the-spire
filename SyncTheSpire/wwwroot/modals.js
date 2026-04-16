@@ -801,3 +801,178 @@ async function checkAnnouncements() {
         clearTimeout(timeout);
     }
 }
+
+// ── mod diff preview modal ──────────────────────────────────────────────────
+
+function showModDiffModal(direction) {
+    return new Promise(async (resolve) => {
+        const modal = $('#mod-diff-modal');
+        const body = $('#mod-diff-body');
+        const icon = $('#mod-diff-icon');
+        const title = $('#mod-diff-title');
+        const confirmBtn = $('#mod-diff-confirm');
+        const unchangedEl = $('#mod-diff-unchanged');
+
+        const isPush = direction === 'push';
+        title.textContent = I18n.t(isPush ? 'modDiff.titlePush' : 'modDiff.titlePull');
+        confirmBtn.textContent = I18n.t(isPush ? 'modDiff.confirmPush' : 'modDiff.confirmPull');
+        // swap lucide icon
+        icon.setAttribute('data-lucide', isPush ? 'upload' : 'download');
+        lucide.createIcons({ nodes: [icon] });
+
+        // loading state
+        body.innerHTML = `<div class="flex items-center justify-center py-10">
+            <div class="spinner"></div>
+            <span class="text-xs text-spire-muted ml-3">${esc(I18n.t('modDiff.loading'))}</span>
+        </div>`;
+        unchangedEl.textContent = '';
+        modal.classList.remove('hidden');
+
+        // fetch mod data
+        const res = await ipcCall('GET_MOD_DIFF');
+        if (res.status !== 'success') {
+            modal.classList.add('hidden');
+            toast(res.message || 'Failed to get mod diff', 'error');
+            resolve(false);
+            return;
+        }
+
+        const localMods = res.payload.local || [];
+        const remoteMods = res.payload.remote || [];
+
+        // for push: local is "new state", remote is "old state"
+        // for pull: remote is "new state", local is "old state"
+        const newSide = isPush ? localMods : remoteMods;
+        const oldSide = isPush ? remoteMods : localMods;
+        const diff = computeModDiff(newSide, oldSide);
+
+        renderModDiff(body, diff, unchangedEl);
+
+        let settled = false;
+        function cleanup() {
+            modal.classList.add('hidden');
+            confirmBtn.removeEventListener('click', onConfirm);
+            $('#mod-diff-cancel').removeEventListener('click', onCancel);
+            $('#mod-diff-close').removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onBackdrop);
+            document.removeEventListener('keydown', onKey);
+        }
+        function onConfirm() { if (!settled) { settled = true; cleanup(); resolve(true); } }
+        function onCancel()  { if (!settled) { settled = true; cleanup(); resolve(false); } }
+        function onBackdrop(e) { if (e.target === modal) onCancel(); }
+        function onKey(e) { if (e.key === 'Escape') onCancel(); }
+
+        confirmBtn.addEventListener('click', onConfirm);
+        $('#mod-diff-cancel').addEventListener('click', onCancel);
+        $('#mod-diff-close').addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKey);
+    });
+}
+
+// match mods by name (case-insensitive), fallback to id
+function computeModDiff(newMods, oldMods) {
+    const key = m => (m.name || m.id || '').toLowerCase();
+
+    const oldMap = new Map();
+    for (const m of oldMods) oldMap.set(key(m), m);
+
+    const added = [];
+    const updated = [];
+    const matched = new Set();
+
+    for (const m of newMods) {
+        const k = key(m);
+        const old = oldMap.get(k);
+        if (!old) {
+            added.push(m);
+        } else {
+            matched.add(k);
+            if ((m.version || '') !== (old.version || '')) {
+                updated.push({ name: m.name || m.id, author: m.author, oldVersion: old.version || '\u2014', newVersion: m.version || '\u2014' });
+            }
+        }
+    }
+
+    const removed = [];
+    for (const m of oldMods) {
+        if (!matched.has(key(m))) {
+            removed.push(m);
+        }
+    }
+
+    const unchanged = oldMods.length - updated.length - removed.length;
+    return { added, updated, removed, unchanged: Math.max(0, unchanged) };
+}
+
+function renderModDiff(container, diff, unchangedEl) {
+    const { added, updated, removed, unchanged } = diff;
+    const hasChanges = added.length > 0 || updated.length > 0 || removed.length > 0;
+
+    if (!hasChanges) {
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-10 gap-2">
+                <i data-lucide="check-circle-2" class="w-8 h-8 text-spire-success" style="width:32px;height:32px"></i>
+                <p class="text-xs text-spire-muted">${esc(I18n.t('modDiff.noDiff'))}</p>
+            </div>`;
+        lucide.createIcons({ nodes: container.querySelectorAll('[data-lucide]') });
+        unchangedEl.textContent = I18n.t('modDiff.unchangedCount', { count: unchanged });
+        return;
+    }
+
+    let html = '';
+
+    if (added.length > 0) {
+        html += modDiffSection(I18n.t('modDiff.added'), added.length, 'added', added.map(m => `
+            <div class="mod-diff-card mod-diff-added">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-spire-text">${esc(m.name || m.id)}</span>
+                    <span class="text-[10px] text-spire-muted font-mono">${esc(m.version || '')}</span>
+                </div>
+                ${m.author ? `<div class="text-[11px] text-spire-muted">${esc(m.author)}</div>` : ''}
+            </div>`).join(''));
+    }
+
+    if (updated.length > 0) {
+        html += modDiffSection(I18n.t('modDiff.updated'), updated.length, 'updated', updated.map(u => `
+            <div class="mod-diff-card mod-diff-updated">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-spire-text">${esc(u.name)}</span>
+                    <span class="text-[10px] font-mono">
+                        <span class="text-spire-muted">${esc(u.oldVersion)}</span>
+                        <span class="text-spire-muted/50 mx-1">\u2192</span>
+                        <span class="text-spire-warn">${esc(u.newVersion)}</span>
+                    </span>
+                </div>
+                ${u.author ? `<div class="text-[11px] text-spire-muted">${esc(u.author)}</div>` : ''}
+            </div>`).join(''));
+    }
+
+    if (removed.length > 0) {
+        html += modDiffSection(I18n.t('modDiff.removed'), removed.length, 'removed', removed.map(m => `
+            <div class="mod-diff-card mod-diff-removed">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-spire-text/60 line-through">${esc(m.name || m.id)}</span>
+                    <span class="text-[10px] text-spire-muted/50 font-mono">${esc(m.version || '')}</span>
+                </div>
+                ${m.author ? `<div class="text-[11px] text-spire-muted/50">${esc(m.author)}</div>` : ''}
+            </div>`).join(''));
+    }
+
+    container.innerHTML = html;
+    unchangedEl.textContent = unchanged > 0 ? I18n.t('modDiff.unchangedCount', { count: unchanged }) : '';
+}
+
+function modDiffSection(label, count, type, cardsHtml) {
+    const colors = { added: '#22c55e', updated: '#f59e0b', removed: '#ef4444' };
+    const color = colors[type] || '#94a3b8';
+    return `
+        <div class="mb-4">
+            <div class="flex items-center gap-2 mb-2">
+                <div class="w-1.5 h-1.5 rounded-full" style="background:${color}"></div>
+                <span class="text-[11px] font-medium" style="color:${color}">${esc(label)}</span>
+                <span class="text-[10px] text-spire-muted">${count}</span>
+            </div>
+            <div class="flex flex-col gap-1.5">${cardsHtml}</div>
+        </div>`;
+}

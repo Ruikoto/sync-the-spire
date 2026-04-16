@@ -122,6 +122,35 @@
         </div>
     </div>
 
+    <!-- mod diff preview modal -->
+    <div id="mod-diff-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 flex flex-col" style="max-height:80vh">
+            <!-- header -->
+            <div class="flex items-center justify-between px-5 pt-5 pb-3">
+                <div class="flex items-center gap-2">
+                    <i id="mod-diff-icon" class="w-4 h-4 text-spire-accent" data-lucide="arrow-up-circle" style="width:16px;height:16px"></i>
+                    <h3 id="mod-diff-title" class="text-sm font-medium">Mod 差异预览</h3>
+                </div>
+                <button id="mod-diff-close" class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭">&times;</button>
+            </div>
+            <!-- scrollable body -->
+            <div id="mod-diff-body" class="flex-1 overflow-y-auto px-5 min-h-0">
+                <!-- dynamically rendered diff sections -->
+            </div>
+            <!-- footer -->
+            <div class="flex items-center justify-between px-5 py-4">
+                <span id="mod-diff-unchanged" class="text-[11px] text-spire-muted"></span>
+                <div class="flex gap-2">
+                    <button id="mod-diff-cancel"
+                        class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-4 py-1.5 transition-colors"
+                        data-i18n="common.cancel">取消</button>
+                    <button id="mod-diff-confirm"
+                        class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- steam account selection modal (for save path auto-find) -->
     <div id="steam-account-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">

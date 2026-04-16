@@ -263,6 +263,18 @@
       "notFound": "未找到有效的存档文件夹"
     }
   },
+  "modDiff": {
+    "titlePush": "上传预览",
+    "titlePull": "拉取预览",
+    "loading": "正在比对 Mod 差异…",
+    "added": "新增",
+    "updated": "更新",
+    "removed": "移除",
+    "noDiff": "Mod 配置完全一致，没有差异",
+    "unchangedCount": "未变更：{count} 个 Mod",
+    "confirmPush": "确认上传",
+    "confirmPull": "确认拉取"
+  },
   "status": {
     "connected": "已连接",
     "modConnected": "Mod 已连接",

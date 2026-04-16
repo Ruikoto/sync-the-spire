@@ -284,6 +284,18 @@ button, select {
     padding: 0 1px;
 }
 
+/* mod diff preview cards */
+.mod-diff-card {
+    background: #0f1117;
+    border-radius: 6px;
+    border: 1px solid rgba(42, 45, 58, 0.5);
+    border-left-width: 2px;
+    padding: 8px 10px;
+}
+.mod-diff-added  { border-left-color: #22c55e; }
+.mod-diff-updated { border-left-color: #f59e0b; }
+.mod-diff-removed { border-left-color: #ef4444; }
+
 /* help tooltip bubble */
 .help-tip {
     display: inline-flex;

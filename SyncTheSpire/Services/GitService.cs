@@ -305,6 +305,32 @@ public class GitService
     };
 
     /// <summary>
+    /// scan the local working tree for mod definitions (filesystem equivalent of GetBranchMods).
+    /// walks all .json files under WorkTreePath and keeps entries with a valid "id" field.
+    /// </summary>
+    public List<ModInfo> GetLocalMods()
+    {
+        var mods = new List<ModInfo>();
+        if (!Directory.Exists(WorkTreePath)) return mods;
+
+        foreach (var file in Directory.EnumerateFiles(WorkTreePath, "*.json", SearchOption.AllDirectories))
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var mod = JsonSerializer.Deserialize<ModInfo>(json, ModJsonOpts);
+                if (!string.IsNullOrEmpty(mod?.Id))
+                    mods.Add(mod);
+            }
+            catch
+            {
+                // not a mod definition or malformed json, skip
+            }
+        }
+        return mods;
+    }
+
+    /// <summary>
     /// read all mod definitions from a remote branch's file tree without checkout.
     /// walks the commit tree recursively, tries to deserialize every .json blob,
     /// and keeps entries that have a valid "id" field.

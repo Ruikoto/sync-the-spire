@@ -263,6 +263,18 @@
       "notFound": "No valid save folder found"
     }
   },
+  "modDiff": {
+    "titlePush": "Push Preview",
+    "titlePull": "Pull Preview",
+    "loading": "Comparing mods…",
+    "added": "Added",
+    "updated": "Updated",
+    "removed": "Removed",
+    "noDiff": "Mod configurations are identical, no changes",
+    "unchangedCount": "Unchanged: {count} mods",
+    "confirmPush": "Confirm Push",
+    "confirmPull": "Confirm Pull"
+  },
   "status": {
     "connected": "Connected",
     "modConnected": "Mods Linked",

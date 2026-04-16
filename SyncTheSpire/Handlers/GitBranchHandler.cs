@@ -102,6 +102,29 @@ public class GitBranchHandler : HandlerBase
         }
     }
 
+    public void HandleGetModDiff()
+    {
+        try
+        {
+            var branch = _gitService.GetCurrentBranch();
+            var local = _gitService.GetLocalMods()
+                .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(m => new { id = m.Id, name = m.Name, author = m.Author, version = m.Version });
+            var remote = string.IsNullOrEmpty(branch)
+                ? Enumerable.Empty<object>()
+                : _gitService.GetBranchMods(branch)
+                    .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(m => new { id = m.Id, name = m.Name, author = m.Author, version = m.Version });
+
+            Send(IpcResponse.Success("GET_MOD_DIFF", new { local, remote }));
+        }
+        catch (Exception ex)
+        {
+            LogService.Error("[GET_MOD_DIFF] Failed", ex);
+            Send(IpcResponse.Error("GET_MOD_DIFF", $"获取 Mod 差异失败：{ex.Message}"));
+        }
+    }
+
     public void HandleSwitchToVanilla()
     {
         // silently save any local changes first

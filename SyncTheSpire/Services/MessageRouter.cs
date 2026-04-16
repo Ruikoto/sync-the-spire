@@ -212,6 +212,14 @@ public class MessageRouter
                 }
                 _gitBranchHandler.HandleGetBranchMods(req.Payload);
                 return;
+            case "GET_MOD_DIFF":
+                if (_gitBranchHandler is null)
+                {
+                    Send(IpcResponse.Error("GET_MOD_DIFF", "当前没有活跃的工作区"));
+                    return;
+                }
+                _gitBranchHandler.HandleGetModDiff();
+                return;
             // steam auto-find — read-only filesystem/registry, no need for the gate
             case "FIND_GAME_PATH":
                 _steamFinderHandler.HandleFindGamePath();
