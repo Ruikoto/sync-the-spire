@@ -58,6 +58,7 @@ public class ConfigHandler : HandlerBase
             supportsSaveBackup = _adapter.SupportsSaveBackup,
             supportsModdedSaves = _adapter.SupportsModdedSaves,
             supportsModScanning = _adapter.SupportsModScanning,
+            supportsModOrder = _adapter.SupportsModOrder,
             supportsAutoFind = _adapter.SupportsAutoFind,
             // generic adapter: junction is always on, no toggle needed
             supportsModToggle = _adapter.TypeKey != "generic",

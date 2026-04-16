@@ -37,6 +37,7 @@ public class StardewValleyAdapter : IGameAdapter
     public bool SupportsSaveBackup => false;
     public bool SupportsModdedSaves => false;
     public bool SupportsModScanning => false;
+    public bool SupportsModOrder => false;
     public bool SupportsJunction => true;
     public bool ComingSoon => true;
     public int? SteamAppId => 413150;

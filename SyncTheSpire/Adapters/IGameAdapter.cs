@@ -52,6 +52,7 @@ public interface IGameAdapter
     bool SupportsSaveBackup { get; }
     bool SupportsModdedSaves { get; }
     bool SupportsModScanning { get; }
+    bool SupportsModOrder { get; }     // true = can reorder mod load priority (settings.save mod_list)
     bool SupportsJunction { get; }     // true = uses junction (game folder -> Repo/); false = git worktree is user's folder directly
     bool ComingSoon { get; }           // true = not yet ready for release builds
     int? SteamAppId { get; }            // non-null = can launch via steam:// URL scheme

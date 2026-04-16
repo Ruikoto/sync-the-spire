@@ -68,6 +68,7 @@ on('GET_STATUS', data => {
             // default to disabled until GET_SAVE_STATUS confirms save path
             ws.savePathConfigured = false;
             updateSaveBackupCard();
+            updateModOrderCard();
             sendMessage('GET_SAVE_STATUS');
             sendMessage('GET_REDIRECT_STATUS');
             // auto-refresh on startup if a branch is active
@@ -237,6 +238,7 @@ on('GET_SAVE_STATUS', data => {
     const p = data.payload;
     getWsState().savePathConfigured = !!p.isConfigured;
     updateSaveBackupCard();
+    updateModOrderCard();
     // if saves are in merged state, prompt user to unlink
     if (p.isConfigured && (p.mergeState === 'linked' || p.mergeState === 'partial')) {
         $('#save-unlink-modal').classList.remove('hidden');
@@ -562,6 +564,11 @@ $('#btn-open-backup').addEventListener('click', () => {
     sendMessage('OPEN_FOLDER', { folderType: 'backup' });
 });
 
+$('#btn-mod-order').addEventListener('click', () => {
+    if ($('#btn-mod-order').disabled) return;
+    openModOrderModal();
+});
+
 
 // ── close any closeable modal on Escape ──────────────────────────────────────
 
@@ -577,7 +584,7 @@ document.addEventListener('keydown', e => {
         }
         return;
     }
-    const modals = ['#welcome-modal', '#backup-list-modal', '#settings-modal', '#conflict-modal', '#create-workspace-modal'];
+    const modals = ['#welcome-modal', '#backup-list-modal', '#settings-modal', '#conflict-modal', '#create-workspace-modal', '#mod-order-modal'];
     for (const sel of modals) {
         const m = $(sel);
         if (m && !m.classList.contains('hidden')) {
@@ -845,6 +852,7 @@ async function bootstrap() {
             updateSyncStatusLine();
             updateActionButtons();
             updateSaveBackupCard();
+            updateModOrderCard();
             if (ws.capabilities) updateDashboardForCapabilities(ws.capabilities);
         }
     });

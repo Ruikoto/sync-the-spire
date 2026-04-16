@@ -677,6 +677,24 @@
             </div>
         </div>
 
+        <!-- mod load order card -->
+        <div id="card-mod-order" class="hidden bg-spire-card rounded-xl border border-spire-border p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-medium" data-i18n="modOrder.title">Mod 加载顺序</h2>
+                        <span class="help-tip" data-tip="调整 Mod 的加载优先级，列表中越靠前的 Mod 越先加载。" data-i18n-tip="modOrder.tip">?</span>
+                    </div>
+                    <p class="text-xs text-spire-muted mt-0.5" data-i18n="modOrder.description">拖拽调整 Mod 加载优先级</p>
+                </div>
+                <button id="btn-mod-order"
+                    class="text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg px-3 py-1.5 transition-colors"
+                    data-i18n="modOrder.editButton">
+                    调整顺序
+                </button>
+            </div>
+        </div>
+
         <!-- follow others -->
         <div class="bg-spire-card rounded-xl border border-spire-border p-4">
             <div class="flex items-center justify-between">
@@ -818,6 +836,35 @@
                 data-i18n="settings.docs">
                 使用教程
             </button>
+        </div>
+    </div>
+
+    <!-- mod load order modal -->
+    <div id="mod-order-modal" class="hidden fixed inset-0 z-30 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-spire-border">
+                <h2 class="text-sm font-medium" data-i18n="modOrder.modalTitle">Mod 加载顺序</h2>
+                <button id="mod-order-close"
+                    class="text-spire-muted hover:text-spire-text text-lg leading-none transition-colors px-1" aria-label="关闭" data-i18n-aria="common.close">&times;</button>
+            </div>
+            <!-- inconsistency warning banner -->
+            <div id="mod-order-warning" class="hidden mx-4 mt-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400 leading-relaxed">
+                <span data-i18n="modOrder.inconsistentWarning">Mod 列表与已安装的 Mod 不一致，请先启动一次游戏再调整顺序。</span>
+            </div>
+            <div class="px-4 pt-2 pb-1">
+                <p class="text-[10px] text-spire-muted/60" data-i18n="modOrder.dragHint">拖拽调整加载顺序，越靠前越先加载</p>
+            </div>
+            <div id="mod-order-list" class="flex-1 overflow-y-auto px-4 py-2 space-y-1 min-h-[100px]">
+                <!-- dynamically populated -->
+            </div>
+            <div class="flex gap-2 px-4 py-3 border-t border-spire-border">
+                <button id="mod-order-cancel"
+                    class="flex-1 text-xs border border-spire-border text-spire-muted hover:text-spire-text rounded-lg py-1.5 transition-colors"
+                    data-i18n="common.cancel">取消</button>
+                <button id="mod-order-save"
+                    class="flex-1 text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg py-1.5 transition-colors"
+                    data-i18n="common.save">保存</button>
+            </div>
         </div>
     </div>
 

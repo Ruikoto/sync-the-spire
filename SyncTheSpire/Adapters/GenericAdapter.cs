@@ -37,6 +37,7 @@ public class GenericAdapter : IGameAdapter
     public bool SupportsSaveBackup => false;
     public bool SupportsModdedSaves => false;
     public bool SupportsModScanning => false;
+    public bool SupportsModOrder => false;
     public bool SupportsJunction => false;
     public bool ComingSoon => false;
     public int? SteamAppId => null;

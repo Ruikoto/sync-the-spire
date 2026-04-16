@@ -34,12 +34,13 @@ public class StS2Adapter : IGameAdapter
 
     public (string? Path, string? Error) ValidateSaveFolderPath(string path)
     {
-        // walk up to find the save root (must contain profile1/ and profile.save)
+        // walk up to find the save root (must contain profile1/, profile.save, and settings.save)
         var resolved = FileSystemHelper.FindAncestorContaining(path,
             dir => Directory.Exists(Path.Combine(dir, "profile1"))
-                && File.Exists(Path.Combine(dir, "profile.save")));
+                && File.Exists(Path.Combine(dir, "profile.save"))
+                && File.Exists(Path.Combine(dir, "settings.save")));
         if (resolved is null)
-            return (null, $"存档路径无效：未找到 profile1 文件夹或 profile.save 文件\n请确认路径是否正确：{path}");
+            return (null, $"存档路径无效：未找到 profile1 文件夹、profile.save 或 settings.save 文件\n请确认路径是否正确：{path}");
         return (resolved, null);
     }
 
@@ -114,6 +115,7 @@ public class StS2Adapter : IGameAdapter
     public bool SupportsSaveBackup => true;
     public bool SupportsModdedSaves => true;
     public bool SupportsModScanning => true;
+    public bool SupportsModOrder => true;
     public bool SupportsJunction => true;
     public bool ComingSoon => false;
     public int? SteamAppId => AppId;

@@ -152,6 +152,25 @@
     "enabled": "Enabled",
     "disabled": "Not enabled"
   },
+  "modOrder": {
+    "title": "Mod Load Order",
+    "tip": "Adjust the mod load priority. Mods higher in the list are loaded first.",
+    "description": "Drag to reorder mod load priority",
+    "editButton": "Edit Order",
+    "modalTitle": "Mod Load Order",
+    "dragHint": "Drag to reorder — mods higher in the list load first",
+    "inconsistentWarning": "The mod list doesn't match the installed mods. Please launch the game once before reordering.",
+    "saved": "Mod order saved",
+    "saveFailed": "Failed to save",
+    "loadFailed": "Failed to load",
+    "empty": "No mods installed",
+    "disabled": "Disabled",
+    "modsDisabled": "Mods are disabled. Enable mods in the game first.",
+    "moveTop": "Move to top",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveBottom": "Move to bottom"
+  },
   "follow": {
     "title": "Co-op Follow",
     "description": "Switch to a friend's branch to sync their Mods",

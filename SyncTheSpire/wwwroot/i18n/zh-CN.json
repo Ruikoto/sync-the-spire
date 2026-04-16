@@ -152,6 +152,25 @@
     "enabled": "已启用",
     "disabled": "未启用"
   },
+  "modOrder": {
+    "title": "Mod 加载顺序",
+    "tip": "调整 Mod 的加载优先级，列表中越靠前的 Mod 越先加载。",
+    "description": "拖拽调整 Mod 加载优先级",
+    "editButton": "调整顺序",
+    "modalTitle": "Mod 加载顺序",
+    "dragHint": "拖拽调整加载顺序，越靠前越先加载",
+    "inconsistentWarning": "Mod 列表与已安装的 Mod 不一致，请先启动一次游戏再调整顺序。",
+    "saved": "Mod 排序已保存",
+    "saveFailed": "保存失败",
+    "loadFailed": "加载失败",
+    "empty": "没有已安装的 Mod",
+    "disabled": "已禁用",
+    "modsDisabled": "Mod 功能已关闭，请在游戏中启用 Mod 后再调整顺序",
+    "moveTop": "置顶",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "moveBottom": "置底"
+  },
   "follow": {
     "title": "联机跟随",
     "description": "切换到朋友的分支来同步他们的 Mod",

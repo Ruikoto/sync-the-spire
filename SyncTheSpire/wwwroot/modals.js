@@ -976,3 +976,279 @@ function modDiffSection(label, count, type, cardsHtml) {
             <div class="flex flex-col gap-1.5">${cardsHtml}</div>
         </div>`;
 }
+
+
+// ── mod load order modal ────────────────────────────────────────────────────
+
+let modOrderMods = [];
+let modOrderConsistent = true;
+
+async function openModOrderModal() {
+    const modal = $('#mod-order-modal');
+    const list = $('#mod-order-list');
+    const warning = $('#mod-order-warning');
+    const saveBtn = $('#mod-order-save');
+
+    // reset state
+    list.innerHTML = `<div class="flex items-center justify-center py-8 text-xs text-spire-muted">${esc(I18n.t('common.processing'))}</div>`;
+    warning.classList.add('hidden');
+    saveBtn.disabled = false;
+    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    modal.classList.remove('hidden');
+
+    try {
+        const result = await ipcCall('GET_MOD_ORDER');
+        const payload = result.payload;
+        modOrderMods = payload.mods || [];
+        modOrderConsistent = payload.consistent;
+
+        if (!payload.modsEnabled) {
+            list.innerHTML = `<div class="flex flex-col items-center justify-center py-8 gap-2 text-xs text-spire-muted">
+                <span>${esc(I18n.t('modOrder.modsDisabled'))}</span>
+            </div>`;
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            return;
+        }
+
+        if (modOrderMods.length === 0) {
+            list.innerHTML = `<div class="flex items-center justify-center py-8 text-xs text-spire-muted">${esc(I18n.t('modOrder.empty'))}</div>`;
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            return;
+        }
+
+        if (!modOrderConsistent) {
+            warning.classList.remove('hidden');
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        renderModOrderList();
+    } catch {
+        list.innerHTML = `<div class="flex items-center justify-center py-8 text-xs text-spire-danger">${esc(I18n.t('modOrder.loadFailed'))}</div>`;
+    }
+}
+
+function moveModOrder(fromIdx, toIdx) {
+    if (fromIdx === toIdx || toIdx < 0 || toIdx >= modOrderMods.length) return;
+    const list = $('#mod-order-list');
+    const scrollTop = list.scrollTop;
+    const [moved] = modOrderMods.splice(fromIdx, 1);
+    modOrderMods.splice(toIdx, 0, moved);
+    renderModOrderList();
+    // restore scroll and keep the moved item visible
+    list.scrollTop = scrollTop;
+    const movedItem = list.querySelector(`[data-index="${toIdx}"]`);
+    if (movedItem) movedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function renderModOrderList() {
+    const list = $('#mod-order-list');
+    const scrollTop = list.scrollTop;
+    list.innerHTML = '';
+    const canDrag = modOrderConsistent;
+    const lastIdx = modOrderMods.length - 1;
+
+    modOrderMods.forEach((mod, idx) => {
+        const item = document.createElement('div');
+        item.className = 'mod-order-item flex items-center gap-2 px-3 py-2 rounded-lg border border-spire-border/50 bg-spire-bg/50 select-none transition-all';
+        if (canDrag) item.className += ' cursor-grab';
+        item.draggable = canDrag;
+        item.dataset.index = idx;
+
+        // grip handle (6-dot pattern)
+        const grip = document.createElement('div');
+        grip.className = 'flex flex-col gap-[2px] shrink-0 text-spire-muted/40';
+        grip.innerHTML = `<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" style="width:8px;height:14px">
+            <circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>
+            <circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/>
+            <circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/>
+        </svg>`;
+
+        // position number
+        const num = document.createElement('span');
+        num.className = 'text-[10px] text-spire-muted/50 font-mono w-4 text-right shrink-0';
+        num.textContent = idx + 1;
+
+        // mod info
+        const info = document.createElement('div');
+        info.className = 'flex-1 min-w-0';
+        const nameRow = document.createElement('div');
+        nameRow.className = 'flex items-center gap-2';
+        const name = document.createElement('span');
+        name.className = 'text-xs font-medium text-spire-text truncate';
+        name.textContent = mod.name || mod.id;
+        nameRow.appendChild(name);
+
+        if (mod.version) {
+            const ver = document.createElement('span');
+            ver.className = 'text-[10px] text-spire-muted/60 font-mono shrink-0';
+            ver.textContent = mod.version;
+            nameRow.appendChild(ver);
+        }
+
+        if (!mod.isEnabled) {
+            const badge = document.createElement('span');
+            badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-spire-muted/20 text-spire-muted/60 shrink-0';
+            badge.textContent = I18n.t('modOrder.disabled');
+            nameRow.appendChild(badge);
+        }
+
+        info.appendChild(nameRow);
+
+        if (mod.author) {
+            const author = document.createElement('div');
+            author.className = 'text-[10px] text-spire-muted/50 truncate';
+            author.textContent = mod.author;
+            info.appendChild(author);
+        }
+
+        // move buttons (top / up / down / bottom)
+        const btns = document.createElement('div');
+        btns.className = 'flex items-center gap-0.5 shrink-0';
+        if (canDrag) {
+            const mkBtn = (icon, title, disabled, onClick) => {
+                const b = document.createElement('button');
+                b.className = 'mod-order-btn p-1.5 rounded text-spire-muted hover:text-spire-accent hover:bg-spire-accent/10 transition-colors';
+                b.innerHTML = icon;
+                b.title = title;
+                if (disabled) {
+                    b.classList.add('opacity-0', 'pointer-events-none');
+                    b.disabled = true;
+                }
+                b.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+                return b;
+            };
+            // svg icons — inline with fixed size to avoid tailwind rebuild dependency
+            const iconTop = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><line x1="4" y1="3" x2="12" y2="3"/><polyline points="5,9 8,6 11,9"/><line x1="8" y1="6" x2="8" y2="13"/></svg>';
+            const iconUp = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><polyline points="5,9 8,6 11,9"/><line x1="8" y1="6" x2="8" y2="13"/></svg>';
+            const iconDown = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><polyline points="5,7 8,10 11,7"/><line x1="8" y1="3" x2="8" y2="10"/></svg>';
+            const iconBottom = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><polyline points="5,7 8,10 11,7"/><line x1="8" y1="3" x2="8" y2="10"/><line x1="4" y1="13" x2="12" y2="13"/></svg>';
+
+            btns.appendChild(mkBtn(iconTop, I18n.t('modOrder.moveTop'), idx === 0, () => moveModOrder(idx, 0)));
+            btns.appendChild(mkBtn(iconUp, I18n.t('modOrder.moveUp'), idx === 0, () => moveModOrder(idx, idx - 1)));
+            btns.appendChild(mkBtn(iconDown, I18n.t('modOrder.moveDown'), idx === lastIdx, () => moveModOrder(idx, idx + 1)));
+            btns.appendChild(mkBtn(iconBottom, I18n.t('modOrder.moveBottom'), idx === lastIdx, () => moveModOrder(idx, lastIdx)));
+        }
+
+        item.appendChild(grip);
+        item.appendChild(num);
+        item.appendChild(info);
+        item.appendChild(btns);
+        list.appendChild(item);
+    });
+
+    // restore scroll position after re-render
+    list.scrollTop = scrollTop;
+    initModOrderDragAndDrop();
+}
+
+// ── HTML5 drag-and-drop for mod order list ──
+
+let modDragIndex = null;
+let modDropIndicator = null;
+
+function initModOrderDragAndDrop() {
+    const list = $('#mod-order-list');
+
+    // clean up old listeners by cloning the node
+    const newList = list.cloneNode(true);
+    list.parentNode.replaceChild(newList, list);
+
+    newList.addEventListener('dragstart', e => {
+        const item = e.target.closest('.mod-order-item');
+        if (!item) return;
+        modDragIndex = parseInt(item.dataset.index);
+        item.classList.add('opacity-30');
+        e.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => item.classList.add('dragging'));
+    });
+
+    newList.addEventListener('dragend', e => {
+        const item = e.target.closest('.mod-order-item');
+        if (item) {
+            item.classList.remove('opacity-30', 'dragging');
+        }
+        modDragIndex = null;
+        removeDropIndicator();
+    });
+
+    newList.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const item = e.target.closest('.mod-order-item');
+        if (!item || modDragIndex === null) return;
+
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        const insertBefore = e.clientY < midY;
+        showDropIndicator(item, insertBefore);
+    });
+
+    newList.addEventListener('dragleave', e => {
+        if (!e.relatedTarget || !newList.contains(e.relatedTarget)) {
+            removeDropIndicator();
+        }
+    });
+
+    newList.addEventListener('drop', e => {
+        e.preventDefault();
+        const item = e.target.closest('.mod-order-item');
+        if (!item || modDragIndex === null) return;
+
+        const targetIndex = parseInt(item.dataset.index);
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        let dropIndex = e.clientY < midY ? targetIndex : targetIndex + 1;
+
+        if (modDragIndex < dropIndex) dropIndex--;
+        if (modDragIndex !== dropIndex && dropIndex >= 0 && dropIndex <= modOrderMods.length) {
+            moveModOrder(modDragIndex, dropIndex);
+        }
+
+        modDragIndex = null;
+        removeDropIndicator();
+    });
+}
+
+function showDropIndicator(targetItem, before) {
+    removeDropIndicator();
+    modDropIndicator = document.createElement('div');
+    modDropIndicator.className = 'mod-drop-indicator h-0.5 bg-spire-accent rounded-full mx-2 transition-all';
+    if (before) {
+        targetItem.parentNode.insertBefore(modDropIndicator, targetItem);
+    } else {
+        targetItem.parentNode.insertBefore(modDropIndicator, targetItem.nextSibling);
+    }
+}
+
+function removeDropIndicator() {
+    if (modDropIndicator) {
+        modDropIndicator.remove();
+        modDropIndicator = null;
+    }
+}
+
+async function saveModOrder() {
+    const orderedIds = modOrderMods.map(m => m.id);
+    try {
+        await ipcCall('SAVE_MOD_ORDER', { orderedIds });
+        toast(I18n.t('modOrder.saved'), 'success');
+        closeModOrderModal();
+    } catch {
+        toast(I18n.t('modOrder.saveFailed'), 'error');
+    }
+}
+
+function closeModOrderModal() {
+    $('#mod-order-modal').classList.add('hidden');
+    modOrderMods = [];
+}
+
+$('#mod-order-close').addEventListener('click', closeModOrderModal);
+$('#mod-order-cancel').addEventListener('click', closeModOrderModal);
+$('#mod-order-save').addEventListener('click', saveModOrder);
+$('#mod-order-modal').addEventListener('click', e => {
+    if (e.target === $('#mod-order-modal')) closeModOrderModal();
+});

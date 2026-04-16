@@ -130,6 +130,10 @@ function updateDashboardForCapabilities(capabilities) {
     if (saveBackupCard) saveBackupCard.classList.toggle('hidden', !capabilities.supportsSaveBackup);
     if (modToggleCard) modToggleCard.classList.toggle('hidden', !capabilities.supportsModToggle);
 
+    // mod order card — only for games that support mod load ordering
+    const modOrderCard = $('#card-mod-order');
+    if (modOrderCard) modOrderCard.classList.toggle('hidden', !capabilities.supportsModOrder);
+
     // adapt folder dropdown for generic (no separate game/mod distinction)
     const folderGame = document.querySelector('[data-folder="game"]');
     const folderMod = $('#folder-item-mod');
@@ -198,5 +202,21 @@ function updateSaveBackupCard() {
     } else {
         btns.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
         if (desc) desc.textContent = I18n.t('saveBackup.notConfigured');
+    }
+}
+
+// ── mod order card ──────────────────────────────────────────────────────────
+
+function updateModOrderCard() {
+    const btn = $('#btn-mod-order');
+    if (!btn) return;
+    const ws = getWsState();
+
+    if (ws.savePathConfigured) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
     }
 }

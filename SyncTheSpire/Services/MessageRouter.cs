@@ -34,6 +34,7 @@ public class MessageRouter
     private StoreUpdateHandler _storeUpdateHandler = null!;
     private SteamFinderHandler _steamFinderHandler = null!;
     private FilesystemHandler _filesystemHandler = null!;
+    private ModOrderHandler _modOrderHandler = null!;
 
     // A3: actions that require an active workspace context — unified null guard
     private static readonly HashSet<string> WorkspaceScopedActions =
@@ -45,6 +46,7 @@ public class MessageRouter
         "GET_REDIRECT_STATUS", "SET_REDIRECT",
         "RESTORE_JUNCTION", "OPEN_FOLDER",
         "LAUNCH_GAME", "SET_CUSTOM_EXE",
+        "GET_MOD_ORDER", "SAVE_MOD_ORDER",
     ];
 
     // current workspace context (null if no workspace active yet)
@@ -103,6 +105,7 @@ public class MessageRouter
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, adapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, adapter, _form);
+            _modOrderHandler = new ModOrderHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, adapter);
         }
         else
         {
@@ -344,6 +347,15 @@ public class MessageRouter
 
                 case "SET_REDIRECT":
                     _redirectHandler.HandleSetRedirect(req.Payload);
+                    break;
+
+                // ── mod load order ───────────────────────────────────
+                case "GET_MOD_ORDER":
+                    _modOrderHandler.HandleGetModOrder();
+                    break;
+
+                case "SAVE_MOD_ORDER":
+                    _modOrderHandler.HandleSaveModOrder(req.Payload);
                     break;
 
                 case "GET_DISMISSED_ANNOUNCEMENTS":
