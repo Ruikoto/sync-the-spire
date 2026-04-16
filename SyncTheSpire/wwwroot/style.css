@@ -504,3 +504,46 @@ button, select {
 .settings-select:disabled {
     opacity: 0.6;
 }
+
+/* ── mod manager ───────────────────────────────────────────────────── */
+
+/* ghost card: subtle pulsing red border */
+.mm-ghost-card {
+    animation: ghostPulse 2s ease-in-out infinite;
+    border-style: dashed;
+}
+@keyframes ghostPulse {
+    0%, 100% { border-color: rgba(239, 68, 68, 0.3); }
+    50% { border-color: rgba(239, 68, 68, 0.6); }
+}
+
+/* detail modal dep row: clickable feel */
+.mm-dep-row.clickable { cursor: pointer; }
+.mm-dep-row.clickable:hover { background: rgba(99, 102, 241, 0.08); }
+
+/* drop zone */
+.mm-dropzone {
+    border: 2px dashed rgba(99, 102, 241, 0.25);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+.mm-dropzone:hover, .mm-dropzone.drag-over {
+    border-color: rgba(99, 102, 241, 0.6);
+    background: rgba(99, 102, 241, 0.04);
+}
+
+/* mod manager card hover */
+.mm-mod-card {
+    transition: border-color 0.15s, background 0.15s;
+}
+.mm-mod-card:hover {
+    background: rgba(99, 102, 241, 0.04);
+}
+
+/* branch picker dropdown */
+.mm-branch-option {
+    border-bottom: 1px solid rgba(42, 45, 58, 0.4);
+}
+.mm-branch-option:last-child {
+    border-bottom: none;
+}

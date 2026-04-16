@@ -567,6 +567,24 @@ $('#btn-open-backup').addEventListener('click', () => {
 
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
+    // mod manager detail/branch-copy modals (Layer 2/3) — close innermost first
+    const mmDetail = $('#mm-detail-modal');
+    if (mmDetail && !mmDetail.classList.contains('hidden')) {
+        closeModDetail();
+        return;
+    }
+    const mmBranch = $('#mm-branch-copy-modal');
+    if (mmBranch && !mmBranch.classList.contains('hidden')) {
+        closeBranchCopyModal();
+        refreshModList();
+        return;
+    }
+    // mod manager main modal (Layer 1)
+    const mmMain = $('#mod-manager-modal');
+    if (mmMain && !mmMain.classList.contains('hidden')) {
+        closeModManager();
+        return;
+    }
     // branch modal: if preview is showing, go back to list first
     const bm = $('#branch-modal');
     if (bm && !bm.classList.contains('hidden')) {

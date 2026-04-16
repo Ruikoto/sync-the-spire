@@ -34,6 +34,7 @@ public class MessageRouter
     private StoreUpdateHandler _storeUpdateHandler = null!;
     private SteamFinderHandler _steamFinderHandler = null!;
     private FilesystemHandler _filesystemHandler = null!;
+    private ModManagerHandler _modManagerHandler = null!;
 
     // A3: actions that require an active workspace context — unified null guard
     private static readonly HashSet<string> WorkspaceScopedActions =
@@ -45,6 +46,8 @@ public class MessageRouter
         "GET_REDIRECT_STATUS", "SET_REDIRECT",
         "RESTORE_JUNCTION", "OPEN_FOLDER",
         "LAUNCH_GAME", "SET_CUSTOM_EXE",
+        "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES",
+        "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH",
     ];
 
     // current workspace context (null if no workspace active yet)
@@ -103,6 +106,7 @@ public class MessageRouter
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, adapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, adapter, _form);
+            _modManagerHandler = new ModManagerHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, new ModInstallService(), _form);
         }
         else
         {
@@ -121,6 +125,7 @@ public class MessageRouter
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, stubCs);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, stubAdapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, stubCs, _junctionService, stubBackup, stubJH, stubAdapter, _form);
+            _modManagerHandler = null!;
         }
     }
 
@@ -194,6 +199,15 @@ public class MessageRouter
                 return;
             case "PICK_GAME_EXE":
                 _filesystemHandler.HandlePickGameExe();
+                return;
+            // mod manager: file picker needs UI thread — handle outside the gate
+            case "PICK_MOD_ARCHIVE":
+                if (_modManagerHandler is null)
+                {
+                    Send(IpcResponse.Error("PICK_MOD_ARCHIVE", "当前没有活跃的工作区"));
+                    return;
+                }
+                _modManagerHandler.HandlePickModArchive();
                 return;
             // Store update actions use system UI / network calls — don't hold the gate
             case "CHECK_STORE_UPDATE":
@@ -386,6 +400,27 @@ public class MessageRouter
 
                 case "SAVE_SETTINGS":
                     _settingsHandler.HandleSaveSettings(req.Payload);
+                    break;
+
+                // ── mod manager ─────────────────────────────────────
+                case "GET_LOCAL_MODS_DETAILED":
+                    _modManagerHandler.HandleGetLocalModsDetailed();
+                    break;
+
+                case "DELETE_MOD":
+                    _modManagerHandler.HandleDeleteMod(req.Payload);
+                    break;
+
+                case "INSTALL_MOD_FILES":
+                    _modManagerHandler.HandleInstallModFiles(req.Payload);
+                    break;
+
+                case "GET_BRANCH_MODS_FOR_COPY":
+                    _modManagerHandler.HandleGetBranchModsForCopy(req.Payload);
+                    break;
+
+                case "COPY_MOD_FROM_BRANCH":
+                    _modManagerHandler.HandleCopyModFromBranch(req.Payload);
                     break;
 
                 default:

@@ -140,6 +140,10 @@ function updateDashboardForCapabilities(capabilities) {
     if (folderMod) folderMod.classList.toggle('hidden', !capabilities.supportsModToggle);
     if (folderSave) folderSave.classList.toggle('hidden', !capabilities.supportsSaveBackup);
 
+    // show mod manager button when mod scanning is supported
+    const mmBtn = $('#btn-open-mod-manager');
+    if (mmBtn) mmBtn.classList.toggle('hidden', !capabilities.supportsModScanning);
+
     // show launch button when Steam launch or custom exe is available
     const launchContainer = $('#launch-container');
     if (launchContainer) {

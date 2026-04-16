@@ -650,10 +650,17 @@
                         <span id="mod-label" class="text-xs text-spire-muted" data-i18n="modToggle.checking">检查中...</span>
                     </div>
                 </div>
-                <label id="mod-toggle" class="toggle-switch">
-                    <input type="checkbox" id="mod-checkbox" disabled>
-                    <span class="toggle-slider"></span>
-                </label>
+                <div class="flex items-center gap-2">
+                    <button id="btn-open-mod-manager" class="hidden text-xs px-2 py-1 rounded-md border border-spire-border text-spire-muted hover:text-spire-text hover:border-spire-accent transition-colors flex items-center gap-1"
+                        data-i18n="modToggle.manage">
+                        <i data-lucide="package" style="width:12px;height:12px"></i>
+                        管理
+                    </button>
+                    <label id="mod-toggle" class="toggle-switch">
+                        <input type="checkbox" id="mod-checkbox" disabled>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -821,6 +828,99 @@
         </div>
     </div>
 
+    <!-- ── mod manager modal (Layer 1) ────────────────────────────────── -->
+    <div id="mod-manager-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center" style="z-index:30">
+        <div class="bg-spire-bg border border-spire-border rounded-2xl flex flex-col" style="width:90vw;max-width:1100px;height:88vh;max-height:88vh;">
+            <!-- header -->
+            <div class="flex items-center justify-between px-5 py-3 border-b border-spire-border shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="package" style="width:16px;height:16px" class="text-spire-accent"></i>
+                        <h2 class="text-sm font-semibold">Mod 管理器</h2>
+                    </div>
+                    <span id="mm-mod-count" class="text-xs text-spire-muted"></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input id="mm-search" type="text" placeholder="搜索 MOD..." class="text-xs bg-spire-card border border-spire-border rounded-lg px-3 py-1.5 w-40 focus:outline-none focus:border-spire-accent text-spire-text placeholder-spire-muted">
+                    </div>
+                    <button id="mm-btn-branch-copy" class="text-xs px-3 py-1.5 border border-spire-border text-spire-muted hover:text-spire-text rounded-lg transition-colors flex items-center gap-1">
+                        <i data-lucide="git-branch" style="width:12px;height:12px"></i>
+                        从其他分支拷贝
+                    </button>
+                    <button id="mm-btn-close" class="text-spire-muted hover:text-spire-text transition-colors p-1">
+                        <i data-lucide="x" style="width:16px;height:16px"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- dropzone -->
+            <div id="mm-dropzone" class="mm-dropzone mx-5 mt-3 rounded-lg py-3 flex items-center justify-center gap-2 text-xs text-spire-muted">
+                <i data-lucide="upload" style="width:14px;height:14px"></i>
+                <span>拖入压缩包/文件到此处安装 MOD，或点击「安装」按钮选择文件</span>
+            </div>
+            <!-- mod grid (scroll wrapper + column layout inside) -->
+            <div id="mm-grid-scroll" class="flex-1 overflow-y-auto px-5 py-3">
+                <div id="mm-grid" style="column-count:2;column-gap:12px;">
+                    <!-- cards rendered by JS -->
+                </div>
+            </div>
+            <!-- loading spinner -->
+            <div id="mm-loading" class="hidden flex-1 flex items-center justify-center">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── mod detail modal (Layer 2) ─────────────────────────────────── -->
+    <div id="mm-detail-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center" style="z-index:40">
+        <div class="bg-spire-bg border border-spire-border rounded-2xl flex flex-col" style="width:480px;max-width:92vw;max-height:80vh;">
+            <div id="mm-detail-content" class="overflow-y-auto p-5">
+                <!-- filled by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ── branch copy modal (Layer 3) ────────────────────────────────── -->
+    <div id="mm-branch-copy-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center" style="z-index:40">
+        <div class="bg-spire-bg border border-spire-border rounded-2xl flex flex-col" style="width:900px;max-width:92vw;max-height:80vh;">
+            <!-- header -->
+            <div class="flex items-center justify-between px-5 py-3 border-b border-spire-border shrink-0">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-sm font-semibold">从分支拷贝 MOD</h2>
+                    <!-- custom dropdown for branch selection -->
+                    <div id="mm-branch-picker" class="relative">
+                        <button id="mm-branch-picker-btn" class="flex items-center gap-1.5 text-xs bg-spire-card border border-spire-border rounded-lg px-3 py-1.5 text-spire-text hover:border-spire-accent transition-colors focus:outline-none focus:border-spire-accent min-w-[140px]">
+                            <span id="mm-branch-picker-label" class="truncate">选择分支...</span>
+                            <i data-lucide="chevron-down" style="width:12px;height:12px" class="shrink-0 text-spire-muted"></i>
+                        </button>
+                        <div id="mm-branch-picker-dropdown" class="hidden absolute top-full left-0 mt-1 bg-spire-card border border-spire-border rounded-lg shadow-xl overflow-hidden" style="z-index:50;min-width:200px;max-height:280px;">
+                            <div id="mm-branch-picker-list" class="overflow-y-auto" style="max-height:280px;">
+                                <!-- populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input id="mm-branch-search" type="text" placeholder="搜索..." class="text-xs bg-spire-card border border-spire-border rounded-lg px-3 py-1.5 w-32 focus:outline-none focus:border-spire-accent text-spire-text placeholder-spire-muted">
+                    <button id="mm-branch-close" class="text-spire-muted hover:text-spire-text transition-colors p-1">
+                        <i data-lucide="x" style="width:16px;height:16px"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- branch mod grid (scroll wrapper + column layout inside) -->
+            <div id="mm-branch-grid-scroll" class="flex-1 overflow-y-auto px-5 py-3">
+                <div id="mm-branch-grid" style="column-count:2;column-gap:12px;">
+                </div>
+            </div>
+            <div id="mm-branch-loading" class="hidden flex-1 flex items-center justify-center py-8">
+                <div class="spinner"></div>
+            </div>
+            <div id="mm-branch-empty" class="hidden flex-1 flex items-center justify-center py-8 text-xs text-spire-muted">
+                选择一个分支以查看可拷贝的 MOD
+            </div>
+        </div>
+    </div>
+
     <script src="lib/lucide.min.js"></script>
     <script src="lib/marked.min.js"></script>
     <script src="ipc.js"></script>
@@ -828,6 +928,7 @@
     <script src="ui.js"></script>
     <script src="state.js"></script>
     <script src="modals.js"></script>
+    <script src="mod-manager.js"></script>
     <script src="setup.js"></script>
     <script src="dashboard.js"></script>
     <script src="home.js"></script>
