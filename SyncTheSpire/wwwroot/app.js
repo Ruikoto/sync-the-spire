@@ -595,6 +595,42 @@ $('#btn-close').addEventListener('click', () => sendMessage('WINDOW_CLOSE'));
 $('#titlebar-drag').addEventListener('dblclick', () => sendMessage('WINDOW_MAXIMIZE'));
 
 
+// ── window edge resize (borderless window) ──────────────────────────────────
+// detect cursor near window edges, show resize cursors, and trigger native
+// resize via IPC on mousedown — same pattern as titlebar drag
+
+(function initEdgeResize() {
+    const BORDER = 6;
+    const CURSOR_MAP = {
+        n: 'n-resize', s: 's-resize', e: 'e-resize', w: 'w-resize',
+        nw: 'nw-resize', ne: 'ne-resize', sw: 'sw-resize', se: 'se-resize'
+    };
+    let currentEdge = '';
+
+    document.addEventListener('mousemove', (e) => {
+        const x = e.clientX, y = e.clientY;
+        const w = window.innerWidth, h = window.innerHeight;
+        let edge = '';
+        if (y < BORDER) edge += 'n';
+        if (y >= h - BORDER) edge += 's';
+        if (x < BORDER) edge += 'w';
+        if (x >= w - BORDER) edge += 'e';
+
+        if (edge !== currentEdge) {
+            currentEdge = edge;
+            document.documentElement.style.cursor = CURSOR_MAP[edge] || '';
+        }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+        if (currentEdge && e.button === 0) {
+            e.preventDefault();
+            sendMessage('WINDOW_RESIZE', { edge: currentEdge });
+        }
+    });
+})();
+
+
 // ── help-tip tooltip (fixed position, viewport-clamped) ──────────────────────
 
 (function () {
@@ -648,9 +684,9 @@ function renderTabBar() {
         const isActive = id === AppState.activeWorkspaceId;
         return `
             <div class="tab-item${isActive ? ' active' : ''} h-full flex items-center gap-1.5 px-3 text-xs text-spire-muted shrink min-w-0" data-tab="${escAttr(id)}">
-                <span class="game-badge-${ws.gameType}" style="display:flex;">${gameIcon(ws.gameType, 12)}</span>
-                <span class="truncate max-w-[120px]">${esc(ws.name)}</span>
-                <button class="tab-close ml-1 text-spire-muted hover:text-spire-danger text-xs leading-none" data-tab-close="${escAttr(id)}" title="${escAttr(I18n.t('titlebar.closeTab'))}">&times;</button>
+                <span class="shrink-0 game-badge-${ws.gameType}" style="display:flex;">${gameIcon(ws.gameType, 12)}</span>
+                <span class="truncate">${esc(ws.name)}</span>
+                <button class="shrink-0 tab-close ml-1 text-spire-muted hover:text-spire-danger text-xs leading-none" data-tab-close="${escAttr(id)}" title="${escAttr(I18n.t('titlebar.closeTab'))}">&times;</button>
             </div>`;
     }).join('');
 

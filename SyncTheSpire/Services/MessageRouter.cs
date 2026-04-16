@@ -157,7 +157,7 @@ public class MessageRouter
             return;
         }
 
-        if (req.Action != "WINDOW_DRAG")
+        if (req.Action != "WINDOW_DRAG" && req.Action != "WINDOW_RESIZE")
             LogService.Info($"IPC <- {req.Action}");
 
         // run everything off the UI thread so we don't freeze the window
@@ -171,6 +171,10 @@ public class MessageRouter
         {
             case "WINDOW_DRAG":
                 _uiContext.Post(_ => _form.BeginDrag(), null);
+                return;
+            case "WINDOW_RESIZE":
+                var edge = req.Payload?.GetProperty("edge").GetString() ?? "";
+                _uiContext.Post(_ => _form.BeginResize(edge), null);
                 return;
             case "WINDOW_MINIMIZE":
                 _uiContext.Post(_ => _form.WindowState = FormWindowState.Minimized, null);

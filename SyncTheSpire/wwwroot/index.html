@@ -12,7 +12,7 @@
     <!-- custom title bar / tab bar -->
     <div id="titlebar" class="flex items-center bg-spire-card border-b border-spire-border h-9 shrink-0">
         <!-- home tab (always visible) -->
-        <button id="tab-home" class="tab-item active no-drag h-full flex items-center gap-1.5 px-3 text-xs text-spire-muted hover:text-spire-text transition-colors shrink-0" data-tab="home">
+        <button id="tab-home" class="tab-item active no-drag w-9 h-full flex items-center justify-center text-xs text-spire-muted hover:text-spire-text transition-colors shrink-0" data-tab="home">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>
         </button>
         <!-- dynamic workspace tabs -->
@@ -571,9 +571,9 @@
                         </button>
                     </div>
                 </div>
-                <div id="launch-container" class="relative flex">
+                <div id="launch-container" class="relative flex flex-1">
                     <button id="btn-launch"
-                        class="text-xs py-2 px-3 transition-colors flex items-center justify-center gap-1.5 bg-emerald-500/[.10] text-emerald-400/90 hover:bg-emerald-500/[.18] hover:text-emerald-400"
+                        class="flex-1 text-xs py-2 px-3 transition-colors flex items-center justify-center gap-1.5 bg-emerald-500/[.10] text-emerald-400/90 hover:bg-emerald-500/[.18] hover:text-emerald-400"
                         style="border-radius: 0.5rem 0 0 0.5rem"
                         data-i18n="main.launch">
                         <i data-lucide="play" style="width:12px;height:12px"></i>

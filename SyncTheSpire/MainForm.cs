@@ -12,8 +12,8 @@ public class MainForm : Form
     private MessageRouter? _router;
 
     // base sizes designed at 96 DPI (100% scaling)
-    private const int DesignWidth = 650;
-    private const int DesignHeight = 600;
+    private const int DesignWidth = 700;
+    private const int DesignHeight = 650;
     private const int MinWidth = 640;
     private const int MinHeight = 480;
 
@@ -153,7 +153,7 @@ public class MainForm : Form
         MinimumSize = new System.Drawing.Size((int)(MinWidth * scale), (int)(MinHeight * scale));
     }
 
-    // ── native drag support ─────────────────────────────────────────────
+    // ── native drag + resize support ────────────────────────────────────
 
     [DllImport("user32.dll")]
     private static extern bool ReleaseCapture();
@@ -171,6 +171,33 @@ public class MainForm : Form
     {
         ReleaseCapture();
         SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+    }
+
+    // SC_SIZE direction constants (WMSZ_*)
+    private const int WM_SYSCOMMAND = 0x0112;
+    private const int SC_SIZE = 0xF000;
+
+    private static readonly Dictionary<string, int> ResizeDirections = new()
+    {
+        ["w"]  = 1, // WMSZ_LEFT
+        ["e"]  = 2, // WMSZ_RIGHT
+        ["n"]  = 3, // WMSZ_TOP
+        ["nw"] = 4, // WMSZ_TOPLEFT
+        ["ne"] = 5, // WMSZ_TOPRIGHT
+        ["s"]  = 6, // WMSZ_BOTTOM
+        ["sw"] = 7, // WMSZ_BOTTOMLEFT
+        ["se"] = 8, // WMSZ_BOTTOMRIGHT
+    };
+
+    /// <summary>
+    /// called from MessageRouter when JS detects mousedown on a window edge
+    /// </summary>
+    public void BeginResize(string edge)
+    {
+        if (WindowState == FormWindowState.Maximized) return;
+        if (!ResizeDirections.TryGetValue(edge, out var dir)) return;
+        ReleaseCapture();
+        SendMessage(Handle, WM_SYSCOMMAND, SC_SIZE + dir, 0);
     }
 
     // ── WndProc: borderless frame + maximize bounds ────────
