@@ -154,6 +154,15 @@ function updateRedirectCard(data) {
     const dot = $('#redirect-dot');
     const label = $('#redirect-label');
     const checkbox = $('#redirect-checkbox');
+    const ws = getWsState();
+
+    if (ws.needsBranchSelection) {
+        dot.className = 'w-2 h-2 rounded-full bg-gray-500';
+        label.textContent = I18n.t('redirect.needMod');
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        return;
+    }
 
     if (!data.isJunctionActive) {
         dot.className = 'w-2 h-2 rounded-full bg-gray-500';

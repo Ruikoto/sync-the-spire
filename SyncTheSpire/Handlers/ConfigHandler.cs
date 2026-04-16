@@ -116,6 +116,7 @@ public class ConfigHandler : HandlerBase
                 currentBranch = (string?)null,
                 isJunctionActive = false,
                 hasLocalChanges = false,
+                needsBranchSelection = true,
                 ahead = 0,
                 behind = 0,
                 hasRemoteBranch = false
