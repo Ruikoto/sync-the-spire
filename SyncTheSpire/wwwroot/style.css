@@ -75,6 +75,7 @@ button, select {
 .tab-item {
     position: relative;
     white-space: nowrap;
+    min-width: 48px;
     transition: background 0.15s, color 0.15s;
 }
 .tab-item.active {

@@ -624,6 +624,17 @@ $('#titlebar-drag').addEventListener('dblclick', () => sendMessage('WINDOW_MAXIM
 
 // ── tab bar rendering + workspace switching ──────────────────────────────────
 
+// wheel scroll for tab bar — translate vertical scroll to horizontal
+(function initTabBarWheel() {
+    const bar = $('#tab-bar');
+    if (!bar) return;
+    bar.addEventListener('wheel', (e) => {
+        if (bar.scrollWidth <= bar.clientWidth) return;
+        e.preventDefault();
+        bar.scrollLeft += e.deltaY || e.deltaX;
+    }, { passive: false });
+})();
+
 function renderTabBar() {
     const tabBar = $('#tab-bar');
     if (!tabBar) return;
@@ -636,7 +647,7 @@ function renderTabBar() {
         if (!ws) return '';
         const isActive = id === AppState.activeWorkspaceId;
         return `
-            <div class="tab-item${isActive ? ' active' : ''} h-full flex items-center gap-1.5 px-3 text-xs text-spire-muted shrink-0" data-tab="${escAttr(id)}">
+            <div class="tab-item${isActive ? ' active' : ''} h-full flex items-center gap-1.5 px-3 text-xs text-spire-muted shrink min-w-0" data-tab="${escAttr(id)}">
                 <span class="game-badge-${ws.gameType}" style="display:flex;">${gameIcon(ws.gameType, 12)}</span>
                 <span class="truncate max-w-[120px]">${esc(ws.name)}</span>
                 <button class="tab-close ml-1 text-spire-muted hover:text-spire-danger text-xs leading-none" data-tab-close="${escAttr(id)}" title="${escAttr(I18n.t('titlebar.closeTab'))}">&times;</button>
