@@ -29,7 +29,7 @@ public class SaveHandler : HandlerBase
 
     public void HandleGetSaveStatus()
     {
-        var cfg = _configService.LoadConfig();
+        var cfg = _configService.Workspace;
 
         if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath) || !Directory.Exists(cfg.SaveFolderPath))
         {
@@ -60,7 +60,7 @@ public class SaveHandler : HandlerBase
 
     public void HandleUnlinkSaves()
     {
-        var cfg = _configService.LoadConfig();
+        var cfg = _configService.Workspace;
         if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
         {
             Send(IpcResponse.Error("UNLINK_SAVES", "存档路径未配置"));
@@ -80,7 +80,7 @@ public class SaveHandler : HandlerBase
 
     public void HandleBackupSaves()
     {
-        var cfg = _configService.LoadConfig();
+        var cfg = _configService.Workspace;
         if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
         {
             Send(IpcResponse.Error("BACKUP_SAVES", "存档路径未配置"));
@@ -132,7 +132,7 @@ public class SaveHandler : HandlerBase
             return;
         }
 
-        var cfg = _configService.LoadConfig();
+        var cfg = _configService.Workspace;
         if (string.IsNullOrWhiteSpace(cfg.SaveFolderPath))
         {
             Send(IpcResponse.Error("RESTORE_BACKUP", "存档路径未配置"));

@@ -2,6 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace SyncTheSpire.Models;
 
+/// <summary>
+/// V1 config model — used ONLY for deserializing legacy v1 config.json during migration.
+/// All runtime code should use WorkspaceConfig directly.
+/// </summary>
+[Obsolete("V1 migration only. Use WorkspaceConfig for all runtime code.")]
 public class AppConfig
 {
     [JsonPropertyName("repoUrl")]

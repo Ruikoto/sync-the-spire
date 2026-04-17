@@ -4,9 +4,7 @@ namespace SyncTheSpire.Services;
 
 /// <summary>
 /// Workspace-scoped config wrapper.
-/// Presents a WorkspaceConfig through the familiar AppConfig interface so
-/// that existing handlers and GitService keep working without changes.
-/// Delegates persistence to WorkspaceManager.
+/// Exposes the underlying WorkspaceConfig directly and delegates persistence to WorkspaceManager.
 /// </summary>
 public class ConfigService
 {
@@ -34,58 +32,12 @@ public class ConfigService
     }
 
     /// <summary>
-    /// Direct access to the underlying WorkspaceConfig — preferred over LoadConfig().
+    /// Direct access to the underlying WorkspaceConfig.
     /// </summary>
     public WorkspaceConfig Workspace => _workspace;
 
     /// <summary>
-    /// Returns an AppConfig view of the current workspace config.
-    /// Legacy bridge — prefer using Workspace directly for correct GameModPath.
-    /// </summary>
-    public AppConfig LoadConfig()
-    {
-        return new AppConfig
-        {
-            RepoUrl = _workspace.RepoUrl,
-            Nickname = _workspace.Nickname,
-            Username = _workspace.Username,
-            Token = _workspace.Token,
-            AuthType = _workspace.AuthType,
-            SshKeyPath = _workspace.SshKeyPath,
-            SshPassphrase = _workspace.SshPassphrase,
-            GameInstallPath = _workspace.GameInstallPath,
-            GameModPathLegacy = _workspace.GameModPathLegacy,
-            SaveFolderPath = _workspace.SaveFolderPath,
-        };
-    }
-
-    /// <summary>
-    /// Saves changes from an AppConfig back into the workspace config and persists to disk.
-    /// </summary>
-    public void SaveConfig(AppConfig config)
-    {
-        _workspace.RepoUrl = config.RepoUrl;
-        _workspace.Nickname = config.Nickname;
-        _workspace.Username = config.Username;
-        _workspace.Token = config.Token;
-        _workspace.AuthType = config.AuthType;
-        _workspace.SshKeyPath = config.SshKeyPath;
-        _workspace.SshPassphrase = config.SshPassphrase;
-        _workspace.GameInstallPath = config.GameInstallPath;
-        _workspace.GameModPathLegacy = config.GameModPathLegacy;
-        _workspace.SaveFolderPath = config.SaveFolderPath;
-
-        _manager.SaveConfig();
-        LogService.Info("Workspace config saved");
-    }
-
-    /// <summary>
-    /// no-op in workspace mode — config is always in-memory from WorkspaceManager
-    /// </summary>
-    public void InvalidateCache() { }
-
-    /// <summary>
-    /// persist the current workspace config to disk (for direct field modifications)
+    /// persist the current workspace config to disk
     /// </summary>
     public void SaveWorkspace()
     {

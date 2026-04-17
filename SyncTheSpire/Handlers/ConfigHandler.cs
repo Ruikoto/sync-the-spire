@@ -147,17 +147,17 @@ public class ConfigHandler : HandlerBase
     /// </summary>
     public void HandleGetConfig()
     {
-        var cfg = _configService.LoadConfig();
+        var ws = _configService.Workspace;
         var gitUserName = _gitService?.ReadGitGlobalConfig("user.name");
         Send(IpcResponse.Success("GET_CONFIG", new
         {
-            nickname = cfg.Nickname,
-            repoUrl = cfg.RepoUrl,
-            authType = cfg.AuthType,
-            username = cfg.Username,
-            sshKeyPath = cfg.SshKeyPath,
-            gameInstallPath = cfg.GameInstallPath,
-            saveFolderPath = cfg.SaveFolderPath,
+            nickname = ws.Nickname,
+            repoUrl = ws.RepoUrl,
+            authType = ws.AuthType,
+            username = ws.Username,
+            sshKeyPath = ws.SshKeyPath,
+            gameInstallPath = ws.GameInstallPath,
+            saveFolderPath = ws.SaveFolderPath,
             gitUserName,
             // don't return token or sshPassphrase
         }));
@@ -172,7 +172,7 @@ public class ConfigHandler : HandlerBase
         }
 
         var raw = payload.Value.GetRawText();
-        var cfg = JsonSerializer.Deserialize<AppConfig>(raw);
+        var cfg = JsonSerializer.Deserialize<WorkspaceConfig>(raw);
         if (cfg is null)
         {
             Send(IpcResponse.Error("INIT_CONFIG", "请填写所有配置项"));
@@ -212,7 +212,7 @@ public class ConfigHandler : HandlerBase
         }
 
         // merge sensitive fields from existing config if user left them blank
-        var existing = _configService.LoadConfig();
+        var existing = _configService.Workspace;
         if (string.IsNullOrWhiteSpace(cfg.Token) && !string.IsNullOrWhiteSpace(existing.Token))
             cfg.Token = existing.Token;
         if (string.IsNullOrWhiteSpace(cfg.SshPassphrase) && !string.IsNullOrWhiteSpace(existing.SshPassphrase))
@@ -224,9 +224,19 @@ public class ConfigHandler : HandlerBase
             return;
         }
 
-        // invalidate cache so we re-read fresh after save
-        _configService.InvalidateCache();
-        _configService.SaveConfig(cfg);
+        // apply changes to the workspace config and persist
+        var ws = _configService.Workspace;
+        ws.RepoUrl = cfg.RepoUrl;
+        ws.Nickname = cfg.Nickname;
+        ws.Username = cfg.Username;
+        ws.Token = cfg.Token;
+        ws.AuthType = cfg.AuthType;
+        ws.SshKeyPath = cfg.SshKeyPath;
+        ws.SshPassphrase = cfg.SshPassphrase;
+        ws.GameInstallPath = cfg.GameInstallPath;
+        ws.GameModPathLegacy = cfg.GameModPathLegacy;
+        ws.SaveFolderPath = cfg.SaveFolderPath;
+        _configService.SaveWorkspace();
 
         // resolve the actual target path — adapter decides if it's {install}\Mods or install itself
         var targetModPath = _adapter.ResolveModPath(cfg.GameInstallPath) ?? _configService.Workspace.GameModPath;
@@ -300,7 +310,7 @@ public class ConfigHandler : HandlerBase
     /// check if the incoming config's paths conflict with any other workspace.
     /// returns an error message if conflict found, null if clean.
     /// </summary>
-    private string? CheckPathConflicts(AppConfig cfg)
+    private string? CheckPathConflicts(WorkspaceConfig cfg)
     {
         var currentWsId = _configService.Workspace.Id;
         var allWorkspaces = _workspaceManager.GetAllWorkspaces();

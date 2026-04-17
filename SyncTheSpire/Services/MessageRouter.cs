@@ -27,14 +27,18 @@ public class MessageRouter
 
     // domain handlers — rebuilt when workspace changes
     private ConfigHandler _configHandler = null!;
-    private GitBranchHandler _gitBranchHandler = null!;
-    private SaveHandler _saveHandler = null!;
+    private GitBranchHandler? _gitBranchHandler;
+    private SaveHandler? _saveHandler;
     private RedirectHandler _redirectHandler = null!;
     private AnnouncementHandler _announcementHandler = null!;
     private StoreUpdateHandler _storeUpdateHandler = null!;
     private SteamFinderHandler _steamFinderHandler = null!;
     private FilesystemHandler _filesystemHandler = null!;
-    private ModManagerHandler _modManagerHandler = null!;
+    private ModManagerHandler? _modManagerHandler;
+
+    // dispatch tables — rebuilt when workspace changes
+    private Dictionary<string, Action<IpcRequest>> _fireAndForget = new();
+    private Dictionary<string, Action<IpcRequest>> _gated = new();
 
     // A3: actions that require an active workspace context — unified null guard
     private static readonly HashSet<string> WorkspaceScopedActions =
@@ -100,13 +104,13 @@ public class MessageRouter
             var junctionHelper = new JunctionHelper(_junctionService, ctx.BackupService, Send);
 
             _configHandler = new ConfigHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter, _workspaceManager);
-            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter);
+            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, ctx.NsfwDetection, ctx.ModScanner, _junctionService, junctionHelper, adapter);
             _saveHandler = new SaveHandler(_webView, _uiContext, ctx.ConfigService, ctx.BackupService, ctx.MergeService, _junctionService);
             _redirectHandler = new RedirectHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, adapter);
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, adapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, adapter, _form);
-            _modManagerHandler = new ModManagerHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, new ModInstallService(), _form);
+            _modManagerHandler = new ModManagerHandler(_webView, _uiContext, ctx.ConfigService, ctx.ModScanner, new ModInstallService(), _form);
         }
         else
         {
@@ -119,13 +123,133 @@ public class MessageRouter
             var stubAdapter = GameAdapterRegistry.Get("sts2");
 
             _configHandler = new ConfigHandler(_webView, _uiContext, stubCs, null!, _junctionService, stubJH, stubAdapter, _workspaceManager);
-            _gitBranchHandler = null!;
-            _saveHandler = null!;
+            _gitBranchHandler = null;
+            _saveHandler = null;
             _redirectHandler = new RedirectHandler(_webView, _uiContext, stubCs, _junctionService, stubAdapter);
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, stubCs);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, stubAdapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, stubCs, _junctionService, stubBackup, stubJH, stubAdapter, _form);
-            _modManagerHandler = null!;
+            _modManagerHandler = null;
+        }
+
+        BuildDispatchTables();
+    }
+
+    /// <summary>
+    /// Populate dispatch tables based on current handler state.
+    /// Fire-and-forget actions run without the gate; gated actions are serialized via SemaphoreSlim.
+    /// </summary>
+    private void BuildDispatchTables()
+    {
+        // ── fire-and-forget actions (no gate) ──────────────────────────────
+        _fireAndForget = new Dictionary<string, Action<IpcRequest>>
+        {
+            // window chrome
+            ["WINDOW_DRAG"] = _ => _uiContext.Post(_ => _form.BeginDrag(), null),
+            ["WINDOW_RESIZE"] = req =>
+            {
+                var edge = req.Payload?.GetProperty("edge").GetString() ?? "";
+                _uiContext.Post(_ => _form.BeginResize(edge), null);
+            },
+            ["WINDOW_MINIMIZE"] = _ => _uiContext.Post(_ => _form.WindowState = FormWindowState.Minimized, null),
+            ["WINDOW_MAXIMIZE"] = _ => _uiContext.Post(_ =>
+                _form.WindowState = _form.WindowState == FormWindowState.Maximized
+                    ? FormWindowState.Normal
+                    : FormWindowState.Maximized, null),
+            ["WINDOW_CLOSE"] = _ => _uiContext.Post(_ => _form.Close(), null),
+            // PICK_FOLDER needs UI dialog — handle outside the gate to avoid blocking other IPC
+            ["PICK_FOLDER"] = _ => _filesystemHandler.HandlePickFolder(),
+            ["PICK_GAME_EXE"] = _ => _filesystemHandler.HandlePickGameExe(),
+            // Store update actions use system UI / network calls — don't hold the gate
+            ["CHECK_STORE_UPDATE"] = req => { _ = _storeUpdateHandler.HandleCheckStoreUpdate(); },
+            ["INSTALL_STORE_UPDATE"] = req => { _ = _storeUpdateHandler.HandleInstallStoreUpdate(); },
+            // steam auto-find — read-only filesystem/registry, no need for the gate
+            ["FIND_GAME_PATH"] = _ => _steamFinderHandler.HandleFindGamePath(),
+            ["FIND_SAVE_PATH"] = _ => _steamFinderHandler.HandleFindSavePath(),
+            // workspace queries — read-only, no gate needed
+            ["GET_WORKSPACES"] = _ => _workspaceHandler.HandleGetWorkspaces(),
+            ["GET_GAME_TYPES"] = _ => _workspaceHandler.HandleGetGameTypes(),
+        };
+
+        // workspace-dependent fire-and-forget: branch mods read immutable git objects
+        if (_gitBranchHandler is { } branchHandler)
+        {
+            _fireAndForget["GET_BRANCH_MODS"] = req => branchHandler.HandleGetBranchMods(req.Payload);
+            _fireAndForget["GET_MOD_DIFF"] = _ => branchHandler.HandleGetModDiff();
+        }
+        else
+        {
+            _fireAndForget["GET_BRANCH_MODS"] = _ => Send(IpcResponse.Error("GET_BRANCH_MODS", "当前没有活跃的工作区"));
+            _fireAndForget["GET_MOD_DIFF"] = _ => Send(IpcResponse.Error("GET_MOD_DIFF", "当前没有活跃的工作区"));
+        }
+
+        // mod archive picker — needs UI thread
+        if (_modManagerHandler is { } modPicker)
+            _fireAndForget["PICK_MOD_ARCHIVE"] = _ => modPicker.HandlePickModArchive();
+        else
+            _fireAndForget["PICK_MOD_ARCHIVE"] = _ => Send(IpcResponse.Error("PICK_MOD_ARCHIVE", "当前没有活跃的工作区"));
+
+        // ── gated actions (serialized via SemaphoreSlim) ───────────────────
+        _gated = new Dictionary<string, Action<IpcRequest>>
+        {
+            ["GET_STATUS"] = _ => _configHandler.HandleGetStatus(),
+            ["REFRESH_SYNC"] = _ => _configHandler.HandleRefreshSync(),
+            ["GET_VERSION"] = _ => _configHandler.HandleGetVersion(),
+            ["GET_CONFIG"] = _ => _configHandler.HandleGetConfig(),
+            ["INIT_CONFIG"] = req => HandleInitConfigWithWorkspace(req.Payload),
+            // junction / filesystem
+            ["RESTORE_JUNCTION"] = _ => _filesystemHandler.HandleRestoreJunction(),
+            ["OPEN_FOLDER"] = req => _filesystemHandler.HandleOpenFolder(req.Payload),
+            ["LAUNCH_GAME"] = _ => _filesystemHandler.HandleLaunchGame(),
+            ["SET_CUSTOM_EXE"] = req => _filesystemHandler.HandleSetCustomExe(req.Payload),
+            // save redirect
+            ["GET_REDIRECT_STATUS"] = _ => _redirectHandler.HandleGetRedirectStatus(),
+            ["SET_REDIRECT"] = req => _redirectHandler.HandleSetRedirect(req.Payload),
+            // announcements
+            ["GET_DISMISSED_ANNOUNCEMENTS"] = _ => _announcementHandler.HandleGetDismissedAnnouncements(),
+            ["DISMISS_ANNOUNCEMENT"] = req => _announcementHandler.HandleDismissAnnouncement(req.Payload),
+            // workspace management
+            ["CREATE_WORKSPACE"] = req => HandleCreateWorkspaceAndSwitch(req.Payload),
+            ["DELETE_WORKSPACE"] = req => HandleDeleteWorkspaceAndSwitch(req.Payload),
+            ["SWITCH_WORKSPACE"] = req => HandleSwitchWorkspace(req.Payload),
+            ["OPEN_WORKSPACE_TAB"] = req => _workspaceHandler.HandleOpenTab(req.Payload),
+            ["CLOSE_WORKSPACE_TAB"] = req => HandleCloseTabAndMaybeSwitch(req.Payload),
+            ["RENAME_WORKSPACE"] = req => _workspaceHandler.HandleRenameWorkspace(req.Payload),
+            // global settings
+            ["GET_SETTINGS"] = _ => _settingsHandler.HandleGetSettings(),
+            ["SAVE_SETTINGS"] = req => _settingsHandler.HandleSaveSettings(req.Payload),
+        };
+
+        // workspace-dependent gated actions (guarded by WorkspaceScopedActions check in Route)
+        if (_gitBranchHandler is { } gb)
+        {
+            _gated["GET_BRANCHES"] = _ => gb.HandleGetBranches();
+            _gated["SWITCH_TO_VANILLA"] = _ => gb.HandleSwitchToVanilla();
+            _gated["SYNC_OTHER_BRANCH"] = req => gb.HandleSyncOtherBranch(req.Payload);
+            _gated["CREATE_MY_BRANCH"] = req => gb.HandleCreateMyBranch(req.Payload);
+            _gated["SAVE_AND_PUSH_MY_BRANCH"] = _ => gb.HandleSaveAndPush();
+            _gated["FORCE_PUSH"] = _ => gb.HandleForcePush();
+            _gated["RESET_TO_REMOTE"] = _ => gb.HandleResetToRemote();
+        }
+
+        if (_saveHandler is { } sh)
+        {
+            _gated["GET_SAVE_STATUS"] = _ => sh.HandleGetSaveStatus();
+            _gated["UNLINK_SAVES"] = _ => sh.HandleUnlinkSaves();
+            _gated["BACKUP_SAVES"] = _ => sh.HandleBackupSaves();
+            _gated["GET_BACKUP_LIST"] = _ => sh.HandleGetBackupList();
+            _gated["RESTORE_BACKUP"] = req => sh.HandleRestoreBackup(req.Payload);
+            _gated["DELETE_BACKUP"] = req => sh.HandleDeleteBackup(req.Payload);
+        }
+
+        if (_modManagerHandler is { } mm)
+        {
+            _gated["GET_LOCAL_MODS_DETAILED"] = _ => mm.HandleGetLocalModsDetailed();
+            _gated["DELETE_MOD"] = req => mm.HandleDeleteMod(req.Payload);
+            _gated["INSTALL_MOD_FILES"] = req => mm.HandleInstallModFiles(req.Payload);
+            _gated["GET_BRANCH_MODS_FOR_COPY"] = req => mm.HandleGetBranchModsForCopy(req.Payload);
+            _gated["COPY_MOD_FROM_BRANCH"] = req => mm.HandleCopyModFromBranch(req.Payload);
+            _gated["INSTALL_MOD_DROPPED"] = req => mm.HandleInstallModDropped(req.Payload);
         }
     }
 
@@ -171,83 +295,11 @@ public class MessageRouter
 
     private void Route(IpcRequest req)
     {
-        // window chrome controls don't need serialization — fire and forget on UI thread
-        switch (req.Action)
+        // fire-and-forget — no serialization needed
+        if (_fireAndForget.TryGetValue(req.Action, out var ff))
         {
-            case "WINDOW_DRAG":
-                _uiContext.Post(_ => _form.BeginDrag(), null);
-                return;
-            case "WINDOW_RESIZE":
-                var edge = req.Payload?.GetProperty("edge").GetString() ?? "";
-                _uiContext.Post(_ => _form.BeginResize(edge), null);
-                return;
-            case "WINDOW_MINIMIZE":
-                _uiContext.Post(_ => _form.WindowState = FormWindowState.Minimized, null);
-                return;
-            case "WINDOW_MAXIMIZE":
-                _uiContext.Post(_ =>
-                    _form.WindowState = _form.WindowState == FormWindowState.Maximized
-                        ? FormWindowState.Normal
-                        : FormWindowState.Maximized, null);
-                return;
-            case "WINDOW_CLOSE":
-                _uiContext.Post(_ => _form.Close(), null);
-                return;
-            // PICK_FOLDER needs UI dialog — handle outside the gate to avoid blocking other IPC
-            case "PICK_FOLDER":
-                _filesystemHandler.HandlePickFolder();
-                return;
-            case "PICK_GAME_EXE":
-                _filesystemHandler.HandlePickGameExe();
-                return;
-            // mod manager: file picker needs UI thread — handle outside the gate
-            case "PICK_MOD_ARCHIVE":
-                if (_modManagerHandler is null)
-                {
-                    Send(IpcResponse.Error("PICK_MOD_ARCHIVE", "当前没有活跃的工作区"));
-                    return;
-                }
-                _modManagerHandler.HandlePickModArchive();
-                return;
-            // Store update actions use system UI / network calls — don't hold the gate
-            case "CHECK_STORE_UPDATE":
-                _ = _storeUpdateHandler.HandleCheckStoreUpdate();
-                return;
-            case "INSTALL_STORE_UPDATE":
-                _ = _storeUpdateHandler.HandleInstallStoreUpdate();
-                return;
-            // mod preview reads immutable git objects — safe outside the gate
-            case "GET_BRANCH_MODS":
-                // H2 fix: send error instead of silently dropping when no workspace
-                if (_gitBranchHandler is null)
-                {
-                    Send(IpcResponse.Error("GET_BRANCH_MODS", "当前没有活跃的工作区"));
-                    return;
-                }
-                _gitBranchHandler.HandleGetBranchMods(req.Payload);
-                return;
-            case "GET_MOD_DIFF":
-                if (_gitBranchHandler is null)
-                {
-                    Send(IpcResponse.Error("GET_MOD_DIFF", "当前没有活跃的工作区"));
-                    return;
-                }
-                _gitBranchHandler.HandleGetModDiff();
-                return;
-            // steam auto-find — read-only filesystem/registry, no need for the gate
-            case "FIND_GAME_PATH":
-                _steamFinderHandler.HandleFindGamePath();
-                return;
-            case "FIND_SAVE_PATH":
-                _steamFinderHandler.HandleFindSavePath();
-                return;
-            // workspace queries — read-only, no gate needed
-            case "GET_WORKSPACES":
-                _workspaceHandler.HandleGetWorkspaces();
-                return;
-            case "GET_GAME_TYPES":
-                _workspaceHandler.HandleGetGameTypes();
-                return;
+            ff(req);
+            return;
         }
 
         _gate.Wait();
@@ -260,177 +312,10 @@ public class MessageRouter
                 return;
             }
 
-            switch (req.Action)
-            {
-                case "GET_STATUS":
-                    _configHandler.HandleGetStatus();
-                    break;
-
-                case "REFRESH_SYNC":
-                    _configHandler.HandleRefreshSync();
-                    break;
-
-                case "GET_VERSION":
-                    _configHandler.HandleGetVersion();
-                    break;
-
-                case "GET_CONFIG":
-                    _configHandler.HandleGetConfig();
-                    break;
-
-                case "INIT_CONFIG":
-                    HandleInitConfigWithWorkspace(req.Payload);
-                    break;
-
-                case "GET_BRANCHES":
-                    _gitBranchHandler.HandleGetBranches();
-                    break;
-
-                case "SWITCH_TO_VANILLA":
-                    _gitBranchHandler.HandleSwitchToVanilla();
-                    break;
-
-                case "SYNC_OTHER_BRANCH":
-                    _gitBranchHandler.HandleSyncOtherBranch(req.Payload);
-                    break;
-
-                case "CREATE_MY_BRANCH":
-                    _gitBranchHandler.HandleCreateMyBranch(req.Payload);
-                    break;
-
-                case "SAVE_AND_PUSH_MY_BRANCH":
-                    _gitBranchHandler.HandleSaveAndPush();
-                    break;
-
-                case "FORCE_PUSH":
-                    _gitBranchHandler.HandleForcePush();
-                    break;
-
-                case "RESET_TO_REMOTE":
-                    _gitBranchHandler.HandleResetToRemote();
-                    break;
-
-                case "RESTORE_JUNCTION":
-                    _filesystemHandler.HandleRestoreJunction();
-                    break;
-
-                case "OPEN_FOLDER":
-                    _filesystemHandler.HandleOpenFolder(req.Payload);
-                    break;
-
-                case "LAUNCH_GAME":
-                    _filesystemHandler.HandleLaunchGame();
-                    break;
-
-                case "SET_CUSTOM_EXE":
-                    _filesystemHandler.HandleSetCustomExe(req.Payload);
-                    break;
-
-                // ── save management ──────────────────────────────────
-                case "GET_SAVE_STATUS":
-                    _saveHandler.HandleGetSaveStatus();
-                    break;
-
-                case "UNLINK_SAVES":
-                    _saveHandler.HandleUnlinkSaves();
-                    break;
-
-                case "BACKUP_SAVES":
-                    _saveHandler.HandleBackupSaves();
-                    break;
-
-                case "GET_BACKUP_LIST":
-                    _saveHandler.HandleGetBackupList();
-                    break;
-
-                case "RESTORE_BACKUP":
-                    _saveHandler.HandleRestoreBackup(req.Payload);
-                    break;
-
-                case "DELETE_BACKUP":
-                    _saveHandler.HandleDeleteBackup(req.Payload);
-                    break;
-
-                // ── save redirect ─────────────────────────────────────
-                case "GET_REDIRECT_STATUS":
-                    _redirectHandler.HandleGetRedirectStatus();
-                    break;
-
-                case "SET_REDIRECT":
-                    _redirectHandler.HandleSetRedirect(req.Payload);
-                    break;
-
-                case "GET_DISMISSED_ANNOUNCEMENTS":
-                    _announcementHandler.HandleGetDismissedAnnouncements();
-                    break;
-
-                case "DISMISS_ANNOUNCEMENT":
-                    _announcementHandler.HandleDismissAnnouncement(req.Payload);
-                    break;
-
-                // ── workspace management ─────────────────────────────
-                case "CREATE_WORKSPACE":
-                    HandleCreateWorkspaceAndSwitch(req.Payload);
-                    break;
-
-                case "DELETE_WORKSPACE":
-                    HandleDeleteWorkspaceAndSwitch(req.Payload);
-                    break;
-
-                case "SWITCH_WORKSPACE":
-                    HandleSwitchWorkspace(req.Payload);
-                    break;
-
-                case "OPEN_WORKSPACE_TAB":
-                    _workspaceHandler.HandleOpenTab(req.Payload);
-                    break;
-
-                case "CLOSE_WORKSPACE_TAB":
-                    HandleCloseTabAndMaybeSwitch(req.Payload);
-                    break;
-
-                case "RENAME_WORKSPACE":
-                    _workspaceHandler.HandleRenameWorkspace(req.Payload);
-                    break;
-
-                // ── global settings ───────────────────────────────
-                case "GET_SETTINGS":
-                    _settingsHandler.HandleGetSettings();
-                    break;
-
-                case "SAVE_SETTINGS":
-                    _settingsHandler.HandleSaveSettings(req.Payload);
-                    break;
-
-                // ── mod manager ─────────────────────────────────────
-                case "GET_LOCAL_MODS_DETAILED":
-                    _modManagerHandler.HandleGetLocalModsDetailed();
-                    break;
-
-                case "DELETE_MOD":
-                    _modManagerHandler.HandleDeleteMod(req.Payload);
-                    break;
-
-                case "INSTALL_MOD_FILES":
-                    _modManagerHandler.HandleInstallModFiles(req.Payload);
-                    break;
-
-                case "GET_BRANCH_MODS_FOR_COPY":
-                    _modManagerHandler.HandleGetBranchModsForCopy(req.Payload);
-                    break;
-
-                case "COPY_MOD_FROM_BRANCH":
-                    _modManagerHandler.HandleCopyModFromBranch(req.Payload);
-                    break;
-
-                case "INSTALL_MOD_DROPPED":
-                    _modManagerHandler.HandleInstallModDropped(req.Payload);
-                    break;
-
-                default:
-                    Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
-                    break;
-            }
+            if (_gated.TryGetValue(req.Action, out var gated))
+                gated(req);
+            else
+                Send(IpcResponse.Error(req.Action, $"Unknown action: {req.Action}"));
         }
         catch (IOException ex)
         {
@@ -449,7 +334,7 @@ public class MessageRouter
             ex.Message.Contains("401") || ex.Message.Contains("403"))
         {
             LogService.Error($"[{req.Action}] Auth failure", ex);
-            var authType = _currentContext?.ConfigService.LoadConfig().AuthType ?? "anonymous";
+            var authType = _currentContext?.ConfigService.Workspace.AuthType ?? "anonymous";
             var msg = authType switch
             {
                 "anonymous" =>

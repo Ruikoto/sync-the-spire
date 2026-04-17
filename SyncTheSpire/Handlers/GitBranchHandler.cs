@@ -11,6 +11,8 @@ public class GitBranchHandler : HandlerBase
 {
     private readonly ConfigService _configService;
     private readonly GitService _gitService;
+    private readonly NsfwDetectionService _nsfwDetection;
+    private readonly ModScannerService _modScanner;
     private readonly JunctionService _junctionService;
     private readonly JunctionHelper _junctionHelper;
     private readonly IGameAdapter _adapter;
@@ -20,6 +22,8 @@ public class GitBranchHandler : HandlerBase
         SynchronizationContext uiContext,
         ConfigService configService,
         GitService gitService,
+        NsfwDetectionService nsfwDetection,
+        ModScannerService modScanner,
         JunctionService junctionService,
         JunctionHelper junctionHelper,
         IGameAdapter adapter)
@@ -27,6 +31,8 @@ public class GitBranchHandler : HandlerBase
     {
         _configService = configService;
         _gitService = gitService;
+        _nsfwDetection = nsfwDetection;
+        _modScanner = modScanner;
         _junctionService = junctionService;
         _junctionHelper = junctionHelper;
         _adapter = adapter;
@@ -46,7 +52,7 @@ public class GitBranchHandler : HandlerBase
         var current = _gitService.GetCurrentBranch();
 
         // scan all branches for NSFW signals (folder names, mod names, etc.)
-        var nsfwMap = _gitService.CheckBranchesNsfw(branches.Select(b => b.Name));
+        var nsfwMap = _nsfwDetection.CheckBranchesNsfw(branches.Select(b => b.Name));
 
         // flatten BranchInfo to plain objects so JSON stays predictable
         var list = branches.Select(b =>
@@ -81,7 +87,7 @@ public class GitBranchHandler : HandlerBase
 
         try
         {
-            var mods = _gitService.GetBranchMods(branchName);
+            var mods = _modScanner.GetBranchMods(branchName);
             var sorted = mods
                 .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(m => new
@@ -107,12 +113,12 @@ public class GitBranchHandler : HandlerBase
         try
         {
             var branch = _gitService.GetCurrentBranch();
-            var local = _gitService.GetLocalMods()
+            var local = _modScanner.GetLocalMods()
                 .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(m => new { id = m.Id, name = m.Name, author = m.Author, version = m.Version });
             var remote = string.IsNullOrEmpty(branch)
                 ? Enumerable.Empty<object>()
-                : _gitService.GetBranchMods(branch)
+                : _modScanner.GetBranchMods(branch)
                     .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(m => new { id = m.Id, name = m.Name, author = m.Author, version = m.Version });
 

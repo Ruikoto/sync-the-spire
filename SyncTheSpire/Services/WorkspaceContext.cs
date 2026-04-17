@@ -16,6 +16,8 @@ public class WorkspaceContext : IDisposable
     // workspace-scoped services
     public ConfigService ConfigService { get; }
     public GitService GitService { get; }
+    public ModScannerService ModScanner { get; }
+    public NsfwDetectionService NsfwDetection { get; }
     public SaveBackupService BackupService { get; }
     public SaveMergeService MergeService { get; }
 
@@ -49,6 +51,8 @@ public class WorkspaceContext : IDisposable
         ConfigService = new ConfigService(config, manager, RepoPath, GitDirPath, WorkTreePath);
         BackupService = new SaveBackupService(BackupDir);
         GitService = new GitService(ConfigService, gitResolver);
+        ModScanner = new ModScannerService(ConfigService);
+        NsfwDetection = new NsfwDetectionService(ConfigService);
         MergeService = new SaveMergeService(junctionService, BackupService, GameAdapter);
     }
 

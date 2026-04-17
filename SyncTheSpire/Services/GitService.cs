@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 using LibGit2Sharp;
 using LibGit2Sharp.Handlers;
 using SyncTheSpire.Helpers;
@@ -40,7 +39,7 @@ public class GitService
     private string GitDirPath => _config.GitDirPath;
     private string WorkTreePath => _config.WorkTreePath;
 
-    private bool IsSshMode => _config.LoadConfig().AuthType == "ssh";
+    private bool IsSshMode => _config.Workspace.AuthType == "ssh";
 
     // sentinel branch name used before the user picks a real branch
     public const string InitBranch = "_init";
@@ -54,13 +53,13 @@ public class GitService
     // HTTPS cred handler — null for anonymous (public repos)
     private CredentialsHandler? MakeCredHandler()
     {
-        var cfg = _config.LoadConfig();
-        if (cfg.AuthType != "https") return null;
-        if (string.IsNullOrWhiteSpace(cfg.Username) || string.IsNullOrWhiteSpace(cfg.Token)) return null;
+        var ws = _config.Workspace;
+        if (ws.AuthType != "https") return null;
+        if (string.IsNullOrWhiteSpace(ws.Username) || string.IsNullOrWhiteSpace(ws.Token)) return null;
         return (_, _, _) => new UsernamePasswordCredentials
         {
-            Username = cfg.Username,
-            Password = cfg.Token
+            Username = ws.Username,
+            Password = ws.Token
         };
     }
 
@@ -72,12 +71,12 @@ public class GitService
     /// </summary>
     private void ConfigureGitEnv(ProcessStartInfo psi, bool setGitDir = true)
     {
-        var cfg = _config.LoadConfig();
+        var ws = _config.Workspace;
 
-        if (!string.IsNullOrWhiteSpace(cfg.SshKeyPath))
+        if (!string.IsNullOrWhiteSpace(ws.SshKeyPath))
         {
             // ssh wants forward slashes in key path
-            var keyPath = cfg.SshKeyPath.Replace("\\", "/");
+            var keyPath = ws.SshKeyPath.Replace("\\", "/");
             psi.Environment["GIT_SSH_COMMAND"] = $"ssh -i \"{keyPath}\" -o StrictHostKeyChecking=accept-new";
         }
 
@@ -96,10 +95,10 @@ public class GitService
         configIdx++;
 
         // HTTPS auth: inject Basic auth header so git.exe works with any platform (GitHub, Gitee, etc.)
-        if (cfg.AuthType == "https" &&
-            !string.IsNullOrWhiteSpace(cfg.Username) && !string.IsNullOrWhiteSpace(cfg.Token))
+        if (ws.AuthType == "https" &&
+            !string.IsNullOrWhiteSpace(ws.Username) && !string.IsNullOrWhiteSpace(ws.Token))
         {
-            var cred = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{cfg.Username}:{cfg.Token}"));
+            var cred = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ws.Username}:{ws.Token}"));
             psi.Environment[$"GIT_CONFIG_KEY_{configIdx}"] = "http.extraHeader";
             psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = $"Authorization: Basic {cred}";
             configIdx++;
@@ -162,13 +161,13 @@ public class GitService
 
     public void CloneRepo()
     {
-        var cfg = _config.LoadConfig();
-        LogService.Info($"Cloning repo: {cfg.RepoUrl}");
+        var ws = _config.Workspace;
+        LogService.Info($"Cloning repo: {ws.RepoUrl}");
 
         if (IsSshMode)
         {
             // SSH: always use git.exe (LibGit2Sharp 0.30 dropped SSH support)
-            CloneViaGitCli(cfg);
+            CloneViaGitCli();
         }
         else
         {
@@ -180,7 +179,7 @@ public class GitService
                 var creds = MakeCredHandler();
                 if (creds != null)
                     opts.FetchOptions.CredentialsProvider = creds;
-                Repository.Clone(cfg.RepoUrl, RepoPath, opts);
+                Repository.Clone(ws.RepoUrl, RepoPath, opts);
             }
             catch (LibGit2SharpException ex)
             {
@@ -188,7 +187,7 @@ public class GitService
                 LogService.Warn($"LibGit2Sharp clone failed, falling back to git.exe: {ex.Message}");
                 if (Directory.Exists(RepoPath))
                     Directory.Delete(RepoPath, true);
-                CloneViaGitCli(cfg);
+                CloneViaGitCli();
             }
         }
 
@@ -207,7 +206,7 @@ public class GitService
         CheckoutEmptyInitBranch();
     }
 
-    private void CloneViaGitCli(Models.AppConfig cfg)
+    private void CloneViaGitCli()
     {
         var psi = new ProcessStartInfo
         {
@@ -218,7 +217,7 @@ public class GitService
             RedirectStandardError = true,
         };
         psi.ArgumentList.Add("clone");
-        psi.ArgumentList.Add(cfg.RepoUrl);
+        psi.ArgumentList.Add(_config.Workspace.RepoUrl);
         psi.ArgumentList.Add(RepoPath);
 
         // clone doesn't have a GitDir yet, so skip GIT_DIR/GIT_WORK_TREE
@@ -296,402 +295,6 @@ public class GitService
         using var repo = OpenRepo();
         var status = repo.RetrieveStatus(new StatusOptions());
         return status.IsDirty;
-    }
-
-    // ── branch mod preview ──────────────────────────────────────────────
-
-    private static readonly JsonSerializerOptions ModJsonOpts = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
-    /// <summary>
-    /// scan the local working tree for mod definitions (filesystem equivalent of GetBranchMods).
-    /// walks all .json files under WorkTreePath and keeps entries with a valid "id" field.
-    /// </summary>
-    public List<ModInfo> GetLocalMods()
-    {
-        return ScanLocalModManifests(WorkTreePath);
-    }
-
-    /// <summary>
-    /// shared helper: recursively walk a directory for .json mod manifests.
-    /// returns one ModInfo per valid manifest found.
-    /// </summary>
-    private static List<ModInfo> ScanLocalModManifests(string rootPath)
-    {
-        var mods = new List<ModInfo>();
-        if (!Directory.Exists(rootPath)) return mods;
-
-        foreach (var file in Directory.EnumerateFiles(rootPath, "*.json", SearchOption.AllDirectories))
-        {
-            try
-            {
-                var json = File.ReadAllText(file);
-                var mod = JsonSerializer.Deserialize<ModInfo>(json, ModJsonOpts);
-                if (!string.IsNullOrEmpty(mod?.Id))
-                    mods.Add(mod);
-            }
-            catch
-            {
-                // not a mod definition or malformed json, skip
-            }
-        }
-        return mods;
-    }
-
-    /// <summary>
-    /// read all mod definitions from a remote branch's file tree without checkout.
-    /// walks the commit tree recursively, tries to deserialize every .json blob,
-    /// and keeps entries that have a valid "id" field.
-    /// </summary>
-    public List<ModInfo> GetBranchMods(string branchName)
-    {
-        using var repo = OpenRepo();
-        var branch = repo.Branches[$"origin/{branchName}"];
-        if (branch is null) return [];
-
-        var mods = new List<ModInfo>();
-        ScanTreeForMods(branch.Tip.Tree, mods);
-        return mods;
-    }
-
-    private static void ScanTreeForMods(Tree tree, List<ModInfo> mods)
-    {
-        foreach (var entry in tree)
-        {
-            if (entry.TargetType == TreeEntryTargetType.Tree)
-            {
-                ScanTreeForMods((Tree)entry.Target, mods);
-            }
-            else if (entry.TargetType == TreeEntryTargetType.Blob &&
-                     entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var blob = (Blob)entry.Target;
-                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
-                    if (!string.IsNullOrEmpty(mod?.Id))
-                        mods.Add(mod);
-                }
-                catch
-                {
-                    // not a mod definition or malformed json, skip
-                }
-            }
-        }
-    }
-
-    // ── mod manager: detailed local scan + dependency analysis ─────────
-
-    /// <summary>
-    /// deep scan of local working tree — enriched ModInfo with folder, file list, size, integrity.
-    /// reuses the same recursive .json scan as GetLocalMods, then augments each mod
-    /// with its containing folder info, file list, and integrity checks.
-    /// </summary>
-    public List<ModInfo> GetLocalModsDetailed()
-    {
-        if (!Directory.Exists(WorkTreePath)) return [];
-
-        // id -> (manifest, jsonFilePath) — deduplicate by id, first match wins
-        var found = new Dictionary<string, (ModInfo Mod, string JsonPath)>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var file in Directory.EnumerateFiles(WorkTreePath, "*.json", SearchOption.AllDirectories))
-        {
-            try
-            {
-                var json = File.ReadAllText(file);
-                var mod = JsonSerializer.Deserialize<ModInfo>(json, ModJsonOpts);
-                if (!string.IsNullOrEmpty(mod?.Id) && !found.ContainsKey(mod.Id))
-                    found[mod.Id] = (mod, file);
-            }
-            catch { /* not a valid manifest, skip */ }
-        }
-
-        var result = new List<ModInfo>();
-        foreach (var (mod, jsonPath) in found.Values)
-        {
-            // the mod's "folder" is the directory containing its manifest json
-            var modDir = Path.GetDirectoryName(jsonPath)!;
-            var folderName = Path.GetRelativePath(WorkTreePath, modDir).Replace('\\', '/');
-            // if manifest is at the WorkTreePath root itself, use the file name as identifier
-            if (folderName == ".") folderName = Path.GetFileNameWithoutExtension(jsonPath);
-
-            // collect all files relative to the mod folder
-            var files = new List<string>();
-            long totalSize = 0;
-            foreach (var f in Directory.EnumerateFiles(modDir, "*", SearchOption.AllDirectories))
-            {
-                files.Add(Path.GetRelativePath(modDir, f));
-                try { totalSize += new FileInfo(f).Length; } catch { /* access denied etc */ }
-            }
-
-            // integrity check
-            var missingFiles = new List<string>();
-            if (mod.HasDll && !files.Any(f => f.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
-                missingFiles.Add(".dll");
-            if (mod.HasPck && !files.Any(f => f.EndsWith(".pck", StringComparison.OrdinalIgnoreCase)))
-                missingFiles.Add(".pck");
-
-            result.Add(mod with
-            {
-                FolderName = folderName,
-                FolderPath = modDir,
-                Files = files,
-                SizeBytes = totalSize,
-                MissingFiles = missingFiles,
-            });
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// cross-reference dependencies across all mods and produce ghost entries for missing ones.
-    /// enriches each mod's DependedBy list and returns (realMods, ghostMods).
-    /// </summary>
-    public static (List<ModInfo> Mods, List<ModInfo> Ghosts) AnalyzeDependencies(List<ModInfo> allMods)
-    {
-        var byId = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
-        foreach (var m in allMods)
-            if (!string.IsNullOrEmpty(m.Id))
-                byId.TryAdd(m.Id, m);
-
-        // temporary lookup for building DependedBy lists
-        var dependedByMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var ghostIds = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var mod in allMods)
-        {
-            foreach (var depId in mod.Dependencies)
-            {
-                if (string.IsNullOrWhiteSpace(depId)) continue;
-
-                if (byId.ContainsKey(depId))
-                {
-                    if (!dependedByMap.ContainsKey(depId))
-                        dependedByMap[depId] = [];
-                    dependedByMap[depId].Add(mod.Id!);
-                }
-                else
-                {
-                    // missing dependency -> ghost
-                    if (!ghostIds.ContainsKey(depId))
-                        ghostIds[depId] = [];
-                    ghostIds[depId].Add(mod.Id!);
-                }
-            }
-        }
-
-        // enrich real mods with DependedBy
-        var enriched = allMods.Select(m =>
-        {
-            var db = dependedByMap.GetValueOrDefault(m.Id ?? "", []);
-            return db.Count > 0 ? m with { DependedBy = db } : m;
-        }).ToList();
-
-        // create ghost mod entries for missing dependencies
-        var ghosts = ghostIds.Select(kv => new ModInfo
-        {
-            Id = kv.Key,
-            Name = kv.Key,
-            DependedBy = kv.Value,
-        }).ToList();
-
-        return (enriched, ghosts);
-    }
-
-    /// <summary>
-    /// read mods from a remote branch with folder name info (for branch copy feature).
-    /// recursively scans all subtrees for manifest .json files, same approach as local scan.
-    /// each mod's FolderName = the top-level directory it belongs to.
-    /// </summary>
-    public List<ModInfo> GetBranchModsForCopy(string branchName)
-    {
-        using var repo = OpenRepo();
-        var branch = repo.Branches[$"origin/{branchName}"];
-        if (branch is null) return [];
-
-        var tree = branch.Tip.Tree;
-        // id -> (mod, topLevelFolder) — deduplicate by id, first match wins
-        var found = new Dictionary<string, ModInfo>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in tree)
-        {
-            if (entry.TargetType != TreeEntryTargetType.Tree) continue;
-            var topFolder = entry.Name;
-            // recursively scan this subtree for manifest jsons
-            ScanTreeForManifests((Tree)entry.Target, topFolder, found);
-        }
-
-        return found.Values.ToList();
-    }
-
-    /// <summary>
-    /// recursively walk a git tree looking for .json files that are valid mod manifests.
-    /// each discovered mod gets FolderName set to topLevelFolder (the root dir it lives under).
-    /// </summary>
-    private void ScanTreeForManifests(Tree tree, string topLevelFolder, Dictionary<string, ModInfo> found)
-    {
-        foreach (var entry in tree)
-        {
-            if (entry.TargetType == TreeEntryTargetType.Tree)
-            {
-                ScanTreeForManifests((Tree)entry.Target, topLevelFolder, found);
-            }
-            else if (entry.TargetType == TreeEntryTargetType.Blob
-                     && entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var blob = (Blob)entry.Target;
-                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
-                    if (!string.IsNullOrEmpty(mod?.Id) && !found.ContainsKey(mod.Id))
-                        found[mod.Id] = mod with { FolderName = topLevelFolder };
-                }
-                catch { /* not a valid manifest */ }
-            }
-        }
-    }
-
-    /// <summary>
-    /// extract a mod folder from a remote branch's git tree into local working tree.
-    /// reads blobs from git objects — no checkout needed.
-    /// </summary>
-    public void CopyModFromBranch(string branchName, string modFolderName)
-    {
-        using var repo = OpenRepo();
-        var branch = repo.Branches[$"origin/{branchName}"];
-        if (branch is null)
-            throw new InvalidOperationException($"分支不存在：{branchName}");
-
-        var rootTree = branch.Tip.Tree;
-        var modEntry = rootTree[modFolderName];
-        if (modEntry is null || modEntry.TargetType != TreeEntryTargetType.Tree)
-            throw new InvalidOperationException($"分支 {branchName} 中未找到 MOD 文件夹：{modFolderName}");
-
-        var destDir = Path.Combine(WorkTreePath, modFolderName);
-        ExtractTreeToDir((Tree)modEntry.Target, destDir);
-    }
-
-    private static void ExtractTreeToDir(Tree tree, string destDir)
-    {
-        Directory.CreateDirectory(destDir);
-        foreach (var entry in tree)
-        {
-            var targetPath = Path.Combine(destDir, entry.Name);
-            if (entry.TargetType == TreeEntryTargetType.Tree)
-            {
-                ExtractTreeToDir((Tree)entry.Target, targetPath);
-            }
-            else if (entry.TargetType == TreeEntryTargetType.Blob)
-            {
-                var blob = (Blob)entry.Target;
-                using var stream = blob.GetContentStream();
-                using var fs = File.Create(targetPath);
-                stream.CopyTo(fs);
-            }
-        }
-    }
-
-    /// <summary>
-    /// safely delete a mod folder from the working tree.
-    /// validates path to prevent directory traversal attacks.
-    /// </summary>
-    public void DeleteModFolder(string folderName)
-    {
-        // path traversal guard — block ".." but allow nested relative paths (e.g. "SomeMod/inner")
-        if (folderName.Contains(".."))
-            throw new InvalidOperationException($"非法文件夹名：{folderName}");
-
-        var fullPath = Path.Combine(WorkTreePath, folderName);
-        var resolved = Path.GetFullPath(fullPath);
-        var resolvedBase = Path.GetFullPath(WorkTreePath);
-
-        // must be strictly inside WorkTreePath (not equal to it — never delete the root itself)
-        if (!resolved.StartsWith(resolvedBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("路径越界");
-
-        if (!Directory.Exists(resolved))
-            throw new InvalidOperationException($"文件夹不存在：{folderName}");
-
-        FileSystemHelper.ForceDeleteDirectory(resolved);
-    }
-
-    // ── NSFW detection ──────────────────────────────────────────────────
-
-    // ordered longest-first so "R18G" matches before "R18"
-    private static readonly string[] NsfwKeywords = ["r18-g", "r18g", "nsfw", "r18"];
-
-    public record NsfwResult(bool IsNsfw, List<string> Reasons);
-
-    /// <summary>
-    /// scan each branch for NSFW signals: branch name, folder names, and mod names.
-    /// pure object-db read, no checkout involved.
-    /// </summary>
-    public Dictionary<string, NsfwResult> CheckBranchesNsfw(IEnumerable<string> branchNames)
-    {
-        using var repo = OpenRepo();
-        var result = new Dictionary<string, NsfwResult>();
-
-        foreach (var name in branchNames)
-        {
-            var reasons = new List<string>();
-
-            var kw = MatchNsfwKeyword(name);
-            if (kw != null)
-                reasons.Add($"分支名称包含「{kw}」");
-
-            var branch = repo.Branches[$"origin/{name}"];
-            if (branch != null)
-                ScanTreeForNsfw(branch.Tip.Tree, reasons);
-
-            result[name] = new NsfwResult(reasons.Count > 0, reasons);
-        }
-
-        return result;
-    }
-
-    private static string? MatchNsfwKeyword(string text)
-    {
-        foreach (var keyword in NsfwKeywords)
-            if (text.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-                return keyword.ToUpper();
-        return null;
-    }
-
-    private static void ScanTreeForNsfw(Tree tree, List<string> reasons)
-    {
-        foreach (var entry in tree)
-        {
-            if (entry.TargetType == TreeEntryTargetType.Tree)
-            {
-                var kw = MatchNsfwKeyword(entry.Name);
-                if (kw != null)
-                    reasons.Add($"文件夹「{entry.Name}」包含「{kw}」");
-
-                ScanTreeForNsfw((Tree)entry.Target, reasons);
-            }
-            else if (entry.TargetType == TreeEntryTargetType.Blob &&
-                     entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var blob = (Blob)entry.Target;
-                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
-                    if (!string.IsNullOrEmpty(mod?.Id) && !string.IsNullOrEmpty(mod?.Name))
-                    {
-                        var kw = MatchNsfwKeyword(mod.Name);
-                        if (kw != null)
-                            reasons.Add($"Mod「{mod.Name}」名称包含「{kw}」");
-                    }
-                }
-                catch
-                {
-                    // skip non-mod or malformed json
-                }
-            }
-        }
     }
 
     // ── sync (mode 2 - force checkout remote branch) ────────────────────
@@ -819,8 +422,8 @@ public class GitService
         var status = repo.RetrieveStatus(new StatusOptions());
         if (status.IsDirty)
         {
-            var cfg = _config.LoadConfig();
-            var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
+            var ws = _config.Workspace;
+            var sig = MakeSignature(ws, ReadGitGlobalConfig("user.email"));
             var msg = BuildCommitMessage(status);
             repo.Commit(msg, sig, sig);
             LogService.Info($"Committed: {msg}");
@@ -884,8 +487,8 @@ public class GitService
         var status = repo.RetrieveStatus(new StatusOptions());
         if (!status.IsDirty) return;
 
-        var cfg = _config.LoadConfig();
-        var sig = MakeSignature(cfg, ReadGitGlobalConfig("user.email"));
+        var ws = _config.Workspace;
+        var sig = MakeSignature(ws, ReadGitGlobalConfig("user.email"));
         repo.Commit("Snapshot before branch switch", sig, sig);
         LogService.Info("Silent auto-commit before branch switch");
     }
@@ -1000,10 +603,10 @@ public class GitService
             Directory.Delete(d, true);
     }
 
-    private static Signature MakeSignature(Models.AppConfig cfg, string? gitEmail)
+    private static Signature MakeSignature(WorkspaceConfig ws, string? gitEmail)
     {
         // for SSH/anonymous mode, nickname is the canonical identity
-        var name = string.IsNullOrWhiteSpace(cfg.Nickname) ? "player" : cfg.Nickname;
+        var name = string.IsNullOrWhiteSpace(ws.Nickname) ? "player" : ws.Nickname;
         var email = gitEmail ?? $"{name}@sync-the-spire";
         return new Signature(name, email, DateTimeOffset.Now);
     }
@@ -1097,13 +700,13 @@ public class GitService
     private void PushCurrentBranch(Repository repo)
     {
         // sanity check: make sure the repo's remote matches user config
-        var cfg = _config.LoadConfig();
+        var ws = _config.Workspace;
         var remote = repo.Network.Remotes["origin"];
         if (remote is null)
             throw new InvalidOperationException("Git 仓库未配置 origin 远端");
-        if (!string.Equals(remote.Url, cfg.RepoUrl, StringComparison.Ordinal))
+        if (!string.Equals(remote.Url, ws.RepoUrl, StringComparison.Ordinal))
             throw new InvalidOperationException(
-                $"远端地址不一致，期望 \"{cfg.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
+                $"远端地址不一致，期望 \"{ws.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
 
         var localTip = repo.Head.Tip.Sha;
         var branchName = repo.Head.FriendlyName;
@@ -1170,13 +773,13 @@ public class GitService
     /// </summary>
     private void ForcePushCurrentBranch(Repository repo)
     {
-        var cfg = _config.LoadConfig();
+        var ws = _config.Workspace;
         var remote = repo.Network.Remotes["origin"];
         if (remote is null)
             throw new InvalidOperationException("Git 仓库未配置 origin 远端");
-        if (!string.Equals(remote.Url, cfg.RepoUrl, StringComparison.Ordinal))
+        if (!string.Equals(remote.Url, ws.RepoUrl, StringComparison.Ordinal))
             throw new InvalidOperationException(
-                $"远端地址不一致，期望 \"{cfg.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
+                $"远端地址不一致，期望 \"{ws.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
 
         var localTip = repo.Head.Tip.Sha;
         var branchName = repo.Head.FriendlyName;

@@ -8,7 +8,7 @@ namespace SyncTheSpire.Handlers;
 public class ModManagerHandler : HandlerBase
 {
     private readonly ConfigService _configService;
-    private readonly GitService _gitService;
+    private readonly ModScannerService _modScanner;
     private readonly ModInstallService _installService;
     private readonly MainForm _form;
 
@@ -16,13 +16,13 @@ public class ModManagerHandler : HandlerBase
         CoreWebView2 webView,
         SynchronizationContext uiContext,
         ConfigService configService,
-        GitService gitService,
+        ModScannerService modScanner,
         ModInstallService installService,
         MainForm form)
         : base(webView, uiContext)
     {
         _configService = configService;
-        _gitService = gitService;
+        _modScanner = modScanner;
         _installService = installService;
         _form = form;
     }
@@ -32,8 +32,8 @@ public class ModManagerHandler : HandlerBase
     /// </summary>
     public void HandleGetLocalModsDetailed()
     {
-        var allMods = _gitService.GetLocalModsDetailed();
-        var (mods, ghosts) = GitService.AnalyzeDependencies(allMods);
+        var allMods = _modScanner.GetLocalModsDetailed();
+        var (mods, ghosts) = ModScannerService.AnalyzeDependencies(allMods);
 
         Send(IpcResponse.Success("GET_LOCAL_MODS_DETAILED", new
         {
@@ -74,7 +74,7 @@ public class ModManagerHandler : HandlerBase
             return;
         }
 
-        _gitService.DeleteModFolder(folderName);
+        _modScanner.DeleteModFolder(folderName);
         Send(IpcResponse.Success("DELETE_MOD", new { message = $"已删除 MOD：{folderName}" }));
     }
 
@@ -189,7 +189,7 @@ public class ModManagerHandler : HandlerBase
             return;
         }
 
-        var mods = _gitService.GetBranchModsForCopy(branchName);
+        var mods = _modScanner.GetBranchModsForCopy(branchName);
         Send(IpcResponse.Success("GET_BRANCH_MODS_FOR_COPY", new
         {
             mods = mods.Select(m => new
@@ -220,7 +220,7 @@ public class ModManagerHandler : HandlerBase
             return;
         }
 
-        _gitService.CopyModFromBranch(branchName, folderName);
+        _modScanner.CopyModFromBranch(branchName, folderName);
         Send(IpcResponse.Success("COPY_MOD_FROM_BRANCH", new { message = $"已从分支 {branchName} 拷贝 MOD：{folderName}" }));
     }
 

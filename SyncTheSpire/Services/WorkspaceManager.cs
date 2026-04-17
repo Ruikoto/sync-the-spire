@@ -130,11 +130,13 @@ public class WorkspaceManager
         catch (Exception ex) { LogService.Warn($"Failed to backup v1 config: {ex.Message}"); }
 
         // 2. deserialize the old config
+#pragma warning disable CS0618 // AppConfig is obsolete — used only for v1 migration
         AppConfig? v1;
         try
         {
             v1 = JsonSerializer.Deserialize<AppConfig>(v1Json) ?? new AppConfig();
         }
+#pragma warning restore CS0618
         catch (Exception ex)
         {
             LogService.Warn($"Failed to deserialize v1 config: {ex.Message}");
