@@ -218,8 +218,7 @@
   "settings": {
     "title": "设置",
     "language": "语言",
-    "languageHint": "更多语言即将推出",
-    "chinese": "中文",
+"chinese": "中文",
     "about": "关于",
     "version": "版本",
     "latestVersion": "最新版本",
