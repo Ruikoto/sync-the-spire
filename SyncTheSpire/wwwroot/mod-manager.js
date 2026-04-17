@@ -540,14 +540,14 @@ async function handleDeleteMod(folderName) {
     const ok = await showConfirm(`确定要删除 MOD 文件夹「${folderName}」吗？\n此操作不可撤销。`, '删除 MOD');
     if (!ok) return;
 
-    try {
-        await ipcCall('DELETE_MOD', { folderName });
-        toast('MOD 已删除', 'success');
-        closeModDetail();
-        refreshModList();
-    } catch (err) {
-        toast(`删除失败：${err.message || ''}`, 'error');
+    const res = await ipcCall('DELETE_MOD', { folderName });
+    if (res.status === 'error') {
+        toast(`删除失败：${res.message || ''}`, 'error');
+        return;
     }
+    toast('MOD 已删除', 'success');
+    closeModDetail();
+    refreshModList();
 }
 
 // ── drag-drop install ───────────────────────────────────────────────────────

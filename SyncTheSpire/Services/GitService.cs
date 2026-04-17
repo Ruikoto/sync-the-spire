@@ -600,13 +600,16 @@ public class GitService
     /// </summary>
     public void DeleteModFolder(string folderName)
     {
-        // path traversal guard
-        if (folderName.Contains("..") || folderName.Contains('/') || folderName.Contains('\\'))
+        // path traversal guard — block ".." but allow nested relative paths (e.g. "SomeMod/inner")
+        if (folderName.Contains(".."))
             throw new InvalidOperationException($"非法文件夹名：{folderName}");
 
         var fullPath = Path.Combine(WorkTreePath, folderName);
         var resolved = Path.GetFullPath(fullPath);
-        if (!resolved.StartsWith(Path.GetFullPath(WorkTreePath), StringComparison.OrdinalIgnoreCase))
+        var resolvedBase = Path.GetFullPath(WorkTreePath);
+
+        // must be strictly inside WorkTreePath (not equal to it — never delete the root itself)
+        if (!resolved.StartsWith(resolvedBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("路径越界");
 
         if (!Directory.Exists(resolved))

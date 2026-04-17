@@ -277,9 +277,13 @@ public class ModManagerHandler : HandlerBase
                 {
                     var folderName = folder.TryGetProperty("name", out var fnEl) ? fnEl.GetString() : null;
                     if (string.IsNullOrEmpty(folderName)) continue;
+                    // folder name traversal guard
+                    if (folderName.Contains("..")) continue;
                     if (!folder.TryGetProperty("entries", out var entriesEl) || entriesEl.ValueKind != JsonValueKind.Array) continue;
 
-                    var destDir = Path.Combine(_configService.WorkTreePath, folderName);
+                    var destDir = Path.GetFullPath(Path.Combine(_configService.WorkTreePath, folderName));
+                    if (!destDir.StartsWith(Path.GetFullPath(_configService.WorkTreePath) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        continue;
                     int fileCount = 0;
 
                     foreach (var entry in entriesEl.EnumerateArray())
@@ -294,7 +298,7 @@ public class ModManagerHandler : HandlerBase
 
                         var fileDest = Path.Combine(destDir, normalized);
                         var resolved = Path.GetFullPath(fileDest);
-                        if (!resolved.StartsWith(Path.GetFullPath(destDir), StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!resolved.StartsWith(Path.GetFullPath(destDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
 
                         var fileDir = Path.GetDirectoryName(fileDest);
                         if (fileDir != null) Directory.CreateDirectory(fileDir);
@@ -354,6 +358,9 @@ public class ModManagerHandler : HandlerBase
 
                     foreach (var (name, bytes) in looseItems)
                     {
+                        // path traversal guard for loose file names
+                        if (name.Contains("..") || name.Contains('/') || name.Contains('\\')) continue;
+
                         var fileDest = Path.Combine(destDir, name);
                         File.WriteAllBytes(fileDest, bytes);
                     }
@@ -392,6 +399,10 @@ public class ModManagerHandler : HandlerBase
         }
         foreach (var dir in Directory.GetDirectories(source))
         {
+            // skip junctions/symlinks to avoid escaping into unrelated directories
+            var info = new DirectoryInfo(dir);
+            if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+
             var destDir = Path.Combine(dest, Path.GetFileName(dir));
             CopyDirectory(dir, destDir);
         }

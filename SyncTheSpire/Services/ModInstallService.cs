@@ -102,7 +102,11 @@ public class ModInstallService
 
                 if (string.IsNullOrEmpty(relativePath)) continue;
 
-                var fileDest = Path.Combine(destPath, relativePath);
+                var fileDest = Path.GetFullPath(Path.Combine(destPath, relativePath));
+                // zip slip guard — refuse to write outside destPath
+                if (!fileDest.StartsWith(Path.GetFullPath(destPath) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 var fileDir = Path.GetDirectoryName(fileDest);
                 if (fileDir != null) Directory.CreateDirectory(fileDir);
 
