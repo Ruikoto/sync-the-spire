@@ -292,11 +292,11 @@ public class ConfigHandler : HandlerBase
 
         if (needsClone)
         {
-            Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
+            Send(IpcResponse.Progress("INIT_CONFIG", "正在从远程仓库拉取文件，请稍候..."));
 
             // wire up real-time progress from git transfer
             _gitService.OnTransferProgress = p =>
-                Send(IpcResponse.Progress("INIT_CONFIG", $"正在克隆仓库... {p.Percent}%", p.Percent, p.Detail));
+                Send(IpcResponse.Progress("INIT_CONFIG", $"正在从远程仓库拉取文件... {p.Percent}%", p.Percent, p.Detail));
 
             if (_adapter.SupportsJunction)
             {
