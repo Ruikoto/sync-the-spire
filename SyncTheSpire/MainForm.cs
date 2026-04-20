@@ -95,6 +95,8 @@ public class MainForm : Form
             return;
         }
 
+        _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+
         // map the wwwroot folder to a virtual hostname so CDN resources work
         // (file:// protocol blocks external scripts due to security policies)
         var wwwroot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
