@@ -134,11 +134,13 @@ function updateDashboardForCapabilities(capabilities) {
     const folderGame = document.querySelector('[data-folder="game"]');
     const folderMod = $('#folder-item-mod');
     const folderSave = $('#folder-item-save');
+    const folderBackup = $('#folder-item-backup');
     if (folderGame) {
         folderGame.textContent = capabilities.supportsModToggle ? I18n.t('main.gameFolder') : I18n.t('main.syncFolder');
     }
     if (folderMod) folderMod.classList.toggle('hidden', !capabilities.supportsModToggle);
     if (folderSave) folderSave.classList.toggle('hidden', !capabilities.supportsSaveBackup);
+    if (folderBackup) folderBackup.classList.toggle('hidden', !capabilities.supportsSaveBackup);
 
     // show mod manager button when mod scanning is supported
     const mmBtn = $('#btn-open-mod-manager');

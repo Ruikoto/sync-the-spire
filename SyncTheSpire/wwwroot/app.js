@@ -386,11 +386,15 @@ $('#btn-open-folder').addEventListener('click', (e) => {
     dd.classList.toggle('hidden', !isHidden);
 
     if (isHidden) {
-        // conditionally show/hide items
+        // conditionally show/hide items based on capabilities + state
+        const caps = getWsState().capabilities || {};
         const modItem = $('#folder-item-mod');
         const saveItem = $('#folder-item-save');
-        modItem.classList.toggle('hidden', !$('#mod-checkbox').checked);
-        saveItem.classList.toggle('hidden', !getWsState().savePathConfigured);
+        const backupItem = $('#folder-item-backup');
+        // mod folder: only for game adapters with mod toggle, and only when mod mode is on
+        modItem.classList.toggle('hidden', !caps.supportsModToggle || !$('#mod-checkbox').checked);
+        saveItem.classList.toggle('hidden', !caps.supportsSaveBackup || !getWsState().savePathConfigured);
+        if (backupItem) backupItem.classList.toggle('hidden', !caps.supportsSaveBackup);
     }
 });
 document.addEventListener('click', () => {

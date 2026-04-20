@@ -61,12 +61,13 @@ function updateTabBarActive(tabId) {
     }
 }
 
-function showLoading(text, percent) {
+function showLoading(text, percent, detail) {
     $('#loading-text').textContent = text;
     const bar = $('#loading-progress');
     const fill = $('#loading-bar-fill');
     if (percent != null && bar && fill) {
         fill.style.width = percent + '%';
+        fill.title = detail || '';
         bar.classList.remove('hidden');
     } else if (bar) {
         bar.classList.add('hidden');

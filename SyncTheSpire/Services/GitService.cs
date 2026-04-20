@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 using LibGit2Sharp;
 using LibGit2Sharp.Handlers;
 using SyncTheSpire.Helpers;
@@ -29,11 +30,19 @@ public class GitService
         *.user
         """;
 
+    // progress data from git transfer operations (clone/fetch/push)
+    public record GitTransferProgress(int Percent, string Detail);
+
     public GitService(ConfigService config, GitResolver resolver)
     {
         _config = config;
         _resolver = resolver;
     }
+
+    /// <summary>
+    /// set by handler before network ops, cleared after. fires with parsed progress from git stderr.
+    /// </summary>
+    public Action<GitTransferProgress>? OnTransferProgress { get; set; }
 
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
@@ -152,6 +161,98 @@ public class GitService
         return stdout;
     }
 
+    // regex for git progress lines: "Receiving objects:  45% (1234/2742), 10.67 MiB | ..."
+    private static readonly Regex ProgressPercentRx = new(@"(\d+)%", RegexOptions.Compiled);
+    private static readonly Regex ProgressSizeRx =
+        new(@"\(([0-9.]+\s*\w+)\s*/\s*([0-9.]+\s*\w+)\)", RegexOptions.Compiled);
+
+    /// <summary>
+    /// run git.exe while streaming stderr for progress updates.
+    /// fires OnTransferProgress callback (throttled to 200ms) as git reports progress.
+    /// </summary>
+    private void RunGitCliWithProgress(string args, string? workDir = null,
+        int timeout = 120_000, bool setGitDir = true)
+    {
+        LogService.Info($"git.exe {args} (with progress)");
+        var psi = new ProcessStartInfo
+        {
+            FileName = _resolver.GetGitPath(),
+            WorkingDirectory = workDir ?? WorkTreePath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        foreach (var arg in SplitArgs(args))
+            psi.ArgumentList.Add(arg);
+
+        ConfigureGitEnv(psi, setGitDir);
+
+        using var proc = Process.Start(psi)!;
+        var stderrBuilder = new StringBuilder();
+        var lastReport = Stopwatch.GetTimestamp();
+
+        // git progress uses \r to overwrite lines, read char-by-char to catch them
+        var lineBuffer = new StringBuilder();
+        var stderrStream = proc.StandardError;
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+
+        while (!stderrStream.EndOfStream)
+        {
+            var ch = (char)stderrStream.Read();
+            if (ch == '\r' || ch == '\n')
+            {
+                var line = lineBuffer.ToString();
+                lineBuffer.Clear();
+                stderrBuilder.AppendLine(line);
+
+                if (OnTransferProgress != null && line.Length > 0)
+                {
+                    // only report the heavy transfer phase — skip Counting/Compressing/Enumerating
+                    // which complete instantly and cause the progress bar to jump 0→100→back
+                    var isTransferPhase = line.Contains("Receiving objects") ||
+                                          line.Contains("Resolving deltas") ||
+                                          line.Contains("Writing objects");
+
+                    var pctMatch = ProgressPercentRx.Match(line);
+                    if (pctMatch.Success && isTransferPhase)
+                    {
+                        var elapsed = Stopwatch.GetElapsedTime(lastReport);
+                        var pct = int.Parse(pctMatch.Groups[1].Value);
+                        // throttle: report at most every 200ms, or on 100%
+                        if (elapsed.TotalMilliseconds >= 200 || pct >= 100)
+                        {
+                            lastReport = Stopwatch.GetTimestamp();
+                            // build detail from the full line
+                            var detail = line.Trim();
+                            // try to extract size info for a cleaner detail
+                            var sizeMatch = ProgressSizeRx.Match(line);
+                            if (sizeMatch.Success)
+                                detail = $"{pct}% ({sizeMatch.Groups[1].Value} / {sizeMatch.Groups[2].Value})";
+
+                            OnTransferProgress(new GitTransferProgress(pct, detail));
+                        }
+                    }
+                }
+            }
+            else
+            {
+                lineBuffer.Append(ch);
+            }
+        }
+
+        if (!proc.WaitForExit(timeout))
+        {
+            proc.Kill();
+            throw new InvalidOperationException($"git {psi.ArgumentList.FirstOrDefault()} timed out after {timeout / 1000}s");
+        }
+
+        var stderr = stderrBuilder.ToString();
+        if (proc.ExitCode != 0)
+            throw new InvalidOperationException($"git {psi.ArgumentList.FirstOrDefault()} failed: {stderr.Trim()}");
+    }
+
     /// <summary>
     /// open repo via the separated git dir
     /// </summary>
@@ -164,32 +265,8 @@ public class GitService
         var ws = _config.Workspace;
         LogService.Info($"Cloning repo: {ws.RepoUrl}");
 
-        if (IsSshMode)
-        {
-            // SSH: always use git.exe (LibGit2Sharp 0.30 dropped SSH support)
-            CloneViaGitCli();
-        }
-        else
-        {
-            // HTTPS / anonymous: try LibGit2Sharp first, fallback to git.exe
-            // (some platforms like Gitee use auth schemes LibGit2Sharp can't handle)
-            try
-            {
-                var opts = new CloneOptions();
-                var creds = MakeCredHandler();
-                if (creds != null)
-                    opts.FetchOptions.CredentialsProvider = creds;
-                Repository.Clone(ws.RepoUrl, RepoPath, opts);
-            }
-            catch (LibGit2SharpException ex)
-            {
-                // clean up partial clone before retrying
-                LogService.Warn($"LibGit2Sharp clone failed, falling back to git.exe: {ex.Message}");
-                if (Directory.Exists(RepoPath))
-                    Directory.Delete(RepoPath, true);
-                CloneViaGitCli();
-            }
-        }
+        // always use git.exe for clone — LibGit2Sharp doesn't support --depth
+        CloneViaGitCli();
 
         // separate .git dir from working tree so junction stays clean
         SeparateGitDir();
@@ -208,35 +285,12 @@ public class GitService
 
     private void CloneViaGitCli()
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = _resolver.GetGitPath(),
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        psi.ArgumentList.Add("clone");
-        psi.ArgumentList.Add(_config.Workspace.RepoUrl);
-        psi.ArgumentList.Add(RepoPath);
-
-        // clone doesn't have a GitDir yet, so skip GIT_DIR/GIT_WORK_TREE
-        ConfigureGitEnv(psi, setGitDir: false);
-
-        using var proc = Process.Start(psi)!;
-        // read stderr async to avoid deadlock when pipe buffer fills
-        var stderrTask = proc.StandardError.ReadToEndAsync();
-        var stdout = proc.StandardOutput.ReadToEnd();
-
-        if (!proc.WaitForExit(300_000))
-        {
-            proc.Kill();
-            throw new InvalidOperationException("git clone timed out after 300s");
-        }
-
-        var stderr = stderrTask.Result;
-        if (proc.ExitCode != 0)
-            throw new InvalidOperationException($"git clone failed: {stderr.Trim()}");
+        // shallow clone with progress — cuts initial download size dramatically for large repos
+        // --no-single-branch: depth=1 implies --single-branch which breaks subsequent fetch --prune
+        // (it sets remote.origin.fetch to only the default branch, so prune kills all other refs)
+        var url = _config.Workspace.RepoUrl;
+        RunGitCliWithProgress($"clone --depth 1 --no-single-branch --progress \"{url}\" \"{RepoPath}\"",
+            workDir: Path.GetDirectoryName(RepoPath), timeout: 300_000, setGitDir: false);
     }
 
     // ── repo validation ─────────────────────────────────────────────────
@@ -245,6 +299,17 @@ public class GitService
     /// check if GitDir is actually a valid git repo (not just leftover dirs)
     /// </summary>
     public bool IsRepoValid => Repository.IsValid(GitDirPath);
+
+    /// <summary>
+    /// update core.worktree in git config — needed when WorkTreePath changes
+    /// after initial clone (e.g. generic adapter: GameInstallPath set after context creation)
+    /// </summary>
+    public void UpdateWorkTree()
+    {
+        if (!IsRepoValid) return;
+        using var repo = OpenRepo();
+        repo.Config.Set("core.worktree", WorkTreePath);
+    }
 
     /// <summary>
     /// get the current origin remote URL from the git repo config
@@ -377,6 +442,51 @@ public class GitService
     {
         using var repo = OpenRepo();
         FetchAll(repo);
+
+        var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
+        if (remoteBranch is null)
+            return new SyncStatus(0, 0, HasRemoteBranch: false);
+
+        var localTip = repo.Head.Tip;
+        var remoteTip = remoteBranch.Tip;
+        if (localTip.Sha == remoteTip.Sha)
+            return new SyncStatus(0, 0, true);
+
+        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
+        int ahead = 0, behind = 0;
+        if (mergeBase is not null)
+        {
+            ahead = repo.Commits.QueryBy(new CommitFilter
+            {
+                IncludeReachableFrom = localTip,
+                ExcludeReachableFrom = mergeBase
+            }).Count();
+            behind = repo.Commits.QueryBy(new CommitFilter
+            {
+                IncludeReachableFrom = remoteTip,
+                ExcludeReachableFrom = mergeBase
+            }).Count();
+        }
+        return new SyncStatus(ahead, behind, true);
+    }
+
+    /// <summary>
+    /// fetch from remote without holding any gate — safe to call concurrently with
+    /// other read-only operations. only touches remote-tracking refs, not the working tree.
+    /// </summary>
+    public void Fetch()
+    {
+        using var repo = OpenRepo();
+        FetchAll(repo);
+    }
+
+    /// <summary>
+    /// return ahead/behind counts against the remote tip WITHOUT fetching first.
+    /// assumes remote refs are already up-to-date (caller fetched separately).
+    /// </summary>
+    public SyncStatus GetSyncStatus()
+    {
+        using var repo = OpenRepo();
 
         var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
         if (remoteBranch is null)
@@ -645,12 +755,13 @@ public class GitService
     /// <summary>
     /// fetch from origin: SSH always uses git.exe, HTTPS/anonymous try LibGit2Sharp first
     /// with git.exe fallback for platforms that LibGit2Sharp can't handle.
+    /// wires up OnTransferProgress for real-time progress reporting when available.
     /// </summary>
     private void FetchAll(Repository repo)
     {
         if (IsSshMode)
         {
-            RunGitCli("fetch --all --prune");
+            RunGitCliWithProgress("fetch --all --prune --progress");
             return;
         }
 
@@ -664,6 +775,27 @@ public class GitService
             var creds = MakeCredHandler();
             if (creds != null)
                 fetchOpts.CredentialsProvider = creds;
+
+            // wire up LibGit2Sharp transfer progress → our callback
+            if (OnTransferProgress != null)
+            {
+                var lastReport = Stopwatch.GetTimestamp();
+                fetchOpts.OnTransferProgress = progress =>
+                {
+                    if (progress.TotalObjects == 0) return true;
+                    var pct = (int)(progress.ReceivedObjects * 100L / progress.TotalObjects);
+                    var elapsed = Stopwatch.GetElapsedTime(lastReport);
+                    if (elapsed.TotalMilliseconds >= 200 || pct >= 100)
+                    {
+                        lastReport = Stopwatch.GetTimestamp();
+                        var received = FormatBytes(progress.ReceivedBytes);
+                        var detail = $"{pct}% ({progress.ReceivedObjects}/{progress.TotalObjects}, {received})";
+                        OnTransferProgress(new GitTransferProgress(pct, detail));
+                    }
+                    return true;
+                };
+            }
+
             Commands.Fetch(repo, remote.Name, refSpecs, fetchOpts, null);
         }
         catch (LibGit2SharpException ex)
@@ -682,14 +814,25 @@ public class GitService
     {
         try
         {
-            RunGitCli("fetch --all --prune");
+            RunGitCliWithProgress("fetch --all --prune --progress");
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Authentication failed"))
         {
             LogService.Warn("git.exe fetch auth failed, retrying after credential helper warm-up...");
             Thread.Sleep(1000);
-            RunGitCli("fetch --all --prune");
+            RunGitCliWithProgress("fetch --all --prune --progress");
         }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        return bytes switch
+        {
+            >= 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024 * 1024):F2}GiB",
+            >= 1024 * 1024 => $"{bytes / (1024.0 * 1024):F2}MiB",
+            >= 1024 => $"{bytes / 1024.0:F2}KiB",
+            _ => $"{bytes}B"
+        };
     }
 
     /// <summary>

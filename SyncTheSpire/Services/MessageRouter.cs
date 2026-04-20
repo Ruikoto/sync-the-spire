@@ -193,7 +193,7 @@ public class MessageRouter
         _gated = new Dictionary<string, Action<IpcRequest>>
         {
             ["GET_STATUS"] = _ => _configHandler.HandleGetStatus(),
-            ["REFRESH_SYNC"] = _ => _configHandler.HandleRefreshSync(),
+            // REFRESH_SYNC is handled separately in Route() with split-gate pattern
             ["GET_VERSION"] = _ => _configHandler.HandleGetVersion(),
             ["GET_CONFIG"] = _ => _configHandler.HandleGetConfig(),
             ["INIT_CONFIG"] = req => HandleInitConfigWithWorkspace(req.Payload),
@@ -302,6 +302,14 @@ public class MessageRouter
             return;
         }
 
+        // REFRESH_SYNC: fetch outside the gate (slow network I/O),
+        // then acquire gate briefly for local status reads only
+        if (req.Action == "REFRESH_SYNC")
+        {
+            HandleRefreshSyncSplit();
+            return;
+        }
+
         _gate.Wait();
         try
         {
@@ -326,7 +334,7 @@ public class MessageRouter
         catch (LibGit2Sharp.LibGit2SharpException ex)
         {
             LogService.Error($"[{req.Action}] LibGit2Sharp error", ex);
-            Send(IpcResponse.Error(req.Action, $"Git 操作失败：{ex.Message}"));
+            Send(IpcResponse.Error(req.Action, FriendlyGitError(ex.Message)));
         }
         catch (InvalidOperationException ex) when (
             ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase) ||
@@ -349,7 +357,7 @@ public class MessageRouter
             ex.Message.Contains("git") && ex.Message.Contains("failed"))
         {
             LogService.Error($"[{req.Action}] Git CLI failure", ex);
-            Send(IpcResponse.Error(req.Action, $"Git 操作失败：{ex.Message}"));
+            Send(IpcResponse.Error(req.Action, FriendlyGitError(ex.Message)));
         }
         catch (Exception ex)
         {
@@ -379,6 +387,26 @@ public class MessageRouter
         }
 
         _configHandler.HandleInitConfig(payload);
+
+        // rebuild context — INIT_CONFIG may have changed GameInstallPath, which affects
+        // WorkTreePath for non-junction adapters (generic). Without this, core.worktree
+        // would still point to RepoPath instead of the user's sync folder.
+        RebuildCurrentContext();
+    }
+
+    /// <summary>
+    /// recreate WorkspaceContext from the current config, recomputing WorkTreePath
+    /// and fixing core.worktree in git config if the repo exists.
+    /// </summary>
+    private void RebuildCurrentContext()
+    {
+        var ws = _currentContext!.Config;
+        _currentContext.Dispose();
+        _currentContext = new WorkspaceContext(ws, _workspaceManager, _gitResolver, _junctionService);
+        BuildHandlers();
+
+        // fix core.worktree to match the recomputed WorkTreePath
+        _currentContext.GitService.UpdateWorkTree();
     }
 
     // CREATE_WORKSPACE — create, switch context, notify
@@ -527,10 +555,125 @@ public class MessageRouter
         }));
     }
 
+    /// <summary>
+    /// REFRESH_SYNC with split-gate: fetch runs outside the gate so it doesn't block
+    /// other IPC operations during slow network I/O, then briefly acquires gate for local reads.
+    /// </summary>
+    private void HandleRefreshSyncSplit()
+    {
+        var ctx = _currentContext;
+        if (ctx == null)
+        {
+            Send(IpcResponse.Error("REFRESH_SYNC", "请先选择一个工作区"));
+            return;
+        }
+
+        // fetch OUTSIDE the gate — this is the slow network part
+        try
+        {
+            var ws = ctx.ConfigService.Workspace;
+            if (ws.IsConfigured && ctx.GitService is { IsRepoValid: true, IsOnInitBranch: false })
+            {
+                // compact progress for refresh — just show percent, detail in tooltip
+                ctx.GitService.OnTransferProgress = p =>
+                    Send(IpcResponse.Progress("REFRESH_SYNC", $"{p.Percent}%", p.Percent, p.Detail));
+                try
+                {
+                    ctx.GitService.Fetch();
+                }
+                finally
+                {
+                    ctx.GitService.OnTransferProgress = null;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // fetch failure is non-fatal — we'll still report local state
+            LogService.Warn($"[REFRESH_SYNC] fetch failed (non-blocking): {ex.Message}");
+        }
+
+        // acquire gate for quick local reads (branch, junction, ahead/behind)
+        _gate.Wait();
+        try
+        {
+            // workspace may have changed while we were fetching — verify
+            if (_currentContext != ctx)
+            {
+                LogService.Info("[REFRESH_SYNC] workspace changed during fetch, discarding stale result");
+                return;
+            }
+
+            _configHandler.HandleRefreshSyncLocal();
+        }
+        catch (Exception ex)
+        {
+            LogService.Error("[REFRESH_SYNC] error reading local status", ex);
+            Send(IpcResponse.Error("REFRESH_SYNC", $"刷新失败：{ex.Message}"));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private void Send(IpcResponse response)
     {
         var json = response.ToJson();
         // PostWebMessageAsString must be called on the UI thread
         _uiContext.Post(_ => _webView.PostWebMessageAsString(json), null);
+    }
+
+    /// <summary>
+    /// translate raw git error messages into user-friendly Chinese text.
+    /// special-cases GitHub connectivity issues with domestic platform suggestions.
+    /// </summary>
+    private static string FriendlyGitError(string rawMessage)
+    {
+        var msg = rawMessage;
+
+        // connection failures
+        if (msg.Contains("unable to access") || msg.Contains("Could not resolve host") ||
+            msg.Contains("Connection refused") || msg.Contains("Connection timed out") ||
+            msg.Contains("Failed to connect") || msg.Contains("Timed out"))
+        {
+            var friendly = "无法连接到远程仓库，请检查网络连接和仓库地址是否正确。";
+
+            // GitHub-specific hint for users in China
+            if (msg.Contains("github.com", StringComparison.OrdinalIgnoreCase))
+                friendly += "\n\n国内部分地区难以访问 GitHub，建议使用 AtomGit、Gitee 等国内 Git 平台。";
+
+            return friendly;
+        }
+
+        // SSL/TLS errors
+        if (msg.Contains("SSL") || msg.Contains("certificate"))
+            return "SSL 连接失败，可能是网络环境或代理设置导致。请检查网络连接。";
+
+        // repo not found
+        if (msg.Contains("not found") || msg.Contains("404") ||
+            msg.Contains("does not appear to be a git repository"))
+            return "仓库未找到，请检查仓库地址是否正确。";
+
+        // timeout
+        if (msg.Contains("timed out"))
+            return "操作超时，请检查网络连接后重试。";
+
+        // fallback: strip the internal prefix like "git clone failed: " and show a cleaner message
+        var colonIdx = msg.IndexOf("failed:");
+        if (colonIdx >= 0)
+        {
+            var detail = msg[(colonIdx + 7)..].Trim();
+            // strip "Cloning into '...'..." prefix from clone errors
+            if (detail.StartsWith("Cloning into"))
+            {
+                var fatalIdx = detail.IndexOf("fatal:");
+                if (fatalIdx >= 0)
+                    detail = detail[(fatalIdx + 6)..].Trim();
+            }
+            return $"Git 操作失败：{detail}";
+        }
+
+        return $"Git 操作失败：{msg}";
     }
 }

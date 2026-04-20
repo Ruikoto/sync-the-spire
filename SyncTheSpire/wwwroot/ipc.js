@@ -32,7 +32,7 @@ window.chrome.webview.addEventListener('message', e => {
     // show progress toasts automatically
     if (data.status === 'progress') {
         _loadingAction = event;
-        showLoading(data.message || 'Processing...', data.percent);
+        showLoading(data.message || 'Processing...', data.percent, data.detail);
         return;
     }
 

@@ -142,6 +142,45 @@ public class ConfigHandler : HandlerBase
     }
 
     /// <summary>
+    /// same as HandleRefreshSync but assumes remote refs are already up-to-date (fetch done separately).
+    /// called by MessageRouter's split-gate pattern to avoid holding the gate during network I/O.
+    /// </summary>
+    public void HandleRefreshSyncLocal()
+    {
+        var ws = _configService.Workspace;
+        if (!ws.IsConfigured || _gitService == null || !_gitService.IsRepoValid || _gitService.IsOnInitBranch)
+        {
+            Send(IpcResponse.Success("REFRESH_SYNC", new
+            {
+                currentBranch = (string?)null,
+                isJunctionActive = false,
+                hasLocalChanges = false,
+                needsBranchSelection = true,
+                ahead = 0,
+                behind = 0,
+                hasRemoteBranch = false
+            }));
+            return;
+        }
+
+        var sync = _gitService.GetSyncStatus();
+        var isJunction = _adapter.SupportsJunction
+            ? _junctionService.IsJunction(ws.GameModPath)
+            : true;
+        var branch = _gitService.GetCurrentBranch();
+
+        Send(IpcResponse.Success("REFRESH_SYNC", new
+        {
+            currentBranch = branch,
+            isJunctionActive = isJunction,
+            hasLocalChanges = _gitService.HasLocalChanges(),
+            ahead = sync.Ahead,
+            behind = sync.Behind,
+            hasRemoteBranch = sync.HasRemoteBranch
+        }));
+    }
+
+    /// <summary>
     /// return saved config to frontend for pre-filling the settings form
     /// strips sensitive fields (token, ssh passphrase)
     /// </summary>
@@ -255,6 +294,10 @@ public class ConfigHandler : HandlerBase
         {
             Send(IpcResponse.Progress("INIT_CONFIG", "正在克隆仓库，请稍候..."));
 
+            // wire up real-time progress from git transfer
+            _gitService.OnTransferProgress = p =>
+                Send(IpcResponse.Progress("INIT_CONFIG", $"正在克隆仓库... {p.Percent}%", p.Percent, p.Detail));
+
             if (_adapter.SupportsJunction)
             {
                 // detach junction so deleting Repo/ doesn't wipe the user's mods
@@ -297,6 +340,8 @@ public class ConfigHandler : HandlerBase
 
                 _gitService.CloneRepo();
             }
+
+            _gitService.OnTransferProgress = null;
         }
 
         // junction mode: link game folder to repo working tree

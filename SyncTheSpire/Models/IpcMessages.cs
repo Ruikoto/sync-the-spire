@@ -30,8 +30,8 @@ public class IpcResponse
     public static IpcResponse Error(string evt, string message) =>
         new() { Event = evt, Data = new { status = "error", message } };
 
-    public static IpcResponse Progress(string evt, string message, int? percent = null) =>
-        new() { Event = evt, Data = new { status = "progress", message, percent } };
+    public static IpcResponse Progress(string evt, string message, int? percent = null, string? detail = null) =>
+        new() { Event = evt, Data = new { status = "progress", message, percent, detail } };
 
     public static IpcResponse Conflict(string evt, object? data = null) =>
         new() { Event = evt, Data = new { status = "conflict", payload = data } };

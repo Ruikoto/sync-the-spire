@@ -161,10 +161,15 @@ public class GitBranchHandler : HandlerBase
 
         Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}..."));
 
+        // wire up fetch progress
+        _gitService.OnTransferProgress = p =>
+            Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}... {p.Percent}%", p.Percent, p.Detail));
+
         // save current work first
         _gitService.SilentCommitIfDirty();
 
         _gitService.ForceCheckoutBranch(branchName);
+        _gitService.OnTransferProgress = null;
 
         // make sure junction is pointing correctly
         if (_adapter.SupportsJunction)
@@ -208,7 +213,11 @@ public class GitBranchHandler : HandlerBase
 
         Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
 
+        _gitService.OnTransferProgress = p =>
+            Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", $"正在上传... {p.Percent}%", p.Percent, p.Detail));
+
         var pushed = _gitService.CommitAndPush();
+        _gitService.OnTransferProgress = null;
 
         if (!pushed)
         {
@@ -233,7 +242,10 @@ public class GitBranchHandler : HandlerBase
         }
 
         Send(IpcResponse.Progress("FORCE_PUSH", "正在覆盖云端..."));
+        _gitService.OnTransferProgress = p =>
+            Send(IpcResponse.Progress("FORCE_PUSH", $"正在覆盖云端... {p.Percent}%", p.Percent, p.Detail));
         _gitService.ForcePush();
+        _gitService.OnTransferProgress = null;
         Send(IpcResponse.Success("FORCE_PUSH", new { message = "已覆盖云端配置！" }));
     }
 
@@ -247,7 +259,10 @@ public class GitBranchHandler : HandlerBase
         }
 
         Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
+        _gitService.OnTransferProgress = p =>
+            Send(IpcResponse.Progress("RESET_TO_REMOTE", $"正在同步云端配置... {p.Percent}%", p.Percent, p.Detail));
         _gitService.ResetToRemote();
+        _gitService.OnTransferProgress = null;
 
         if (_adapter.SupportsJunction)
             _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
