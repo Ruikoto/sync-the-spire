@@ -218,7 +218,7 @@
   "settings": {
     "title": "Settings",
     "language": "Language",
-"chinese": "Chinese",
+    "chinese": "Chinese",
     "about": "About",
     "version": "Version",
     "latestVersion": "Latest Version",
