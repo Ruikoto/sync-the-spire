@@ -148,6 +148,47 @@ hideLoading = function () {
     _guardedBtns.clear();
 };
 
+// ── modal focus trap ─────────────────────────────────────────────────────────
+// Keeps Tab focus inside whichever modal/overlay is currently on top.
+// Modals are checked highest-to-lowest priority; loading overlay last.
+const _modalFocusOrder = [
+    '#mm-branch-copy-modal', '#mm-detail-modal',
+    '#save-unlink-modal', '#confirm-modal', '#conflict-modal',
+    '#mod-diff-modal', '#steam-account-modal', '#update-modal',
+    '#branch-modal', '#welcome-modal', '#create-workspace-modal',
+    '#backup-list-modal', '#settings-modal',
+    '#mod-manager-modal',
+    '#loading-overlay',
+];
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const modal = _modalFocusOrder.map(sel => $(sel)).find(m => m && !m.classList.contains('hidden'));
+    if (!modal) return;
+
+    const focusable = [...modal.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    )].filter(el => el.offsetParent !== null);
+
+    if (focusable.length === 0) { e.preventDefault(); return; }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (e.shiftKey) {
+        if (!modal.contains(active) || active === first) {
+            e.preventDefault();
+            last.focus();
+        }
+    } else {
+        if (!modal.contains(active) || active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+}, true);
+
 // themed confirm dialog — returns a Promise<boolean>
 function showConfirm(message, title) {
     return new Promise(resolve => {
