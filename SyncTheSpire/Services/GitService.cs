@@ -467,21 +467,30 @@ public class GitService
         using var repo = OpenRepo();
         FetchAll(repo);
 
-        // shallow clone + fetch = commit history has a boundary where parent SHAs reference
-        // objects that don't exist locally. `.Tip`, `FindMergeBase`, or rev-walking any of
-        // the returned commits can all trip on this. We catch the whole read path and degrade
-        // to "status unknown" rather than failing the whole refresh.
+        // step 1 — read tips. if this fails we truly know nothing; degrade to "looks synced".
+        Commit localTip, remoteTip;
         try
         {
             var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
             if (remoteBranch is null)
                 return new SyncStatus(0, 0, HasRemoteBranch: false);
+            localTip = repo.Head.Tip;
+            remoteTip = remoteBranch.Tip;
+        }
+        catch (LibGit2SharpException ex)
+        {
+            LogService.Warn($"[FetchAndGetSyncStatus] cannot read tips: {ex.GetType().Name}: {ex.Message}");
+            return new SyncStatus(0, 0, true);
+        }
 
-            var localTip = repo.Head.Tip;
-            var remoteTip = remoteBranch.Tip;
-            if (localTip.Sha == remoteTip.Sha)
-                return new SyncStatus(0, 0, true);
+        if (localTip.Sha == remoteTip.Sha)
+            return new SyncStatus(0, 0, true);
 
+        // step 2 — tips differ, so updates definitely exist. try to count precisely; if the
+        // walk hits a shallow boundary, surface "behind=-1" sentinel so the UI prompts the
+        // user instead of falsely showing "up to date".
+        try
+        {
             var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
             int ahead = 0, behind = 0;
             if (mergeBase is not null)
@@ -501,8 +510,8 @@ public class GitService
         }
         catch (LibGit2SharpException ex)
         {
-            LogService.Warn($"[FetchAndGetSyncStatus] {ex.GetType().Name}: {ex.Message} — returning unknown status");
-            return new SyncStatus(0, 0, true);
+            LogService.Warn($"[FetchAndGetSyncStatus] diff detected but count failed: {ex.GetType().Name}: {ex.Message}");
+            return new SyncStatus(0, -1, true);
         }
     }
 
@@ -523,17 +532,27 @@ public class GitService
     public SyncStatus GetSyncStatus()
     {
         using var repo = OpenRepo();
+
+        Commit localTip, remoteTip;
         try
         {
             var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
             if (remoteBranch is null)
                 return new SyncStatus(0, 0, HasRemoteBranch: false);
+            localTip = repo.Head.Tip;
+            remoteTip = remoteBranch.Tip;
+        }
+        catch (LibGit2SharpException ex)
+        {
+            LogService.Warn($"[GetSyncStatus] cannot read tips: {ex.GetType().Name}: {ex.Message}");
+            return new SyncStatus(0, 0, true);
+        }
 
-            var localTip = repo.Head.Tip;
-            var remoteTip = remoteBranch.Tip;
-            if (localTip.Sha == remoteTip.Sha)
-                return new SyncStatus(0, 0, true);
+        if (localTip.Sha == remoteTip.Sha)
+            return new SyncStatus(0, 0, true);
 
+        try
+        {
             var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
             int ahead = 0, behind = 0;
             if (mergeBase is not null)
@@ -553,8 +572,8 @@ public class GitService
         }
         catch (LibGit2SharpException ex)
         {
-            LogService.Warn($"[GetSyncStatus] {ex.GetType().Name}: {ex.Message} — returning unknown status");
-            return new SyncStatus(0, 0, true);
+            LogService.Warn($"[GetSyncStatus] diff detected but count failed: {ex.GetType().Name}: {ex.Message}");
+            return new SyncStatus(0, -1, true);
         }
     }
 

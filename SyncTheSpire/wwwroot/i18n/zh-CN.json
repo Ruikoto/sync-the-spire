@@ -285,7 +285,8 @@
     "upToDate": "✓ 已是最新",
     "newBranch": "新分支，尚未推送到远端",
     "localChanges": "↑ 有本地改动未上传",
-    "remoteChanges": "↓ 远端有 {count} 处新改动"
+    "remoteChanges": "↓ 远端有 {count} 处新改动",
+    "remoteChangesUnknown": "↓ 远端有新改动"
   },
   "toast": {
     "nightlyBuild": "当前为非正式构建版本，建议前往 About 页面下载最新正式版",

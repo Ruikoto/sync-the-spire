@@ -285,7 +285,8 @@
     "upToDate": "\u2713 Up to date",
     "newBranch": "New branch, not yet pushed to remote",
     "localChanges": "\u2191 Local changes not yet pushed",
-    "remoteChanges": "\u2193 {count} new remote change(s)"
+    "remoteChanges": "\u2193 {count} new remote change(s)",
+    "remoteChangesUnknown": "\u2193 Remote has new changes"
   },
   "toast": {
     "nightlyBuild": "This is an unofficial build. Visit About to download the latest release.",
