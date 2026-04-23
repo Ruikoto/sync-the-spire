@@ -16,6 +16,7 @@ public class GitBranchHandler : HandlerBase
     private readonly JunctionService _junctionService;
     private readonly JunctionHelper _junctionHelper;
     private readonly IGameAdapter _adapter;
+    private readonly WorkspaceManager _workspaceManager;
 
     public GitBranchHandler(
         CoreWebView2 webView,
@@ -26,7 +27,8 @@ public class GitBranchHandler : HandlerBase
         ModScannerService modScanner,
         JunctionService junctionService,
         JunctionHelper junctionHelper,
-        IGameAdapter adapter)
+        IGameAdapter adapter,
+        WorkspaceManager workspaceManager)
         : base(webView, uiContext)
     {
         _configService = configService;
@@ -36,6 +38,7 @@ public class GitBranchHandler : HandlerBase
         _junctionService = junctionService;
         _junctionHelper = junctionHelper;
         _adapter = adapter;
+        _workspaceManager = workspaceManager;
     }
 
     public void HandleGetBranches()
@@ -161,15 +164,22 @@ public class GitBranchHandler : HandlerBase
 
         Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}..."));
 
-        // wire up fetch progress
+        // wire up fetch progress + LFS warnings (LFS checkout may fail or git-lfs may be missing —
+        // user must see it since otherwise the working tree silently contains pointer text files)
         _gitService.OnTransferProgress = p =>
             Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}... {p.Percent}%", p.Percent, p.Detail));
+        _gitService.OnLfsDownloadProgress = msg =>
+            Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", msg));
 
         // save current work first
         _gitService.SilentCommitIfDirty();
 
-        _gitService.ForceCheckoutBranch(branchName);
-        _gitService.OnTransferProgress = null;
+        try { _gitService.ForceCheckoutBranch(branchName); }
+        finally
+        {
+            _gitService.OnTransferProgress = null;
+            _gitService.OnLfsDownloadProgress = null;
+        }
 
         // make sure junction is pointing correctly
         if (_adapter.SupportsJunction)
@@ -211,6 +221,31 @@ public class GitBranchHandler : HandlerBase
             return;
         }
 
+        var ws = _configService.Workspace;
+
+        // preflight: scan for oversized files before committing
+        if (ws.MaxFileSizeMode != "unlimited")
+        {
+            var limit = _gitService.GetEffectiveSizeLimitBytes();
+            var largeFiles = _gitService.ScanLargeFiles(limit);
+            if (largeFiles.Count > 0)
+            {
+                var limitMib = limit == long.MaxValue ? 0 : (int)(limit / (1024 * 1024));
+                var autoReason = ws.MaxFileSizeMode == "auto"
+                    ? GetAutoLimitReason(ws.RepoUrl, limitMib)
+                    : null;
+
+                Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH", new
+                {
+                    kind = "largeFiles",
+                    files = largeFiles.Select(f => new { path = f.RelativePath, sizeMib = (double)f.SizeBytes / (1024 * 1024) }).ToArray(),
+                    limitMib,
+                    autoReason
+                }));
+                return;
+            }
+        }
+
         Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
 
         _gitService.OnTransferProgress = p =>
@@ -231,6 +266,15 @@ public class GitBranchHandler : HandlerBase
 
         Send(IpcResponse.Success("SAVE_AND_PUSH_MY_BRANCH", new { message = "已保存并上传！" }));
     }
+
+    private static string GetAutoLimitReason(string repoUrl, int limitMib)
+    {
+        var host = GitService.GetRepoHost(repoUrl);
+        return $"自动检测到当前平台 ({host}) 的文件大小限制为 {limitMib} MiB";
+    }
+
+    private bool IsGiteeRepo() =>
+        GitService.GetRepoHost(_configService.Workspace.RepoUrl).Contains("gitee.com");
 
     public void HandleForcePush()
     {
@@ -261,12 +305,228 @@ public class GitBranchHandler : HandlerBase
         Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
         _gitService.OnTransferProgress = p =>
             Send(IpcResponse.Progress("RESET_TO_REMOTE", $"正在同步云端配置... {p.Percent}%", p.Percent, p.Detail));
-        _gitService.ResetToRemote();
-        _gitService.OnTransferProgress = null;
+        _gitService.OnLfsDownloadProgress = msg =>
+            Send(IpcResponse.Progress("RESET_TO_REMOTE", msg));
+        try { _gitService.ResetToRemote(); }
+        finally
+        {
+            _gitService.OnTransferProgress = null;
+            _gitService.OnLfsDownloadProgress = null;
+        }
 
         if (_adapter.SupportsJunction)
             _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
         Send(IpcResponse.Success("RESET_TO_REMOTE", new { message = "已同步为云端配置！" }));
+    }
+
+    public void HandlePreflightExcludeLargeFiles(JsonElement? payload)
+    {
+        if (payload is null)
+        {
+            Send(IpcResponse.Error("PREFLIGHT_EXCLUDE_LARGE_FILES", "Missing payload"));
+            return;
+        }
+
+        var paths = payload.Value.GetProperty("files")
+            .EnumerateArray()
+            .Select(f => f.GetString() ?? "")
+            .Where(p => !string.IsNullOrEmpty(p))
+            .ToList();
+
+        // append each path as an exclude rule; also save to workspace config for reference
+        _gitService.AppendExcludeRules(paths);
+
+        var ws = _configService.Workspace;
+        foreach (var p in paths)
+            if (!ws.ExcludedLargeFiles.Contains(p))
+                ws.ExcludedLargeFiles.Add(p);
+        _configService.SaveWorkspace();
+
+        // now proceed with the actual commit+push
+        Send(IpcResponse.Progress("PREFLIGHT_EXCLUDE_LARGE_FILES", "正在保存并上传..."));
+
+        _gitService.OnTransferProgress = p2 =>
+            Send(IpcResponse.Progress("PREFLIGHT_EXCLUDE_LARGE_FILES", $"正在上传... {p2.Percent}%", p2.Percent, p2.Detail));
+
+        var pushed = _gitService.CommitAndPush();
+        _gitService.OnTransferProgress = null;
+
+        if (!pushed)
+        {
+            Send(IpcResponse.Conflict("PREFLIGHT_EXCLUDE_LARGE_FILES", new
+            {
+                message = "云端存在更新的配置，与本地改动冲突。"
+            }));
+            return;
+        }
+
+        Send(IpcResponse.Success("PREFLIGHT_EXCLUDE_LARGE_FILES", new { message = "已保存并上传！" }));
+    }
+
+    public void HandlePreflightEnableLfs(JsonElement? payload)
+    {
+        // track large files by their exact paths — no extension guessing
+        var filePaths = payload?.GetProperty("files").EnumerateArray()
+            .Select(f => f.GetString() ?? "").Where(f => f != "")
+            .Select(f => f.Replace('\\', '/'))
+            .ToList() ?? [];
+
+        if (filePaths.Count == 0)
+        {
+            Send(IpcResponse.Error("PREFLIGHT_ENABLE_LFS", "未收到超限文件列表，无法启用 LFS。"));
+            return;
+        }
+
+        // Gitee free tier doesn't support LFS — bounce the call back as a Conflict so the
+        // frontend can show a real confirm dialog. A Progress-tagged warning flashes past
+        // before the user can read it. `giteeAck: true` in payload means the user has already
+        // confirmed they want to proceed anyway.
+        var giteeAck = payload?.TryGetProperty("giteeAck", out var ackEl) == true &&
+                       ackEl.ValueKind == JsonValueKind.True;
+        if (!giteeAck && IsGiteeRepo())
+        {
+            Send(IpcResponse.Conflict("PREFLIGHT_ENABLE_LFS", new
+            {
+                kind = "gitee",
+                files = filePaths,
+                message = "Gitee 免费账户不支持 Git LFS，启用后推送会失败。是否仍要继续？"
+            }));
+            return;
+        }
+
+        Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", "正在安装 Git LFS..."));
+        _gitService.OnLfsDownloadProgress = msg =>
+            Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", msg));
+        try { _gitService.EnableLfs(); }
+        finally { _gitService.OnLfsDownloadProgress = null; }
+
+        Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", $"正在标记 {filePaths.Count} 个大文件为 LFS 存储..."));
+        _gitService.TrackLfsPatterns(filePaths);
+
+        Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", "正在保存并上传..."));
+        _gitService.OnTransferProgress = p =>
+            Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS",
+                $"正在上传... {p.Percent}%", p.Percent, p.Detail));
+        bool pushed;
+        try { pushed = _gitService.CommitAndPush(); }
+        finally { _gitService.OnTransferProgress = null; }
+
+        if (!pushed)
+        {
+            Send(IpcResponse.Conflict("PREFLIGHT_ENABLE_LFS",
+                new { message = "云端存在更新的配置，与本地改动冲突。" }));
+            return;
+        }
+
+        Send(IpcResponse.Success("PREFLIGHT_ENABLE_LFS", new
+        {
+            message = $"已启用 Git LFS，{filePaths.Count} 个大文件将以 LFS 方式上传。",
+            trackedPaths = filePaths
+        }));
+    }
+
+    public void HandleMigrateExistingToLfs(JsonElement? payload)
+    {
+        // auto-scan — no user input required
+        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", "正在扫描超限文件..."));
+        var limit = _gitService.GetEffectiveSizeLimitBytes();
+        var largeFiles = _gitService.ScanLargeFiles(limit);
+
+        if (largeFiles.Count == 0)
+        {
+            Send(IpcResponse.Success("MIGRATE_EXISTING_TO_LFS", new
+            {
+                message = "当前工作区未检测到超限文件，无需迁移。"
+            }));
+            return;
+        }
+
+        var filePaths = largeFiles
+            .Select(f => f.RelativePath.Replace('\\', '/'))
+            .ToList();
+
+        // Gitee ack — see HandlePreflightEnableLfs for rationale
+        var giteeAck = payload?.TryGetProperty("giteeAck", out var ackEl) == true &&
+                       ackEl.ValueKind == JsonValueKind.True;
+        if (!giteeAck && IsGiteeRepo())
+        {
+            Send(IpcResponse.Conflict("MIGRATE_EXISTING_TO_LFS", new
+            {
+                kind = "gitee",
+                message = "Gitee 免费账户不支持 Git LFS，启用后推送会失败。是否仍要继续？"
+            }));
+            return;
+        }
+
+        // gather all local non-protected branches so the history rewrite covers the whole repo
+        var branches = _gitService.GetMigratableLocalBranches();
+        if (branches.Count == 0)
+        {
+            Send(IpcResponse.Error("MIGRATE_EXISTING_TO_LFS",
+                "没有可迁移的分支（受保护分支和 init 分支会被跳过）。"));
+            return;
+        }
+
+        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", "正在安装 Git LFS..."));
+        _gitService.OnLfsDownloadProgress = msg =>
+            Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", msg));
+        try { _gitService.EnableLfs(); }
+        finally { _gitService.OnLfsDownloadProgress = null; }
+
+        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", $"正在标记 {filePaths.Count} 个超限文件..."));
+        _gitService.TrackLfsPatterns(filePaths);
+
+        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS",
+            $"正在重写 {branches.Count} 个分支的历史并推送（可能需要几分钟）..."));
+        _gitService.MigrateToLfsAndPush(filePaths, branches);
+
+        Send(IpcResponse.Success("MIGRATE_EXISTING_TO_LFS", new
+        {
+            message = $"LFS 迁移完成！已将 {filePaths.Count} 个文件在 {branches.Count} 个分支上转为 LFS 存储。",
+            trackedPaths = filePaths,
+            migratedBranches = branches
+        }));
+    }
+
+    public void HandleRebuildBranchesOrphan(JsonElement? payload)
+    {
+        if (payload is null)
+        {
+            Send(IpcResponse.Error("REBUILD_BRANCHES_ORPHAN", "Missing payload"));
+            return;
+        }
+
+        var branches = payload.Value.GetProperty("branches")
+            .EnumerateArray()
+            .Select(b => b.GetString() ?? "")
+            .Where(b => !string.IsNullOrEmpty(b))
+            .ToList();
+
+        if (branches.Count == 0)
+        {
+            Send(IpcResponse.Error("REBUILD_BRANCHES_ORPHAN", "没有指定分支"));
+            return;
+        }
+
+        Send(IpcResponse.Progress("REBUILD_BRANCHES_ORPHAN", "正在重建分支历史..."));
+
+        var results = _gitService.RebuildBranchesAsOrphan(branches, (branch, index, total) =>
+        {
+            Send(IpcResponse.Progress("REBUILD_BRANCHES_ORPHAN",
+                $"正在重建 ({index + 1}/{total}): {branch}", (int)((double)(index + 1) / total * 80)));
+        });
+
+        Send(IpcResponse.Progress("REBUILD_BRANCHES_ORPHAN", "正在清理本地历史数据...", 90));
+
+        var successCount = results.Count(r => r.Success);
+        var failCount = results.Count(r => !r.Success);
+
+        Send(IpcResponse.Success("REBUILD_BRANCHES_ORPHAN", new
+        {
+            results = results.Select(r => new { branch = r.Branch, success = r.Success, error = r.Error }).ToArray(),
+            successCount,
+            failCount
+        }));
     }
 }

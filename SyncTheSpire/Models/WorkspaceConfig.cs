@@ -68,6 +68,21 @@ public class WorkspaceConfig
             ? GameType == "generic" ? GameInstallPath : Path.Combine(GameInstallPath, "Mods")
             : GameModPathLegacy; // fallback for old configs
 
+    [JsonPropertyName("excludedLargeFiles")]
+    public List<string> ExcludedLargeFiles { get; set; } = [];
+
+    [JsonPropertyName("lfsEnabled")]
+    public bool LfsEnabled { get; set; }
+
+    [JsonPropertyName("lfsTrackedPatterns")]
+    public List<string> LfsTrackedPatterns { get; set; } = [];
+
+    [JsonPropertyName("maxFileSizeMode")]
+    public string MaxFileSizeMode { get; set; } = "auto"; // "auto" | "manual" | "unlimited"
+
+    [JsonPropertyName("maxFileSizeManualMib")]
+    public int MaxFileSizeManualMib { get; set; } = 99;
+
     [JsonIgnore]
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(Nickname) &&

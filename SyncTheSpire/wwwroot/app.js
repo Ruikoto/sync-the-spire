@@ -181,6 +181,11 @@ on('SAVE_AND_PUSH_MY_BRANCH', async data => {
         sendMessage('GET_STATUS');
     }
     if (data.status === 'conflict') {
+        // large file preflight — route to preflight modal instead of conflict dialog
+        if (data.payload?.kind === 'largeFiles') {
+            showPreflightModal(data.payload);
+            return;
+        }
         const choice = await showConflictDialog(
             data.payload?.message || I18n.t('modals.conflict.defaultMessage')
         );
@@ -304,7 +309,7 @@ on('PICK_FOLDER', data => {
 let pendingPickTarget = null;
 
 // setup form
-$('#setup-form').addEventListener('submit', e => {
+$('#setup-form').addEventListener('submit', async e => {
     e.preventDefault();
     const authType = document.querySelector('input[name="authType"]:checked').value;
     const nickname = $('#cfg-nickname').value.trim();
@@ -315,12 +320,29 @@ $('#setup-form').addEventListener('submit', e => {
         return;
     }
 
+    const maxFileSizeMode = document.querySelector('input[name="file-size-mode"]:checked')?.value || 'auto';
+    const maxFileSizeManualMib = parseInt($('#file-size-mib')?.value || '99', 10);
+
+    // gate risky size-limit changes with a confirm. unlimited always, manual only when above
+    // the conservative 99 MiB that matches all auto-detected platforms.
+    const isRelaxing = maxFileSizeMode === 'unlimited' ||
+        (maxFileSizeMode === 'manual' && maxFileSizeManualMib > 99);
+    if (isRelaxing) {
+        const ok = await showConfirm(
+            I18n.t('settings.fileSizeLimitRelaxMessage'),
+            I18n.t('settings.fileSizeLimitRelaxTitle')
+        );
+        if (!ok) return;
+    }
+
     const payload = {
         nickname,
         repoUrl: $('#cfg-repo').value.trim(),
         authType,
         gameInstallPath: $('#cfg-path').value.trim(),
         saveFolderPath: $('#cfg-save').value.trim(),
+        maxFileSizeMode,
+        maxFileSizeManualMib,
     };
 
     if (authType === 'ssh') {
@@ -915,5 +937,148 @@ async function bootstrap() {
         goHome();
     }
 }
+
+// ── file size limit UI (setup page) ─────────────────────────────────────────
+
+function initFileSizeSettingsUI() {
+    const radios = document.querySelectorAll('input[name="file-size-mode"]');
+    const manualRow = $('#file-size-manual-row');
+    const warnEl = $('#file-size-warn');
+
+    function updateVisibility() {
+        const val = document.querySelector('input[name="file-size-mode"]:checked')?.value || 'auto';
+        if (manualRow) manualRow.classList.toggle('hidden', val !== 'manual');
+        if (warnEl) warnEl.classList.toggle('hidden', val === 'auto');
+    }
+
+    radios.forEach(r => r.addEventListener('change', updateVisibility));
+    updateVisibility();
+}
+
+// wire up clean branches button (now in setup page)
+const btnCleanBranches = $('#btn-clean-branches');
+if (btnCleanBranches) {
+    btnCleanBranches.addEventListener('click', () => {
+        openCleanBranchesModal();
+    });
+}
+
+// update LFS status badge + tracked pattern list in advanced settings
+function updateLfsStatus(enabled, patterns) {
+    const badge = $('#lfs-status-badge');
+    const list = $('#lfs-tracked-list');
+    if (badge) {
+        badge.textContent = enabled ? I18n.t('settings.lfsEnabled') : I18n.t('settings.lfsDisabled');
+        badge.className = enabled
+            ? 'text-[10px] px-1.5 py-0.5 rounded border border-spire-success/40 bg-spire-success/10 text-spire-success'
+            : 'text-[10px] px-1.5 py-0.5 rounded bg-spire-bg border border-spire-border text-spire-muted';
+    }
+    if (list) {
+        if (enabled && patterns?.length > 0) {
+            list.textContent = I18n.t('settings.lfsTracked', { patterns: patterns.join(', ') });
+            list.classList.remove('hidden');
+        } else {
+            list.classList.add('hidden');
+        }
+    }
+}
+
+// migrate LFS button — auto-scan on server side, no user input needed
+$('#btn-migrate-lfs')?.addEventListener('click', () => {
+    openMigrateLfsModal();
+});
+
+// advanced settings accordion
+$('#btn-advanced-toggle')?.addEventListener('click', () => {
+    const body = $('#advanced-settings-body');
+    const chevron = $('#advanced-chevron');
+    const btn = $('#btn-advanced-toggle');
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!expanded));
+    body.classList.toggle('hidden', expanded);
+    chevron.style.transform = expanded ? '' : 'rotate(180deg)';
+});
+
+initFileSizeSettingsUI();
+
+
+// ── preflight / rebuild IPC handlers ─────────────────────────────────────────
+
+on('PREFLIGHT_EXCLUDE_LARGE_FILES', async data => {
+    if (data.status === 'success') {
+        getWsState().lastSyncStatus = null;
+        toast(data.payload?.message || 'Pushed!', 'success');
+        sendMessage('GET_STATUS');
+    }
+    if (data.status === 'conflict') {
+        const choice = await showConflictDialog(
+            data.payload?.message || I18n.t('modals.conflict.defaultMessage')
+        );
+        if (choice === 'force') sendMessage('FORCE_PUSH');
+        else if (choice === 'reset') sendMessage('RESET_TO_REMOTE');
+    }
+});
+
+on('PREFLIGHT_ENABLE_LFS', async data => {
+    if (data.status === 'progress') {
+        showLoading(data.message);
+    } else if (data.status === 'success') {
+        hideLoading();
+        toast(data.payload?.message || I18n.t('settings.lfsSuccess'), 'success');
+        const ws = getWsState();
+        ws.lfsEnabled = true;
+        if (data.payload?.trackedPaths) ws.lfsTrackedPatterns = [...new Set([...(ws.lfsTrackedPatterns || []), ...data.payload.trackedPaths])];
+        updateLfsStatus(ws.lfsEnabled, ws.lfsTrackedPatterns);
+    } else if (data.status === 'conflict') {
+        hideLoading();
+        // gitee-on-LFS needs its own confirm — user proceeds only if they really want to
+        if (data.payload?.kind === 'gitee') {
+            const ok = await showConfirm(
+                data.payload.message || I18n.t('modals.giteeLfs.message'),
+                I18n.t('modals.giteeLfs.title')
+            );
+            if (ok) sendMessage('PREFLIGHT_ENABLE_LFS', { files: data.payload.files || [], giteeAck: true });
+            return;
+        }
+        const choice = await showConflictDialog(data.payload?.message);
+        if (choice === 'force') sendMessage('FORCE_PUSH');
+        else if (choice === 'reset') sendMessage('RESET_TO_REMOTE');
+    } else if (data.status === 'error') {
+        hideLoading();
+        toast(data.message || 'LFS 启用失败', 'error');
+    }
+});
+
+on('MIGRATE_EXISTING_TO_LFS', async data => {
+    if (data.status === 'progress') {
+        showLoading(data.message);
+    } else if (data.status === 'success') {
+        hideLoading();
+        toast(data.payload?.message || I18n.t('modals.migrateLfs.success'), 'success');
+        const ws = getWsState();
+        ws.lfsEnabled = true;
+        if (data.payload?.trackedPaths) ws.lfsTrackedPatterns = [...new Set([...(ws.lfsTrackedPatterns || []), ...data.payload.trackedPaths])];
+        updateLfsStatus(ws.lfsEnabled, ws.lfsTrackedPatterns);
+    } else if (data.status === 'conflict' && data.payload?.kind === 'gitee') {
+        hideLoading();
+        const ok = await showConfirm(
+            data.payload.message || I18n.t('modals.giteeLfs.message'),
+            I18n.t('modals.giteeLfs.title')
+        );
+        if (ok) sendMessage('MIGRATE_EXISTING_TO_LFS', { giteeAck: true });
+    } else if (data.status === 'error') {
+        hideLoading();
+        toast(data.message || I18n.t('modals.migrateLfs.error'), 'error');
+    }
+});
+
+on('REBUILD_BRANCHES_ORPHAN', data => {
+    if (data.status === 'success') {
+        const { successCount, failCount } = data.payload || {};
+        const msg = I18n.t('modals.cleanBranches.done', { success: successCount ?? 0, fail: failCount ?? 0 });
+        toast(msg, failCount > 0 ? 'warn' : 'success');
+    }
+});
+
 
 bootstrap();

@@ -52,6 +52,8 @@ public class MessageRouter
         "LAUNCH_GAME", "SET_CUSTOM_EXE",
         "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES", "INSTALL_MOD_DROPPED",
         "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH",
+        "PREFLIGHT_EXCLUDE_LARGE_FILES", "PREFLIGHT_ENABLE_LFS", "PREFLIGHT_CANCEL", "REBUILD_BRANCHES_ORPHAN",
+        "MIGRATE_EXISTING_TO_LFS",
     ];
 
     // current workspace context (null if no workspace active yet)
@@ -104,7 +106,7 @@ public class MessageRouter
             var junctionHelper = new JunctionHelper(_junctionService, ctx.BackupService, Send);
 
             _configHandler = new ConfigHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, _junctionService, junctionHelper, adapter, _workspaceManager);
-            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, ctx.NsfwDetection, ctx.ModScanner, _junctionService, junctionHelper, adapter);
+            _gitBranchHandler = new GitBranchHandler(_webView, _uiContext, ctx.ConfigService, ctx.GitService, ctx.NsfwDetection, ctx.ModScanner, _junctionService, junctionHelper, adapter, _workspaceManager);
             _saveHandler = new SaveHandler(_webView, _uiContext, ctx.ConfigService, ctx.BackupService, ctx.MergeService, _junctionService);
             _redirectHandler = new RedirectHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, adapter);
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
@@ -230,6 +232,11 @@ public class MessageRouter
             _gated["SAVE_AND_PUSH_MY_BRANCH"] = _ => gb.HandleSaveAndPush();
             _gated["FORCE_PUSH"] = _ => gb.HandleForcePush();
             _gated["RESET_TO_REMOTE"] = _ => gb.HandleResetToRemote();
+            _gated["PREFLIGHT_EXCLUDE_LARGE_FILES"] = req => gb.HandlePreflightExcludeLargeFiles(req.Payload);
+            _gated["PREFLIGHT_ENABLE_LFS"] = req => gb.HandlePreflightEnableLfs(req.Payload);
+            _gated["PREFLIGHT_CANCEL"] = _ => Send(IpcResponse.Success("PREFLIGHT_CANCEL", new { }));
+            _gated["REBUILD_BRANCHES_ORPHAN"] = req => gb.HandleRebuildBranchesOrphan(req.Payload);
+            _gated["MIGRATE_EXISTING_TO_LFS"] = req => gb.HandleMigrateExistingToLfs(req.Payload);
         }
 
         if (_saveHandler is { } sh)
@@ -658,6 +665,16 @@ public class MessageRouter
         // timeout
         if (msg.Contains("timed out"))
             return "操作超时，请检查网络连接后重试。";
+
+        // large file size limit rejection
+        if (msg.Contains("File size exceeds") || msg.Contains("exceeds the maximum") ||
+            msg.Contains("larger than") || msg.Contains("HTTP 413") ||
+            (msg.Contains("pre-receive hook declined") && msg.Contains("size")))
+            return "有文件超过了云端平台的单文件上传限制。可以在提交前排除这些文件，或为本仓库启用大文件上传（基于 Git LFS）。";
+
+        // shallow update error — usually from force-pushing orphan to a shallow clone
+        if (msg.Contains("shallow update not allowed"))
+            return "推送失败：远端不接受此次历史重写操作，可能是仓库为浅克隆状态。请尝试先重新初始化仓库。";
 
         // fallback: strip the internal prefix like "git clone failed: " and show a cleaner message
         var colonIdx = msg.IndexOf("failed:");

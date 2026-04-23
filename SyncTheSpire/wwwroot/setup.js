@@ -49,6 +49,24 @@ function prefillConfigForm(cfg) {
     if (cfg.saveFolderPath) $('#cfg-save').value = cfg.saveFolderPath;
     // password fields are intentionally left blank — backend merges them
     setAuthType(cfg.authType || 'anonymous');
+
+    // file size limit settings
+    const mode = cfg.maxFileSizeMode || 'auto';
+    const radio = document.querySelector(`input[name="file-size-mode"][value="${mode}"]`);
+    if (radio) radio.checked = true;
+    const mibInput = $('#file-size-mib');
+    if (mibInput && cfg.maxFileSizeManualMib != null) mibInput.value = cfg.maxFileSizeManualMib;
+    // update visibility
+    const manualRow = $('#file-size-manual-row');
+    const warnEl = $('#file-size-warn');
+    if (manualRow) manualRow.classList.toggle('hidden', mode !== 'manual');
+    if (warnEl) warnEl.classList.toggle('hidden', mode === 'auto');
+
+    // LFS status
+    const ws = getWsState();
+    ws.lfsEnabled = !!cfg.lfsEnabled;
+    ws.lfsTrackedPatterns = cfg.lfsTrackedPatterns || [];
+    updateLfsStatus(ws.lfsEnabled, ws.lfsTrackedPatterns);
 }
 
 // ── steam account picker — returns Promise<string|null> (full save path) ────

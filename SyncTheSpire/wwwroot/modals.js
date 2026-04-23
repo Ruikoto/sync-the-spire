@@ -976,3 +976,132 @@ function modDiffSection(label, count, type, cardsHtml) {
             <div class="flex flex-col gap-1.5">${cardsHtml}</div>
         </div>`;
 }
+
+
+// ── preflight modal (large file check) ───────────────────────────────────────
+
+let _preflightPayload = null; // { files: [{path, sizeMib}], limitMib, autoReason }
+
+function showPreflightModal(payload) {
+    _preflightPayload = payload;
+
+    const reasonText = payload.autoReason
+        ? I18n.t('modals.preflight.autoReason', { reason: payload.autoReason })
+        : '';
+    const desc = I18n.t('modals.preflight.desc', { limitMib: payload.limitMib, reason: reasonText });
+    $('#preflight-desc').textContent = desc;
+
+    const list = $('#preflight-file-list');
+    list.innerHTML = payload.files.map(f =>
+        `<li class="text-xs font-mono text-spire-text bg-spire-bg rounded px-2 py-1 flex justify-between gap-2">
+            <span class="truncate text-spire-muted">${esc(f.path)}</span>
+            <span class="shrink-0 text-spire-warn">${f.sizeMib.toFixed(1)} MiB</span>
+        </li>`
+    ).join('');
+
+    $('#preflight-modal').classList.remove('hidden');
+}
+
+function closePreflightModal() {
+    $('#preflight-modal').classList.add('hidden');
+    _preflightPayload = null;
+}
+
+$('#preflight-btn-exclude').addEventListener('click', () => {
+    if (!_preflightPayload) return;
+    const files = _preflightPayload.files.map(f => f.path);
+    closePreflightModal();
+    sendMessage('PREFLIGHT_EXCLUDE_LARGE_FILES', { files });
+});
+
+$('#preflight-btn-lfs').addEventListener('click', () => {
+    const files = _preflightPayload ? _preflightPayload.files.map(f => f.path) : [];
+    closePreflightModal();
+    sendMessage('PREFLIGHT_ENABLE_LFS', { files });
+});
+
+$('#preflight-btn-cancel').addEventListener('click', () => {
+    closePreflightModal();
+    sendMessage('PREFLIGHT_CANCEL', {});
+});
+
+$('#preflight-modal').addEventListener('click', e => {
+    if (e.target === $('#preflight-modal')) closePreflightModal();
+});
+
+
+// ── clean branches modal ──────────────────────────────────────────────────────
+
+function openCleanBranchesModal() {
+    // populate branch list from current branchData (already loaded from GET_BRANCHES)
+    const container = $('#clean-branches-list');
+    const available = (branchData || []).filter(b => b.name !== '_init');
+
+    if (available.length === 0) {
+        container.innerHTML = `<p class="text-xs text-spire-muted">${esc(I18n.t('modals.cleanBranches.noBranches'))}</p>`;
+    } else {
+        container.innerHTML = available.map(b =>
+            `<label class="flex items-center gap-2 cursor-pointer py-1 px-2 rounded hover:bg-spire-bg/50 transition-colors">
+                <input type="checkbox" class="clean-branch-checkbox accent-red-400" value="${escAttr(b.name)}">
+                <span class="text-xs font-mono text-spire-text">${esc(b.name)}</span>
+            </label>`
+        ).join('');
+    }
+
+    $('#clean-branches-modal').classList.remove('hidden');
+}
+
+function closeCleanBranchesModal() {
+    $('#clean-branches-modal').classList.add('hidden');
+}
+
+$('#clean-branches-modal-close').addEventListener('click', closeCleanBranchesModal);
+$('#clean-branches-modal').addEventListener('click', e => {
+    if (e.target === $('#clean-branches-modal')) closeCleanBranchesModal();
+});
+
+$('#clean-branches-select-all').addEventListener('click', () => {
+    document.querySelectorAll('.clean-branch-checkbox').forEach(cb => cb.checked = true);
+});
+
+$('#clean-branches-deselect-all').addEventListener('click', () => {
+    document.querySelectorAll('.clean-branch-checkbox').forEach(cb => cb.checked = false);
+});
+
+$('#clean-branches-confirm').addEventListener('click', async () => {
+    const selected = [...document.querySelectorAll('.clean-branch-checkbox:checked')]
+        .map(cb => cb.value);
+
+    if (selected.length === 0) {
+        toast(I18n.t('modals.cleanBranches.noBranches'), 'warn');
+        return;
+    }
+
+    const ok = await showConfirm(I18n.t('modals.cleanBranches.warning'), I18n.t('modals.cleanBranches.title'));
+    if (!ok) return;
+
+    closeCleanBranchesModal();
+    sendMessage('REBUILD_BRANCHES_ORPHAN', { branches: selected });
+});
+
+
+// ── migrate existing files to LFS modal ──────────────────────────────────────
+
+function openMigrateLfsModal() {
+    $('#migrate-lfs-modal').classList.remove('hidden');
+}
+
+function closeMigrateLfsModal() {
+    $('#migrate-lfs-modal').classList.add('hidden');
+}
+
+$('#migrate-lfs-cancel').addEventListener('click', closeMigrateLfsModal);
+
+$('#migrate-lfs-modal').addEventListener('click', e => {
+    if (e.target === $('#migrate-lfs-modal')) closeMigrateLfsModal();
+});
+
+$('#migrate-lfs-confirm').addEventListener('click', () => {
+    closeMigrateLfsModal();
+    sendMessage('MIGRATE_EXISTING_TO_LFS', {});
+});

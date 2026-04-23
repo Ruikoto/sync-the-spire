@@ -228,7 +228,26 @@
     "authorName": "Ruikoto（泡菜）",
     "checkUpdate": "检查更新",
     "docs": "使用教程",
-    "upToDate": "（已是最新）"
+    "upToDate": "（已是最新）",
+    "advancedSettings": "高级设置",
+    "fileSizeLimit": "文件大小限制",
+    "fileSizeLimitAuto": "自动检测（推荐）",
+    "fileSizeLimitManual": "手动指定",
+    "fileSizeLimitUnlimited": "不限制",
+    "fileSizeLimitMib": "{n} MiB",
+    "fileSizeLimitManualLabel": "限制大小（MiB）",
+    "fileSizeLimitWarn": "调高或取消此限制可能导致推送失败后本地仓库卡在坏状态，仅在确认目标平台上限时修改。",
+    "fileSizeLimitRelaxTitle": "调高大小限制？",
+    "fileSizeLimitRelaxMessage": "你正在调高或取消文件大小限制。如果超过云端平台实际限制，推送会失败。是否继续？",
+    "cleanBranches": "清理分支历史",
+    "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。",
+    "lfs": "大文件上传（Git LFS）",
+    "lfsEnabled": "已启用",
+    "lfsDisabled": "未启用",
+    "lfsTracked": "跟踪规则：{patterns}",
+    "lfsMigrate": "为历史大文件启用 LFS",
+    "lfsMigrateDesc": "将仓库历史中已有的大文件转换为 LFS 存储，清理仓库体积。",
+    "lfsSuccess": "Git LFS 已启用，大文件将以 LFS 方式上传。"
   },
   "modals": {
     "welcome": {
@@ -260,6 +279,40 @@
       "currentAccount": "当前账号",
       "noSave": "无存档",
       "notFound": "未找到有效的存档文件夹"
+    },
+    "preflight": {
+      "title": "检测到超大文件",
+      "desc": "以下文件超过了 {limitMib} MiB 的限制{reason}，推送前请选择处理方式：",
+      "autoReason": "（{reason}）",
+      "excludeAndPush": "排除这些文件并继续",
+      "enableLfs": "启用大文件上传（Git LFS）",
+      "lfsNote": "基于 Git LFS，首次启用会重写历史",
+      "cancel": "取消"
+    },
+    "migrateLfs": {
+      "title": "为历史大文件启用 LFS",
+      "desc": "自动扫描当前仓库中超过大小限制的文件，将其历史提交转为 LFS 存储。",
+      "warning": "此操作会重写分支历史并强制推送，其他设备下次同步时会自动追上。",
+      "confirm": "开始迁移",
+      "success": "LFS 迁移完成！历史已重写，大文件将使用 LFS 存储。",
+      "error": "LFS 迁移失败"
+    },
+    "giteeLfs": {
+      "title": "Gitee 不支持 LFS",
+      "message": "Gitee 免费账户不支持 Git LFS，启用后推送会失败。建议改用 GitHub、AtomGit 等支持 LFS 的平台。是否仍要继续？"
+    },
+    "cleanBranches": {
+      "title": "清理分支历史",
+      "warning": "此操作会重写所选分支的全部提交历史并强制推送到云端。其他设备下次同步时会自动追上新历史。不可撤销。",
+      "selectBranches": "选择要清理的分支",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "noBranches": "暂无可清理的分支",
+      "confirm": "确认清理",
+      "processing": "正在重建分支 {branch}（{current}/{total}）...",
+      "gcDone": "正在清理本地历史数据...",
+      "done": "完成：{success} 个成功，{fail} 个失败",
+      "failed": "失败"
     }
   },
   "modDiff": {
@@ -285,7 +338,8 @@
     "upToDate": "✓ 已是最新",
     "newBranch": "新分支，尚未推送到远端",
     "localChanges": "↑ 有本地改动未上传",
-    "remoteChanges": "↓ 远端有 {count} 处新改动"
+    "remoteChanges": "↓ 远端有 {count} 处新改动",
+    "historyRewritten": "⚠ 云端分支历史已重建，点击同步"
   },
   "toast": {
     "nightlyBuild": "当前为非正式构建版本，建议前往 About 页面下载最新正式版",

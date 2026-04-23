@@ -37,6 +37,11 @@ public class ConfigService
     public WorkspaceConfig Workspace => _workspace;
 
     /// <summary>
+    /// global app settings (language, file size limits, etc.)
+    /// </summary>
+    public AppSettings Settings => _manager.Config.Settings;
+
+    /// <summary>
     /// persist the current workspace config to disk
     /// </summary>
     public void SaveWorkspace()

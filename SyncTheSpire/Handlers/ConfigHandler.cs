@@ -198,6 +198,10 @@ public class ConfigHandler : HandlerBase
             gameInstallPath = ws.GameInstallPath,
             saveFolderPath = ws.SaveFolderPath,
             gitUserName,
+            maxFileSizeMode = ws.MaxFileSizeMode,
+            maxFileSizeManualMib = ws.MaxFileSizeManualMib,
+            lfsEnabled = ws.LfsEnabled,
+            lfsTrackedPatterns = ws.LfsTrackedPatterns,
             // don't return token or sshPassphrase
         }));
     }
@@ -294,9 +298,11 @@ public class ConfigHandler : HandlerBase
         {
             Send(IpcResponse.Progress("INIT_CONFIG", "正在从远程仓库拉取文件，请稍候..."));
 
-            // wire up real-time progress from git transfer
+            // wire up real-time progress from git transfer + LFS warnings during post-clone auto-detect
             _gitService.OnTransferProgress = p =>
                 Send(IpcResponse.Progress("INIT_CONFIG", $"正在从远程仓库拉取文件... {p.Percent}%", p.Percent, p.Detail));
+            _gitService.OnLfsDownloadProgress = msg =>
+                Send(IpcResponse.Progress("INIT_CONFIG", msg));
 
             if (_adapter.SupportsJunction)
             {
@@ -342,6 +348,7 @@ public class ConfigHandler : HandlerBase
             }
 
             _gitService.OnTransferProgress = null;
+            _gitService.OnLfsDownloadProgress = null;
         }
 
         // junction mode: link game folder to repo working tree

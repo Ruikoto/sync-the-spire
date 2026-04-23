@@ -44,6 +44,13 @@ public class GitService
     /// </summary>
     public Action<GitTransferProgress>? OnTransferProgress { get; set; }
 
+    /// <summary>
+    /// fires during git-lfs download if the binary needs to be fetched
+    /// </summary>
+    public Action<string>? OnLfsDownloadProgress { get; set; }
+
+    public bool IsLfsAvailable => _resolver.GetGitLfsPath() != null;
+
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
     private string WorkTreePath => _config.WorkTreePath;
@@ -254,6 +261,43 @@ public class GitService
     }
 
     /// <summary>
+    /// run git-lfs.exe directly with proper git dir env vars
+    /// </summary>
+    private string RunGitLfsCli(string args, int timeout = 120_000)
+    {
+        var lfsPath = _resolver.GetGitLfsPath()
+            ?? throw new InvalidOperationException("git-lfs.exe 不可用，请先启用大文件上传功能。");
+        LogService.Info($"git-lfs.exe {args}");
+        var psi = new ProcessStartInfo
+        {
+            FileName = lfsPath,
+            WorkingDirectory = WorkTreePath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var arg in SplitArgs(args))
+            psi.ArgumentList.Add(arg);
+        ConfigureGitEnv(psi);
+
+        using var proc = Process.Start(psi)!;
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        var stdout = proc.StandardOutput.ReadToEnd();
+
+        if (!proc.WaitForExit(timeout))
+        {
+            proc.Kill();
+            throw new InvalidOperationException($"git-lfs {psi.ArgumentList.FirstOrDefault()} timed out after {timeout / 1000}s");
+        }
+
+        var stderr = stderrTask.Result;
+        if (proc.ExitCode != 0)
+            throw new InvalidOperationException($"git-lfs {psi.ArgumentList.FirstOrDefault()} failed: {stderr.Trim()}");
+        return stdout;
+    }
+
+    /// <summary>
     /// open repo via the separated git dir
     /// </summary>
     private Repository OpenRepo() => new(GitDirPath);
@@ -274,6 +318,9 @@ public class GitService
 
         // use info/exclude instead of .gitignore (keeps working tree pristine)
         EnsureExcludeRules();
+
+        // auto-detect LFS config in the cloned repo before we clean artifacts
+        DetectAndInstallLfsIfNeeded();
 
         // remove .gitignore from working tree if the remote repo had one
         // (it stays tracked in git, just not physically in our working tree junction)
@@ -398,6 +445,10 @@ public class GitService
 
         // clean untracked files (git clean -fd)
         CleanUntracked(repo);
+
+        // materialize LFS pointers → real content; without this "拉取后本地=远程" is broken
+        // for repos using LFS (since SYNC_OTHER_BRANCH is the primary pull path from the UI).
+        DetectAndInstallLfsIfNeeded();
     }
 
     // ── my branch (mode 3) ───────────────────────────────────────────────
@@ -452,9 +503,12 @@ public class GitService
         if (localTip.Sha == remoteTip.Sha)
             return new SyncStatus(0, 0, true);
 
-        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
+        var mergeBase = TryFindMergeBase(repo, localTip, remoteTip);
+        if (mergeBase is null)
+            return new SyncStatus(0, 0, true);
+
         int ahead = 0, behind = 0;
-        if (mergeBase is not null)
+        try
         {
             ahead = repo.Commits.QueryBy(new CommitFilter
             {
@@ -466,6 +520,11 @@ public class GitService
                 IncludeReachableFrom = remoteTip,
                 ExcludeReachableFrom = mergeBase
             }).Count();
+        }
+        catch (NotFoundException)
+        {
+            // object missing mid-traversal — local db is incomplete; counts unknown
+            return new SyncStatus(0, 0, true);
         }
         return new SyncStatus(ahead, behind, true);
     }
@@ -497,9 +556,12 @@ public class GitService
         if (localTip.Sha == remoteTip.Sha)
             return new SyncStatus(0, 0, true);
 
-        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
+        var mergeBase = TryFindMergeBase(repo, localTip, remoteTip);
+        if (mergeBase is null)
+            return new SyncStatus(0, 0, true);
+
         int ahead = 0, behind = 0;
-        if (mergeBase is not null)
+        try
         {
             ahead = repo.Commits.QueryBy(new CommitFilter
             {
@@ -511,6 +573,10 @@ public class GitService
                 IncludeReachableFrom = remoteTip,
                 ExcludeReachableFrom = mergeBase
             }).Count();
+        }
+        catch (NotFoundException)
+        {
+            return new SyncStatus(0, 0, true);
         }
         return new SyncStatus(ahead, behind, true);
     }
@@ -526,8 +592,11 @@ public class GitService
         if (IsProtectedBranch(repo.Head.FriendlyName))
             throw new InvalidOperationException($"不允许推送到受保护的分支：{repo.Head.FriendlyName}");
 
+        var preCommitSha = repo.Head.Tip?.Sha;
+        bool committedThisCall = false;
+
         // stage everything
-        Commands.Stage(repo, "*");
+        StageAll(repo);
 
         var status = repo.RetrieveStatus(new StatusOptions());
         if (status.IsDirty)
@@ -536,6 +605,7 @@ public class GitService
             var sig = MakeSignature(ws, ReadGitGlobalConfig("user.email"));
             var msg = BuildCommitMessage(status);
             repo.Commit(msg, sig, sig);
+            committedThisCall = true;
             LogService.Info($"Committed: {msg}");
         }
 
@@ -550,7 +620,16 @@ public class GitService
         }
 
         // local is ahead or up-to-date — safe to push
-        PushCurrentBranch(repo);
+        try { PushCurrentBranch(repo); }
+        catch
+        {
+            if (committedThisCall && preCommitSha != null)
+            {
+                RunGitCli($"reset --soft {preCommitSha}");
+                LogService.Warn("Push failed, rolled back local commit to preserve working tree");
+            }
+            throw;
+        }
         return true;
     }
 
@@ -584,6 +663,7 @@ public class GitService
 
         repo.Reset(ResetMode.Hard, remoteBranch.Tip);
         CleanUntracked(repo);
+        DetectAndInstallLfsIfNeeded();
     }
 
     /// <summary>
@@ -592,7 +672,7 @@ public class GitService
     public void SilentCommitIfDirty()
     {
         using var repo = OpenRepo();
-        Commands.Stage(repo, "*");
+        StageAll(repo);
 
         var status = repo.RetrieveStatus(new StatusOptions());
         if (!status.IsDirty) return;
@@ -673,11 +753,330 @@ public class GitService
             return BranchDivergence.UpToDate;
 
         // is remote tip an ancestor of local? -> local is simply ahead
-        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
-        if (mergeBase?.Sha == remoteTip.Sha)
+        var mergeBase = TryFindMergeBase(repo, localTip, remoteTip);
+        if (mergeBase is null)
+            return BranchDivergence.Diverged;
+
+        if (mergeBase.Sha == remoteTip.Sha)
             return BranchDivergence.LocalAhead;
 
         return BranchDivergence.Diverged;
+    }
+
+    // null-safe wrapper — LibGit2Sharp stale object db can throw after git.exe fallback fetches
+    private static Commit? TryFindMergeBase(Repository repo, Commit a, Commit b)
+    {
+        try { return repo.ObjectDatabase.FindMergeBase(a, b); }
+        catch (Exception) { return null; }
+    }
+
+    // host-based file size limits for pre-commit preflight
+    private static readonly (string HostContains, int Mib)[] HostLimits =
+    [
+        ("github.com",    99),
+        ("atomgit.com",   99),
+        ("gitcode.com",   99),
+        ("gitlab.com",    99),
+        ("bitbucket.org", 99),
+        ("gitee.com",     49),
+    ];
+
+    public record LargeFile(string RelativePath, long SizeBytes);
+
+    public record OrphanResult(string Branch, bool Success, string? Error);
+
+    /// <summary>
+    /// lowercased repo host (github.com, gitee.com, etc.). handles HTTPS and SSH urls.
+    /// returns empty string if the url can't be parsed.
+    /// </summary>
+    public static string GetRepoHost(string repoUrl)
+    {
+        if (string.IsNullOrWhiteSpace(repoUrl)) return string.Empty;
+
+        if (Uri.TryCreate(repoUrl, UriKind.Absolute, out var uri))
+            return uri.Host.ToLowerInvariant();
+
+        if (repoUrl.StartsWith("git@"))
+        {
+            var at = repoUrl.IndexOf('@');
+            var colon = repoUrl.IndexOf(':', at);
+            var host = colon > at ? repoUrl[(at + 1)..colon] : repoUrl[(at + 1)..];
+            return host.ToLowerInvariant();
+        }
+
+        return repoUrl.ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// resolve effective size limit from settings; auto-detects based on repo host
+    /// </summary>
+    public long GetEffectiveSizeLimitBytes()
+    {
+        var ws = _config.Workspace;
+        if (ws.MaxFileSizeMode == "unlimited") return long.MaxValue;
+        if (ws.MaxFileSizeMode == "manual") return (long)ws.MaxFileSizeManualMib * 1024 * 1024;
+
+        var host = GetRepoHost(ws.RepoUrl);
+        foreach (var (hostContains, mib) in HostLimits)
+            if (host.Contains(hostContains, StringComparison.OrdinalIgnoreCase))
+                return (long)mib * 1024 * 1024;
+
+        return 49L * 1024 * 1024; // conservative default
+    }
+
+    /// <summary>
+    /// scan working tree for files that exceed the size limit; uses git ls-files to respect .gitignore
+    /// </summary>
+    public List<LargeFile> ScanLargeFiles(long limitBytes)
+    {
+        var output = RunGitCli("ls-files --others --exclude-standard --modified --cached -z");
+        var result = new List<LargeFile>();
+
+        foreach (var rel in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fullPath = Path.Combine(WorkTreePath, rel.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(fullPath)) continue;
+            var size = new FileInfo(fullPath).Length;
+            if (size > limitBytes)
+                result.Add(new LargeFile(rel, size));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// append exclude patterns to git's info/exclude, deduplicating existing entries
+    /// </summary>
+    public void AppendExcludeRules(IEnumerable<string> patterns)
+    {
+        var infoDir = Path.Combine(GitDirPath, "info");
+        Directory.CreateDirectory(infoDir);
+        var excludePath = Path.Combine(infoDir, "exclude");
+
+        var existing = File.Exists(excludePath)
+            ? new HashSet<string>(File.ReadAllLines(excludePath), StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var toAdd = patterns.Where(p => !existing.Contains(p)).ToList();
+        if (toAdd.Count == 0) return;
+
+        using var writer = File.AppendText(excludePath);
+        foreach (var p in toAdd)
+            writer.WriteLine(p);
+    }
+
+    /// <summary>
+    /// install LFS hooks in the separated git dir and mark workspace as LFS-enabled.
+    /// downloads git-lfs.exe if not already available.
+    /// </summary>
+    public void EnableLfs()
+    {
+        _resolver.OnProgress = p => OnLfsDownloadProgress?.Invoke(p.Message);
+        try { _resolver.EnsureGitLfs(); }
+        finally { _resolver.OnProgress = null; }
+
+        RunGitLfsCli("install --local");
+
+        var ws = _config.Workspace;
+        ws.LfsEnabled = true;
+        _config.SaveWorkspace();
+        LogService.Info("Git LFS enabled for workspace");
+    }
+
+    /// <summary>
+    /// run `git lfs track` for each pattern, update .gitattributes in working tree.
+    /// only adds patterns not already tracked.
+    /// </summary>
+    public void TrackLfsPatterns(IEnumerable<string> patterns)
+    {
+        var ws = _config.Workspace;
+        var toAdd = patterns
+            .Where(p => !ws.LfsTrackedPatterns.Contains(p, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var pattern in toAdd)
+        {
+            RunGitLfsCli($"track \"{pattern}\"");
+            ws.LfsTrackedPatterns.Add(pattern);
+            LogService.Info($"LFS tracking: {pattern}");
+        }
+
+        if (toAdd.Count > 0)
+            _config.SaveWorkspace();
+    }
+
+    /// <summary>
+    /// list local branch names (via git.exe so stale LibGit2Sharp DB isn't an issue).
+    /// protected branches and the sentinel _init branch are filtered out.
+    /// </summary>
+    public List<string> GetMigratableLocalBranches()
+    {
+        var output = RunGitCli("branch --format=%(refname:short)");
+        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => !string.IsNullOrEmpty(l) && !IsProtectedBranch(l) && l != InitBranch)
+            .ToList();
+    }
+
+    /// <summary>
+    /// rewrite branch history to replace blobs with LFS pointers, then force push.
+    /// runs a single `migrate import` covering every branch in <paramref name="branches"/>,
+    /// then checks out and force-pushes each branch in turn.
+    /// for files that are already committed — use TrackLfsPatterns + CommitAndPush for new files instead.
+    /// </summary>
+    public void MigrateToLfsAndPush(IEnumerable<string> patterns, IReadOnlyList<string> branches)
+    {
+        if (branches.Count == 0)
+            throw new InvalidOperationException("没有可迁移的分支");
+        foreach (var b in branches)
+            if (IsProtectedBranch(b))
+                throw new InvalidOperationException($"不允许在受保护的分支上执行 LFS 迁移：{b}");
+
+        var patternList = patterns.ToList();
+        if (patternList.Count == 0)
+            throw new InvalidOperationException("没有要迁移的文件");
+
+        // build args manually — one --include= and one --include-ref= per item.
+        // quoting each flag individually keeps paths/refs with spaces safe, and the
+        // comma-separated form of --include would misparse anything containing a comma.
+        var args = new StringBuilder("migrate import");
+        foreach (var pat in patternList) args.Append($" \"--include={pat}\"");
+        foreach (var br in branches) args.Append($" \"--include-ref=refs/heads/{br}\"");
+
+        LogService.Info($"Starting LFS migration: {branches.Count} branch(es), {patternList.Count} pattern(s)");
+        RunGitLfsCli(args.ToString(), timeout: 600_000);
+
+        var savedBranch = GetCurrentBranch();
+
+        foreach (var br in branches)
+        {
+            RunGitCli($"checkout \"{br}\"");
+
+            // open fresh repo view (migrate rewrote history, previous SHA references are stale)
+            using var repo = OpenRepo();
+            var localTip = repo.Head.Tip.Sha;
+
+            LogService.Info($"LFS migration complete for {br}, force pushing");
+            RunGitCli($"push --force-with-lease -u origin \"{br}\"", timeout: 300_000);
+            VerifyPushResult(br, localTip);
+            LogService.Info($"LFS migration push verified for {br}");
+        }
+
+        // restore original branch if it exists and wasn't in the migration set
+        if (!string.IsNullOrEmpty(savedBranch) && savedBranch != InitBranch && !branches.Contains(savedBranch))
+            try { RunGitCli($"checkout \"{savedBranch}\""); } catch { }
+    }
+
+    // detect LFS filter rules in .gitattributes and install git-lfs hooks if found.
+    // also runs `lfs checkout` so the working tree ends up with real content, not pointer text —
+    // otherwise "拉取后本地=远程" is broken for LFS repos.
+    // failures here are non-fatal to the caller (clone/reset already succeeded) but the user
+    // needs to know: we surface a visible warning via OnLfsDownloadProgress so at least
+    // some UI lands instead of a silent log line.
+    private void DetectAndInstallLfsIfNeeded()
+    {
+        var gitattributes = Path.Combine(WorkTreePath, ".gitattributes");
+        if (!File.Exists(gitattributes)) return;
+        if (!File.ReadAllText(gitattributes).Contains("filter=lfs")) return;
+
+        try
+        {
+            _resolver.EnsureGitLfs();
+            RunGitLfsCli("install --local");
+
+            // materialize pointer files into real content — without this, freshly-reset
+            // working trees still look like text files containing "version https://git-lfs..."
+            try { RunGitLfsCli("checkout", timeout: 600_000); }
+            catch (Exception chEx)
+            {
+                LogService.Warn($"lfs checkout failed: {chEx.Message}");
+                OnLfsDownloadProgress?.Invoke(
+                    "⚠ 大文件内容拉取失败，部分文件可能为占位符。请检查网络后再次点击拉取。");
+            }
+
+            var ws = _config.Workspace;
+            if (!ws.LfsEnabled)
+            {
+                ws.LfsEnabled = true;
+                _config.SaveWorkspace();
+            }
+            LogService.Info("LFS auto-detected from .gitattributes and installed");
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"LFS auto-detect failed: {ex.Message}");
+            // surface to the user — a silent failure here means game reads pointer text and breaks
+            OnLfsDownloadProgress?.Invoke(
+                $"⚠ 检测到仓库使用大文件（LFS）但组件安装失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// rebuild each specified branch as an orphan commit and force-push to remote.
+    /// this rewrites history, removing large files from all prior commits.
+    /// calls onProgress(branch, index, total) before each branch.
+    /// </summary>
+    public List<OrphanResult> RebuildBranchesAsOrphan(List<string> branches, Action<string, int, int>? onProgress = null)
+    {
+        var results = new List<OrphanResult>();
+        var filtered = branches
+            .Where(b => !IsProtectedBranch(b) && b != InitBranch)
+            .ToList();
+
+        string? savedBranch = null;
+        try { savedBranch = GetCurrentBranch(); } catch { }
+
+        // try to unshallow first; silently ignore if already full clone
+        try { RunGitCli("fetch --unshallow", timeout: 300_000); } catch { }
+
+        for (int i = 0; i < filtered.Count; i++)
+        {
+            var branch = filtered[i];
+            onProgress?.Invoke(branch, i, filtered.Count);
+            try
+            {
+                RunGitCli($"checkout \"{branch}\"");
+                RunGitCli("checkout --orphan __orphan_tmp");
+                RunGitCli("reset");
+                RunGitCli("add -A");
+                RunGitCli($"commit -m \"Sync cleanup: rebuilt history\"");
+                RunGitCli($"branch -D \"{branch}\"");
+                RunGitCli($"branch -m \"{branch}\"");
+                RunGitCli($"push --force-with-lease origin \"{branch}\"", timeout: 300_000);
+
+                // verify push
+                var localSha = RunGitCli("rev-parse HEAD").Trim();
+                VerifyPushResult(branch, localSha);
+
+                results.Add(new OrphanResult(branch, true, null));
+                LogService.Info($"Orphan rebuilt: {branch}");
+            }
+            catch (Exception ex)
+            {
+                LogService.Warn($"Orphan rebuild failed for {branch}: {ex.Message}");
+                results.Add(new OrphanResult(branch, false, ex.Message));
+                // best-effort cleanup: HEAD may still point at __orphan_tmp, so `branch -D` would
+                // refuse. step away from it first — prefer the target branch (it still exists if
+                // the failure was before `branch -D <target>`), fall back to savedBranch, fall
+                // back to any other branch we can find.
+                try { RunGitCli($"checkout --force \"{branch}\""); }
+                catch
+                {
+                    if (!string.IsNullOrEmpty(savedBranch))
+                        try { RunGitCli($"checkout --force \"{savedBranch}\""); } catch { }
+                }
+                try { RunGitCli("branch -D __orphan_tmp"); } catch { }
+            }
+        }
+
+        // one gc pass at the end to reclaim local space
+        try { RunGitCli("gc --prune=now --aggressive", timeout: 600_000); } catch { }
+
+        // restore original branch
+        if (savedBranch != null && savedBranch != InitBranch)
+            try { RunGitCli($"checkout \"{savedBranch}\""); } catch { }
+
+        return results;
     }
 
     public static bool IsProtectedBranch(string branchName) =>
@@ -958,20 +1357,49 @@ public class GitService
         var infoDir = Path.Combine(GitDirPath, "info");
         Directory.CreateDirectory(infoDir);
         var excludePath = Path.Combine(infoDir, "exclude");
-        File.WriteAllText(excludePath, DefaultExcludeRules);
+
+        // merge-style write — preserve anything already in the file (user-added exclusion rules
+        // from AppendExcludeRules must not be wiped). only append default lines that aren't present.
+        var existing = new HashSet<string>(
+            File.Exists(excludePath) ? File.ReadAllLines(excludePath) : [],
+            StringComparer.OrdinalIgnoreCase);
+
+        var toAdd = DefaultExcludeRules
+            .Split('\n')
+            .Select(l => l.TrimEnd('\r'))
+            .Where(l => !existing.Contains(l))
+            .ToList();
+
+        if (toAdd.Count == 0) return;
+
+        using var writer = File.AppendText(excludePath);
+        foreach (var l in toAdd)
+            writer.WriteLine(l);
     }
 
     /// <summary>
     /// remove .gitignore / .gitattributes etc from working tree if they came from the remote
     /// </summary>
+    // use git.exe when LFS is enabled so the clean filter runs and files become LFS pointers
+    private void StageAll(Repository repo)
+    {
+        if (_config.Workspace.LfsEnabled)
+            RunGitCli("add -A");
+        else
+            Commands.Stage(repo, "*");
+    }
+
     private void CleanGitArtifactsFromWorkTree()
     {
-        string[] artifacts = [".gitignore", ".gitattributes"];
-        foreach (var name in artifacts)
+        // always remove .gitignore — we manage exclusions via info/exclude
+        var gitignore = Path.Combine(WorkTreePath, ".gitignore");
+        if (File.Exists(gitignore)) File.Delete(gitignore);
+
+        // keep .gitattributes when LFS is active — it holds the filter rules
+        if (!_config.Workspace.LfsEnabled)
         {
-            var path = Path.Combine(WorkTreePath, name);
-            if (File.Exists(path))
-                File.Delete(path);
+            var gitattributes = Path.Combine(WorkTreePath, ".gitattributes");
+            if (File.Exists(gitattributes)) File.Delete(gitattributes);
         }
     }
 

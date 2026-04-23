@@ -228,7 +228,26 @@
     "authorName": "Ruikoto",
     "checkUpdate": "Check for Updates",
     "docs": "User Guide",
-    "upToDate": "(up to date)"
+    "upToDate": "(up to date)",
+    "advancedSettings": "Advanced Settings",
+    "fileSizeLimit": "File Size Limit",
+    "fileSizeLimitAuto": "Auto-detect (recommended)",
+    "fileSizeLimitManual": "Manual",
+    "fileSizeLimitUnlimited": "No limit",
+    "fileSizeLimitMib": "{n} MiB",
+    "fileSizeLimitManualLabel": "Limit (MiB)",
+    "fileSizeLimitWarn": "Raising or removing this limit may leave your local repo in a broken state if a push fails. Only change it if you know your platform's actual limit.",
+    "fileSizeLimitRelaxTitle": "Raise size limit?",
+    "fileSizeLimitRelaxMessage": "You're raising or removing the file size limit. If it exceeds your platform's actual limit, pushes will fail. Continue?",
+    "cleanBranches": "Clean Branch History",
+    "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history.",
+    "lfs": "Large File Upload (Git LFS)",
+    "lfsEnabled": "Enabled",
+    "lfsDisabled": "Not enabled",
+    "lfsTracked": "Tracking: {patterns}",
+    "lfsMigrate": "Enable LFS for Existing Large Files",
+    "lfsMigrateDesc": "Convert large files already in repo history to LFS storage to shrink the repo.",
+    "lfsSuccess": "Git LFS enabled. Large files will be uploaded via LFS."
   },
   "modals": {
     "welcome": {
@@ -260,6 +279,40 @@
       "currentAccount": "Current account",
       "noSave": "No saves",
       "notFound": "No valid save folder found"
+    },
+    "preflight": {
+      "title": "Oversized Files Detected",
+      "desc": "The following files exceed the {limitMib} MiB limit{reason}. Choose how to proceed:",
+      "autoReason": " ({reason})",
+      "excludeAndPush": "Exclude these files and continue",
+      "enableLfs": "Enable large file upload (Git LFS)",
+      "lfsNote": "Uses Git LFS; first-time setup rewrites history",
+      "cancel": "Cancel"
+    },
+    "migrateLfs": {
+      "title": "Enable LFS for Existing Large Files",
+      "desc": "Automatically scans for files exceeding the size limit and converts their history to LFS storage.",
+      "warning": "This rewrites branch history and force-pushes. Other devices will auto-catch-up on next sync.",
+      "confirm": "Start Migration",
+      "success": "LFS migration complete! History rewritten, large files now stored via LFS.",
+      "error": "LFS migration failed"
+    },
+    "giteeLfs": {
+      "title": "Gitee doesn't support LFS",
+      "message": "Gitee's free tier doesn't support Git LFS — pushes will fail after enabling it. Consider moving to GitHub, AtomGit, or another LFS-supporting platform. Proceed anyway?"
+    },
+    "cleanBranches": {
+      "title": "Clean Branch History",
+      "warning": "This will rewrite the entire commit history of the selected branches and force-push to the remote. Other devices will automatically catch up on next sync. This cannot be undone.",
+      "selectBranches": "Select branches to clean",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "noBranches": "No branches available",
+      "confirm": "Confirm",
+      "processing": "Rebuilding {branch} ({current}/{total})...",
+      "gcDone": "Cleaning up local history...",
+      "done": "Done: {success} succeeded, {fail} failed",
+      "failed": "Failed"
     }
   },
   "modDiff": {
@@ -285,7 +338,8 @@
     "upToDate": "\u2713 Up to date",
     "newBranch": "New branch, not yet pushed to remote",
     "localChanges": "\u2191 Local changes not yet pushed",
-    "remoteChanges": "\u2193 {count} new remote change(s)"
+    "remoteChanges": "\u2193 {count} new remote change(s)",
+    "historyRewritten": "\u26a0 Remote branch history was rebuilt \u2014 click to sync"
   },
   "toast": {
     "nightlyBuild": "This is an unofficial build. Visit About to download the latest release.",
