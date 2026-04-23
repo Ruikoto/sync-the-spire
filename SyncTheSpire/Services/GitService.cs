@@ -342,24 +342,48 @@ public class GitService
         var remote = repo.Network.Remotes["origin"];
         if (remote is null) return [];
 
-        return repo.Branches
-            .Where(b => b.IsRemote &&
-                        b.FriendlyName.StartsWith("origin/") &&
-                        !b.FriendlyName.EndsWith("/HEAD"))
-            .Select(b => new BranchInfo(
-                b.FriendlyName.Replace("origin/", ""),
-                b.Tip.Author.Name,
-                b.Tip.Author.When))
-            .Where(b => !IsProtectedBranch(b.Name) && b.Name != InitBranch)
-            .OrderByDescending(b => b.LastModified)
-            .ToList();
+        // `.Tip.Author.*` will throw NotFoundException if the branch tip references an object
+        // the local object DB doesn't have (shallow boundary / stale db). Skip those branches
+        // rather than failing the whole listing.
+        var results = new List<BranchInfo>();
+        foreach (var b in repo.Branches)
+        {
+            if (!b.IsRemote) continue;
+            if (!b.FriendlyName.StartsWith("origin/")) continue;
+            if (b.FriendlyName.EndsWith("/HEAD")) continue;
+
+            var name = b.FriendlyName.Replace("origin/", "");
+            if (IsProtectedBranch(name) || name == InitBranch) continue;
+
+            try
+            {
+                var tip = b.Tip;
+                results.Add(new BranchInfo(name, tip.Author.Name, tip.Author.When));
+            }
+            catch (LibGit2SharpException ex)
+            {
+                LogService.Warn($"[GetRemoteBranches] skipping {b.FriendlyName}: {ex.Message}");
+            }
+        }
+        return results.OrderByDescending(b => b.LastModified).ToList();
     }
 
     public bool HasLocalChanges()
     {
-        using var repo = OpenRepo();
-        var status = repo.RetrieveStatus(new StatusOptions());
-        return status.IsDirty;
+        try
+        {
+            using var repo = OpenRepo();
+            var status = repo.RetrieveStatus(new StatusOptions());
+            return status.IsDirty;
+        }
+        catch (LibGit2SharpException ex)
+        {
+            // object-db inconsistency (shallow boundary / stale db) can blow up RetrieveStatus
+            // — degrading to "no local changes" keeps refresh alive; if the user really has
+            // changes they'll find out on the next push attempt.
+            LogService.Warn($"[HasLocalChanges] {ex.GetType().Name}: {ex.Message} — assuming clean");
+            return false;
+        }
     }
 
     // ── sync (mode 2 - force checkout remote branch) ────────────────────
@@ -443,31 +467,43 @@ public class GitService
         using var repo = OpenRepo();
         FetchAll(repo);
 
-        var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
-        if (remoteBranch is null)
-            return new SyncStatus(0, 0, HasRemoteBranch: false);
-
-        var localTip = repo.Head.Tip;
-        var remoteTip = remoteBranch.Tip;
-        if (localTip.Sha == remoteTip.Sha)
-            return new SyncStatus(0, 0, true);
-
-        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
-        int ahead = 0, behind = 0;
-        if (mergeBase is not null)
+        // shallow clone + fetch = commit history has a boundary where parent SHAs reference
+        // objects that don't exist locally. `.Tip`, `FindMergeBase`, or rev-walking any of
+        // the returned commits can all trip on this. We catch the whole read path and degrade
+        // to "status unknown" rather than failing the whole refresh.
+        try
         {
-            ahead = repo.Commits.QueryBy(new CommitFilter
+            var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
+            if (remoteBranch is null)
+                return new SyncStatus(0, 0, HasRemoteBranch: false);
+
+            var localTip = repo.Head.Tip;
+            var remoteTip = remoteBranch.Tip;
+            if (localTip.Sha == remoteTip.Sha)
+                return new SyncStatus(0, 0, true);
+
+            var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
+            int ahead = 0, behind = 0;
+            if (mergeBase is not null)
             {
-                IncludeReachableFrom = localTip,
-                ExcludeReachableFrom = mergeBase
-            }).Count();
-            behind = repo.Commits.QueryBy(new CommitFilter
-            {
-                IncludeReachableFrom = remoteTip,
-                ExcludeReachableFrom = mergeBase
-            }).Count();
+                ahead = repo.Commits.QueryBy(new CommitFilter
+                {
+                    IncludeReachableFrom = localTip,
+                    ExcludeReachableFrom = mergeBase
+                }).Count();
+                behind = repo.Commits.QueryBy(new CommitFilter
+                {
+                    IncludeReachableFrom = remoteTip,
+                    ExcludeReachableFrom = mergeBase
+                }).Count();
+            }
+            return new SyncStatus(ahead, behind, true);
         }
-        return new SyncStatus(ahead, behind, true);
+        catch (LibGit2SharpException ex)
+        {
+            LogService.Warn($"[FetchAndGetSyncStatus] {ex.GetType().Name}: {ex.Message} — returning unknown status");
+            return new SyncStatus(0, 0, true);
+        }
     }
 
     /// <summary>
@@ -487,32 +523,39 @@ public class GitService
     public SyncStatus GetSyncStatus()
     {
         using var repo = OpenRepo();
-
-        var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
-        if (remoteBranch is null)
-            return new SyncStatus(0, 0, HasRemoteBranch: false);
-
-        var localTip = repo.Head.Tip;
-        var remoteTip = remoteBranch.Tip;
-        if (localTip.Sha == remoteTip.Sha)
-            return new SyncStatus(0, 0, true);
-
-        var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
-        int ahead = 0, behind = 0;
-        if (mergeBase is not null)
+        try
         {
-            ahead = repo.Commits.QueryBy(new CommitFilter
+            var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
+            if (remoteBranch is null)
+                return new SyncStatus(0, 0, HasRemoteBranch: false);
+
+            var localTip = repo.Head.Tip;
+            var remoteTip = remoteBranch.Tip;
+            if (localTip.Sha == remoteTip.Sha)
+                return new SyncStatus(0, 0, true);
+
+            var mergeBase = repo.ObjectDatabase.FindMergeBase(localTip, remoteTip);
+            int ahead = 0, behind = 0;
+            if (mergeBase is not null)
             {
-                IncludeReachableFrom = localTip,
-                ExcludeReachableFrom = mergeBase
-            }).Count();
-            behind = repo.Commits.QueryBy(new CommitFilter
-            {
-                IncludeReachableFrom = remoteTip,
-                ExcludeReachableFrom = mergeBase
-            }).Count();
+                ahead = repo.Commits.QueryBy(new CommitFilter
+                {
+                    IncludeReachableFrom = localTip,
+                    ExcludeReachableFrom = mergeBase
+                }).Count();
+                behind = repo.Commits.QueryBy(new CommitFilter
+                {
+                    IncludeReachableFrom = remoteTip,
+                    ExcludeReachableFrom = mergeBase
+                }).Count();
+            }
+            return new SyncStatus(ahead, behind, true);
         }
-        return new SyncStatus(ahead, behind, true);
+        catch (LibGit2SharpException ex)
+        {
+            LogService.Warn($"[GetSyncStatus] {ex.GetType().Name}: {ex.Message} — returning unknown status");
+            return new SyncStatus(0, 0, true);
+        }
     }
 
     /// <summary>
