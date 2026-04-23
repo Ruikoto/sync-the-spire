@@ -517,20 +517,7 @@ public class GitService
     {
         using var repo = OpenRepo();
         FetchAll(repo);
-
-        // shallow clone + fetch = commit history has a boundary where parent SHAs reference
-        // objects that don't exist locally. `.Tip`, `FindMergeBase`, or rev-walking any of
-        // the returned commits can all trip on this. We catch the whole read path and degrade
-        // to "status unknown" rather than failing the whole refresh.
-        try
-        {
-            return ReadSyncStatus(repo);
-        }
-        catch (LibGit2SharpException ex)
-        {
-            LogService.Warn($"[FetchAndGetSyncStatus] {ex.GetType().Name}: {ex.Message} — returning unknown status");
-            return new SyncStatus(0, 0, true);
-        }
+        return ReadSyncStatus(repo);
     }
 
     /// <summary>
@@ -550,45 +537,59 @@ public class GitService
     public SyncStatus GetSyncStatus()
     {
         using var repo = OpenRepo();
+        return ReadSyncStatus(repo);
+    }
+
+    // shared read path for both sync-status APIs. structured so the UI can tell apart three
+    // states: truly in sync, definitely has remote updates with known count, and "tips differ
+    // but count unknown" (shallow boundary fallout). Last case returns behind=-1 so the
+    // frontend surfaces a "remote has changes" prompt instead of falsely showing "up to date".
+    private static SyncStatus ReadSyncStatus(Repository repo)
+    {
+        // step 1 — read tips. if this fails we truly know nothing; degrade to "looks synced".
+        Commit localTip, remoteTip;
         try
         {
-            return ReadSyncStatus(repo);
+            var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
+            if (remoteBranch is null)
+                return new SyncStatus(0, 0, HasRemoteBranch: false);
+            localTip = repo.Head.Tip;
+            remoteTip = remoteBranch.Tip;
         }
         catch (LibGit2SharpException ex)
         {
-            LogService.Warn($"[GetSyncStatus] {ex.GetType().Name}: {ex.Message} — returning unknown status");
+            LogService.Warn($"[ReadSyncStatus] cannot read tips: {ex.GetType().Name}: {ex.Message}");
             return new SyncStatus(0, 0, true);
         }
-    }
 
-    // shared read path for both sync-status APIs. assumes caller has already fetched (or not).
-    // caller is responsible for wrapping in try/catch against shallow-boundary / stale-db fallout.
-    private static SyncStatus ReadSyncStatus(Repository repo)
-    {
-        var remoteBranch = repo.Branches[$"origin/{repo.Head.FriendlyName}"];
-        if (remoteBranch is null)
-            return new SyncStatus(0, 0, HasRemoteBranch: false);
-
-        var localTip = repo.Head.Tip;
-        var remoteTip = remoteBranch.Tip;
         if (localTip.Sha == remoteTip.Sha)
             return new SyncStatus(0, 0, true);
 
-        var mergeBase = TryFindMergeBase(repo, localTip, remoteTip);
-        if (mergeBase is null)
-            return new SyncStatus(0, 0, true);
+        // step 2 — tips differ, so updates definitely exist. try to count precisely; if the
+        // walk hits a shallow boundary, surface "behind=-1" sentinel.
+        try
+        {
+            var mergeBase = TryFindMergeBase(repo, localTip, remoteTip);
+            if (mergeBase is null)
+                return new SyncStatus(0, -1, true);
 
-        var ahead = repo.Commits.QueryBy(new CommitFilter
+            var ahead = repo.Commits.QueryBy(new CommitFilter
+            {
+                IncludeReachableFrom = localTip,
+                ExcludeReachableFrom = mergeBase
+            }).Count();
+            var behind = repo.Commits.QueryBy(new CommitFilter
+            {
+                IncludeReachableFrom = remoteTip,
+                ExcludeReachableFrom = mergeBase
+            }).Count();
+            return new SyncStatus(ahead, behind, true);
+        }
+        catch (LibGit2SharpException ex)
         {
-            IncludeReachableFrom = localTip,
-            ExcludeReachableFrom = mergeBase
-        }).Count();
-        var behind = repo.Commits.QueryBy(new CommitFilter
-        {
-            IncludeReachableFrom = remoteTip,
-            ExcludeReachableFrom = mergeBase
-        }).Count();
-        return new SyncStatus(ahead, behind, true);
+            LogService.Warn($"[ReadSyncStatus] diff detected but count failed: {ex.GetType().Name}: {ex.Message}");
+            return new SyncStatus(0, -1, true);
+        }
     }
 
     /// <summary>

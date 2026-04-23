@@ -97,7 +97,10 @@ function updateSyncStatusLine() {
 
     // combine uncommitted local changes + unpushed commits into a single "local" concept
     const hasLocal = ws.lastHasLocalChanges || s.ahead > 0;
-    const hasRemote = s.behind > 0;
+    // behind < 0 is a sentinel: backend knows tips differ but couldn't walk history
+    // (shallow boundary). treat as "remote has changes, count unknown".
+    const remoteUnknownCount = s.behind < 0;
+    const hasRemote = s.behind > 0 || remoteUnknownCount;
 
     if (!hasLocal && !hasRemote) {
         text.textContent = I18n.t('sync.upToDate');
@@ -114,7 +117,11 @@ function updateSyncStatusLine() {
     }
 
     const parts = [];
-    if (hasRemote) parts.push(I18n.t('sync.remoteChanges', { count: s.behind }));
+    if (hasRemote) {
+        parts.push(remoteUnknownCount
+            ? I18n.t('sync.remoteChangesUnknown')
+            : I18n.t('sync.remoteChanges', { count: s.behind }));
+    }
     if (hasLocal) parts.push(I18n.t('sync.localChanges'));
     text.textContent = parts.join('，');
     text.className = hasRemote ? 'text-xs text-spire-warn' : 'text-xs text-spire-accentHover';

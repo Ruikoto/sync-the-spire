@@ -339,6 +339,7 @@
     "newBranch": "新分支，尚未推送到远端",
     "localChanges": "↑ 有本地改动未上传",
     "remoteChanges": "↓ 远端有 {count} 处新改动",
+    "remoteChangesUnknown": "↓ 远端有新改动",
     "historyRewritten": "⚠ 云端分支历史已重建，点击同步"
   },
   "toast": {

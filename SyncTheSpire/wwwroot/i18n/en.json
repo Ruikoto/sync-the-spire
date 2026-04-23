@@ -339,6 +339,7 @@
     "newBranch": "New branch, not yet pushed to remote",
     "localChanges": "\u2191 Local changes not yet pushed",
     "remoteChanges": "\u2193 {count} new remote change(s)",
+    "remoteChangesUnknown": "\u2193 Remote has new changes",
     "historyRewritten": "\u26a0 Remote branch history was rebuilt \u2014 click to sync"
   },
   "toast": {
