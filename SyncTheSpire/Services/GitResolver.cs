@@ -269,16 +269,22 @@ public class GitResolver
             if (!File.Exists(MinGitExePath))
                 throw new InvalidOperationException("Git 组件解压异常，未找到 git.exe");
 
-            if (lfsBackup != null)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(CachedGitLfsPath)!);
-                try { File.Copy(lfsBackup, CachedGitLfsPath, overwrite: true); } catch { }
-            }
-
             OnProgress?.Invoke(new DownloadProgress("Git 组件已就绪", 100));
         }
         finally
         {
+            // restore LFS in finally so a mid-extract throw doesn't strand the binary in temp.
+            // by this point the wipe may have run (LFS gone from cache) — only restore if the
+            // extract didn't somehow recreate a LFS at that path (paranoia; MinGit zip has none)
+            if (lfsBackup != null && File.Exists(lfsBackup) && !File.Exists(CachedGitLfsPath))
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(CachedGitLfsPath)!);
+                    File.Copy(lfsBackup, CachedGitLfsPath, overwrite: true);
+                }
+                catch { /* swallow — resolver will redownload LFS on next use */ }
+            }
             try { File.Delete(tempZip); } catch { /* best-effort cleanup */ }
             if (lfsBackup != null) try { File.Delete(lfsBackup); } catch { }
         }
