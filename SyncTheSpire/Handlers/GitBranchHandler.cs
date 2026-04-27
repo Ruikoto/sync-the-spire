@@ -468,18 +468,29 @@ public class GitBranchHandler : HandlerBase
             return;
         }
 
+        // `git lfs migrate import` refuses to run on a dirty working tree — snapshot
+        // any pending edits into a commit first so the rewrite can proceed
+        _gitService.SilentCommitIfDirty();
+
         Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", "正在安装 Git LFS..."));
         _gitService.OnLfsDownloadProgress = msg =>
             Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", msg));
         try { _gitService.EnableLfs(); }
         finally { _gitService.OnLfsDownloadProgress = null; }
 
-        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", $"正在标记 {filePaths.Count} 个超限文件..."));
-        _gitService.TrackLfsPatterns(filePaths);
-
+        // skip TrackLfsPatterns: `lfs migrate import` writes its own .gitattributes entries
+        // into the rewritten history. running `git lfs track` here would only dirty the
+        // working tree and make migrate import refuse to run.
         Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS",
             $"正在重写 {branches.Count} 个分支的历史并推送（可能需要几分钟）..."));
         _gitService.MigrateToLfsAndPush(filePaths, branches);
+
+        // record patterns for the settings UI (migrate already wrote .gitattributes in-tree)
+        var ws = _configService.Workspace;
+        foreach (var p in filePaths)
+            if (!ws.LfsTrackedPatterns.Contains(p, StringComparer.OrdinalIgnoreCase))
+                ws.LfsTrackedPatterns.Add(p);
+        _configService.SaveWorkspace();
 
         Send(IpcResponse.Success("MIGRATE_EXISTING_TO_LFS", new
         {

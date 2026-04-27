@@ -49,8 +49,6 @@ public class GitService
     /// </summary>
     public Action<string>? OnLfsDownloadProgress { get; set; }
 
-    public bool IsLfsAvailable => _resolver.GetGitLfsPath() != null;
-
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
     private string WorkTreePath => _config.WorkTreePath;
@@ -319,8 +317,11 @@ public class GitService
         // use info/exclude instead of .gitignore (keeps working tree pristine)
         EnsureExcludeRules();
 
-        // auto-detect LFS config in the cloned repo before we clean artifacts
-        DetectAndInstallLfsIfNeeded();
+        // auto-detect LFS config in the cloned repo before we clean artifacts.
+        // skip materialize: CheckoutEmptyInitBranch is about to wipe the working tree,
+        // so any LFS content we'd download here gets thrown away. defer until the user
+        // picks a real branch (ForceCheckoutBranch / ResetToRemote).
+        DetectAndInstallLfsIfNeeded(materialize: false);
 
         // remove .gitignore from working tree if the remote repo had one
         // (it stays tracked in git, just not physically in our working tree junction)
@@ -836,11 +837,13 @@ public class GitService
     }
 
     /// <summary>
-    /// scan working tree for files that exceed the size limit; uses git ls-files to respect .gitignore
+    /// scan working tree for files about to be pushed that exceed the size limit;
+    /// only includes new/modified files (respects .gitignore). already-tracked unchanged
+    /// files are skipped — their blobs aren't going over the wire on this push.
     /// </summary>
     public List<LargeFile> ScanLargeFiles(long limitBytes)
     {
-        var output = RunGitCli("ls-files --others --exclude-standard --modified --cached -z");
+        var output = RunGitCli("ls-files --others --exclude-standard --modified -z");
         var result = new List<LargeFile>();
 
         foreach (var rel in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
@@ -882,16 +885,23 @@ public class GitService
     /// </summary>
     public void EnableLfs()
     {
-        _resolver.OnProgress = p => OnLfsDownloadProgress?.Invoke(p.Message);
-        try { _resolver.EnsureGitLfs(); }
-        finally { _resolver.OnProgress = null; }
-
+        EnsureGitLfsWithProgress();
         RunGitLfsCli("install --local");
 
         var ws = _config.Workspace;
         ws.LfsEnabled = true;
         _config.SaveWorkspace();
         LogService.Info("Git LFS enabled for workspace");
+    }
+
+    // bridge resolver progress to OnLfsDownloadProgress for the duration of the call,
+    // restoring the previous handler afterwards so the MinGit progress hook isn't lost
+    private void EnsureGitLfsWithProgress()
+    {
+        var prev = _resolver.OnProgress;
+        _resolver.OnProgress = p => OnLfsDownloadProgress?.Invoke(p.Message);
+        try { _resolver.EnsureGitLfs(); }
+        finally { _resolver.OnProgress = prev; }
     }
 
     /// <summary>
@@ -947,6 +957,19 @@ public class GitService
         if (patternList.Count == 0)
             throw new InvalidOperationException("没有要迁移的文件");
 
+        // sanity check: history rewrite + force push is a heavy operation, refuse if remote
+        // doesn't match the configured workspace url
+        using (var validateRepo = OpenRepo())
+        {
+            var ws = _config.Workspace;
+            var origin = validateRepo.Network.Remotes["origin"];
+            if (origin is null)
+                throw new InvalidOperationException("Git 仓库未配置 origin 远端");
+            if (!string.Equals(origin.Url, ws.RepoUrl, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"远端地址不一致，期望 \"{ws.RepoUrl}\"，实际为 \"{origin.Url}\"。请重新初始化配置。");
+        }
+
         // build args manually — one --include= and one --include-ref= per item.
         // quoting each flag individually keeps paths/refs with spaces safe, and the
         // comma-separated form of --include would misparse anything containing a comma.
@@ -979,12 +1002,13 @@ public class GitService
     }
 
     // detect LFS filter rules in .gitattributes and install git-lfs hooks if found.
-    // also runs `lfs checkout` so the working tree ends up with real content, not pointer text —
-    // otherwise "拉取后本地=远程" is broken for LFS repos.
+    // when materialize is true, also runs `lfs checkout` so the working tree ends up with
+    // real content instead of pointer text — required after reset / branch checkout, but
+    // wasted work right after clone where the working tree is about to be wiped anyway.
     // failures here are non-fatal to the caller (clone/reset already succeeded) but the user
     // needs to know: we surface a visible warning via OnLfsDownloadProgress so at least
     // some UI lands instead of a silent log line.
-    private void DetectAndInstallLfsIfNeeded()
+    private void DetectAndInstallLfsIfNeeded(bool materialize = true)
     {
         var gitattributes = Path.Combine(WorkTreePath, ".gitattributes");
         if (!File.Exists(gitattributes)) return;
@@ -992,17 +1016,21 @@ public class GitService
 
         try
         {
-            _resolver.EnsureGitLfs();
+            // bridge resolver progress so the LFS download isn't silent for the user
+            EnsureGitLfsWithProgress();
             RunGitLfsCli("install --local");
 
-            // materialize pointer files into real content — without this, freshly-reset
-            // working trees still look like text files containing "version https://git-lfs..."
-            try { RunGitLfsCli("checkout", timeout: 600_000); }
-            catch (Exception chEx)
+            if (materialize)
             {
-                LogService.Warn($"lfs checkout failed: {chEx.Message}");
-                OnLfsDownloadProgress?.Invoke(
-                    "⚠ 大文件内容拉取失败，部分文件可能为占位符。请检查网络后再次点击拉取。");
+                // materialize pointer files into real content — without this, freshly-reset
+                // working trees still look like text files containing "version https://git-lfs..."
+                try { RunGitLfsCli("checkout", timeout: 600_000); }
+                catch (Exception chEx)
+                {
+                    LogService.Warn($"lfs checkout failed: {chEx.Message}");
+                    OnLfsDownloadProgress?.Invoke(
+                        "⚠ 大文件内容拉取失败，部分文件可能为占位符。请检查网络后再次点击拉取。");
+                }
             }
 
             var ws = _config.Workspace;

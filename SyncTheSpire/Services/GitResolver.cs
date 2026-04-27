@@ -115,6 +115,35 @@ public class GitResolver
     public string? GetGitLfsPath()
     {
         if (_resolvedLfsPath != null) return _resolvedLfsPath;
+        _lock.Wait();
+        try { return ResolveLfsPathLocked(); }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>
+    /// returns path to git-lfs.exe, downloading it if not available.
+    /// </summary>
+    public string EnsureGitLfs()
+    {
+        if (_resolvedLfsPath != null) return _resolvedLfsPath;
+        _lock.Wait();
+        try
+        {
+            var existing = ResolveLfsPathLocked();
+            if (existing != null) return existing;
+
+            LogService.Info("git-lfs not found, downloading...");
+            DownloadGitLfs();
+            _resolvedLfsPath = CachedGitLfsPath;
+            return _resolvedLfsPath;
+        }
+        finally { _lock.Release(); }
+    }
+
+    // assumes caller holds _lock
+    private string? ResolveLfsPathLocked()
+    {
+        if (_resolvedLfsPath != null) return _resolvedLfsPath;
 
         // system git — check if git-lfs is in PATH too
         if (_resolvedPath == "git" && IsSystemExecutableAvailable("git-lfs"))
@@ -139,20 +168,6 @@ public class GitResolver
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// returns path to git-lfs.exe, downloading it if not available.
-    /// </summary>
-    public string EnsureGitLfs()
-    {
-        var existing = GetGitLfsPath();
-        if (existing != null) return existing;
-
-        LogService.Info("git-lfs not found, downloading...");
-        DownloadGitLfs();
-        _resolvedLfsPath = CachedGitLfsPath;
-        return _resolvedLfsPath;
     }
 
     private void DownloadGitLfs()
@@ -223,6 +238,16 @@ public class GitResolver
         var tempZip = Path.Combine(
             Path.GetTempPath(), $"SyncTheSpire_MinGit_{Guid.NewGuid():N}.zip");
 
+        // preserve cached git-lfs.exe if it lives inside MinGitDir — we're about to wipe
+        // the whole dir, and the MinGit zip doesn't contain LFS, so otherwise we'd lose it
+        string? lfsBackup = null;
+        if (File.Exists(CachedGitLfsPath))
+        {
+            lfsBackup = Path.Combine(Path.GetTempPath(), $"SyncTheSpire_LfsPreserve_{Guid.NewGuid():N}.exe");
+            try { File.Copy(CachedGitLfsPath, lfsBackup, overwrite: true); }
+            catch { lfsBackup = null; /* best-effort; resolver will redownload if needed */ }
+        }
+
         try
         {
             if (!TryDownload(ProxyUrl, tempZip) &&
@@ -244,11 +269,18 @@ public class GitResolver
             if (!File.Exists(MinGitExePath))
                 throw new InvalidOperationException("Git 组件解压异常，未找到 git.exe");
 
+            if (lfsBackup != null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(CachedGitLfsPath)!);
+                try { File.Copy(lfsBackup, CachedGitLfsPath, overwrite: true); } catch { }
+            }
+
             OnProgress?.Invoke(new DownloadProgress("Git 组件已就绪", 100));
         }
         finally
         {
             try { File.Delete(tempZip); } catch { /* best-effort cleanup */ }
+            if (lfsBackup != null) try { File.Delete(lfsBackup); } catch { }
         }
     }
 
