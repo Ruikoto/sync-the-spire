@@ -477,10 +477,9 @@ jobs:
           $submissionId = $submission.id
           $uploadUrl = $submission.fileUploadUrl
           Write-Host "Submission $submissionId created."
-          Write-Host "Cloned applicationPackages: $($submission.applicationPackages.Count)"
-          $submission.applicationPackages | ForEach-Object {
-              Write-Host "  cloned: $($_.fileName)  status=$($_.fileStatus)"
-          }
+          Write-Host "POST response top-level fields: $(($submission | Get-Member -MemberType NoteProperty).Name -join ', ')"
+          Write-Host "Cloned applicationPackages ($($submission.applicationPackages.Count)) — full JSON:"
+          $submission.applicationPackages | ConvertTo-Json -Depth 10
           Write-Host "::endgroup::"
 
           # ---- 4. mutate applicationPackages: old -> PendingDelete, new -> PendingUpload ----
@@ -505,15 +504,28 @@ jobs:
           Write-Host "::endgroup::"
 
           # ---- 5. PUT updated submission ----
+          # Capture both request body and response body so we can compare what we sent
+          # vs what the server acknowledged. Previous version discarded the response,
+          # which let a silent no-op on applicationPackages slip past undetected.
           Write-Host "::group::PUT submission metadata"
           $body = $submission | ConvertTo-Json -Depth 20 -Compress
-          Invoke-RestMethod `
+          $bodyPretty = $submission | ConvertTo-Json -Depth 20
+          Write-Host "PUT request body ($($body.Length) bytes) — applicationPackages slice:"
+          ($submission.applicationPackages | ConvertTo-Json -Depth 10)
+          # Stash full bodies as artifacts for offline inspection if needed
+          $diagDir = Join-Path $env:RUNNER_TEMP "store-diag"
+          New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+          $bodyPretty | Set-Content -Path (Join-Path $diagDir "put-request.json") -Encoding utf8
+
+          $putResp = Invoke-RestMethod `
               -Uri "$apiBase/submissions/$submissionId" `
               -Headers $headers `
               -Method Put `
               -ContentType "application/json; charset=utf-8" `
-              -Body $body | Out-Null
-          Write-Host "PUT ok ($($body.Length) bytes)."
+              -Body $body
+          Write-Host "PUT ok ($($body.Length) bytes sent). Response applicationPackages:"
+          ($putResp.applicationPackages | ConvertTo-Json -Depth 10)
+          ($putResp | ConvertTo-Json -Depth 20) | Set-Content -Path (Join-Path $diagDir "put-response.json") -Encoding utf8
           Write-Host "::endgroup::"
 
           # ---- 6. build a FLAT zip (no parent dir) — fileName in applicationPackages must
@@ -584,10 +596,9 @@ jobs:
           #         aren't reflected back, committing would publish an empty update.
           Write-Host "::group::Verifying server-side state before commit"
           $verifySub = Invoke-RestMethod -Uri "$apiBase/submissions/$submissionId" -Headers $headers
-          Write-Host "Server-side applicationPackages after PUT:"
-          $verifySub.applicationPackages | ForEach-Object {
-              Write-Host "  $($_.fileName) -> $($_.fileStatus)"
-          }
+          Write-Host "Server-side applicationPackages after PUT — full JSON:"
+          ($verifySub.applicationPackages | ConvertTo-Json -Depth 10)
+          ($verifySub | ConvertTo-Json -Depth 20) | Set-Content -Path (Join-Path $diagDir "get-after-put.json") -Encoding utf8
           $serverPendingUpload = @($verifySub.applicationPackages | Where-Object { $_.fileStatus -eq "PendingUpload" })
           if ($serverPendingUpload.Count -ne $msixFiles.Count) {
               throw "Mismatch: expected $($msixFiles.Count) PendingUpload entries, server reports $($serverPendingUpload.Count). The PUT didn't take. ABORT before commit."
@@ -646,3 +657,12 @@ jobs:
               Write-Host "  $($_.fileName) ($($_.fileStatus))"
           }
           Write-Host "::notice::Submission $submissionId reached state: $($status.status)"
+
+      - name: Upload store-submit diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-diag
+          path: ${{ runner.temp }}/store-diag/
+          if-no-files-found: ignore
+          retention-days: 7
