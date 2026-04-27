@@ -1,9 +1,25 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sync the Spire</title>
+    <!-- apply theme before any paint to avoid a flash of the wrong palette -->
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('sts-theme'); // "system" | "light" | "dark" | null
+                var mode = saved || 'system';
+                var resolved = mode === 'system'
+                    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                    : mode;
+                if (resolved === 'dark') document.documentElement.classList.add('dark');
+            } catch (e) {
+                // localStorage may be unavailable; default to dark to match prior behavior
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="tailwind.css" />
     <link rel="stylesheet" href="style.css" />
 </head>
@@ -837,7 +853,7 @@
             </div>
 
             <!-- language -->
-            <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center justify-between mb-3">
                 <span class="text-sm text-spire-muted" data-i18n="settings.language">语言</span>
                 <select id="settings-language"
                     class="settings-select bg-spire-bg border border-spire-border rounded-lg text-xs text-spire-muted px-2 py-1 outline-none">
@@ -846,8 +862,19 @@
                 </select>
             </div>
 
+            <!-- theme -->
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-sm text-spire-muted" data-i18n="settings.theme">外观</span>
+                <select id="settings-theme"
+                    class="settings-select bg-spire-bg border border-spire-border rounded-lg text-xs text-spire-muted px-2 py-1 outline-none">
+                    <option value="system" data-i18n="settings.themeSystem">跟随系统</option>
+                    <option value="light" data-i18n="settings.themeLight">浅色</option>
+                    <option value="dark" data-i18n="settings.themeDark">深色</option>
+                </select>
+            </div>
+
             <!-- divider -->
-            <div class="border-t border-spire-border mb-4"></div>
+            <div class="border-t border-spire-border mt-4 mb-4"></div>
 
             <!-- about section -->
             <h3 class="text-xs font-medium text-spire-muted mb-3" data-i18n="settings.about">关于</h3>
@@ -1062,6 +1089,7 @@
     <script src="lib/marked.min.js"></script>
     <script src="ipc.js"></script>
     <script src="i18n.js"></script>
+    <script src="theme.js"></script>
     <script src="ui.js"></script>
     <script src="state.js"></script>
     <script src="modals.js"></script>

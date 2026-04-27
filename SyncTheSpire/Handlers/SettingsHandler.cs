@@ -27,6 +27,7 @@ public class SettingsHandler : HandlerBase
         Send(IpcResponse.Success("GET_SETTINGS", new
         {
             language = settings.Language,
+            theme = settings.Theme,
         }));
     }
 
@@ -43,11 +44,18 @@ public class SettingsHandler : HandlerBase
         if (payload.Value.TryGetProperty("language", out var langEl))
             settings.Language = langEl.GetString() ?? "zh-CN";
 
+        if (payload.Value.TryGetProperty("theme", out var themeEl))
+        {
+            var t = themeEl.GetString();
+            settings.Theme = t is "light" or "dark" or "system" ? t : "system";
+        }
+
         _workspaceManager.SaveConfig();
 
         Send(IpcResponse.Success("SAVE_SETTINGS", new
         {
             language = settings.Language,
+            theme = settings.Theme,
         }));
     }
 }

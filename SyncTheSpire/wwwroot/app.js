@@ -879,6 +879,20 @@ async function bootstrap() {
         });
     }
 
+    // theme dropdown — mode is already applied by the boot script in <head>
+    const themeSelect = $('#settings-theme');
+    if (themeSelect) {
+        themeSelect.value = Theme.getMode();
+        themeSelect.addEventListener('change', () => {
+            Theme.setMode(themeSelect.value);
+            // mirror to backend so the choice survives a config wipe of localStorage
+            sendMessage('SAVE_SETTINGS', { theme: themeSelect.value });
+        });
+        // tag <html> for the smooth color transition; we wait until after first
+        // paint so the initial render doesn't fade in
+        requestAnimationFrame(() => document.documentElement.classList.add('theme-ready'));
+    }
+
     // re-render dynamic UI when language changes
     I18n.onChange(() => {
         renderTabBar();

@@ -6,17 +6,20 @@ module.exports = {
     extend: {
       colors: {
         spire: {
-          bg: '#0f1117',
-          card: '#1a1d27',
-          border: '#2a2d3a',
-          accent: '#6366f1',
-          accentHover: '#818cf8',
-          danger: '#ef4444',
-          dangerHover: '#f87171',
-          success: '#22c55e',
-          warn: '#f59e0b',
-          text: '#e2e8f0',
-          muted: '#94a3b8',
+          bg:           'var(--spire-bg)',
+          bgSubtle:     'var(--spire-bg-subtle)',
+          card:         'var(--spire-card)',
+          border:       'var(--spire-border)',
+          borderStrong: 'var(--spire-border-strong)',
+          accent:       'var(--spire-accent)',
+          accentHover:  'var(--spire-accent-hover)',
+          accentSoft:   'var(--spire-accent-soft)',
+          danger:       'var(--spire-danger)',
+          dangerHover:  'var(--spire-danger-hover)',
+          success:      'var(--spire-success)',
+          warn:         'var(--spire-warn)',
+          text:         'var(--spire-text)',
+          muted:        'var(--spire-muted)',
         }
       }
     }

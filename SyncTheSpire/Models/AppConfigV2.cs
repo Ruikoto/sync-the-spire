@@ -24,4 +24,8 @@ public class AppSettings
 {
     [JsonPropertyName("language")]
     public string Language { get; set; } = "zh-CN";
+
+    // "system" | "light" | "dark"; "system" follows OS prefers-color-scheme
+    [JsonPropertyName("theme")]
+    public string Theme { get; set; } = "system";
 }

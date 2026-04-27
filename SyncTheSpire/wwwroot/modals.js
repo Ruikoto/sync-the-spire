@@ -964,8 +964,13 @@ function renderModDiff(container, diff, unchangedEl) {
 }
 
 function modDiffSection(label, count, type, cardsHtml) {
-    const colors = { added: '#22c55e', updated: '#f59e0b', removed: '#ef4444' };
-    const color = colors[type] || '#94a3b8';
+    // map to themed CSS vars so light/dark both look right
+    const tokens = {
+        added:   'var(--spire-success)',
+        updated: 'var(--spire-warn)',
+        removed: 'var(--spire-danger)',
+    };
+    const color = tokens[type] || 'var(--spire-muted)';
     return `
         <div class="mb-4">
             <div class="flex items-center gap-2 mb-2">
