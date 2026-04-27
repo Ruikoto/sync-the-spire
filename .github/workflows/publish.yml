@@ -154,9 +154,12 @@ jobs:
             echo "VERSION_TAG=$tag" >> $env:GITHUB_OUTPUT
             echo "MSIX_VERSION=$msixVer" >> $env:GITHUB_OUTPUT
           } else {
-            # nightly: date-based version for local testing — no leading zeros allowed in MSIX
+            # nightly: date-based version for local testing.
+            # MSIX rules: no leading zeros in any component; Store ingestion additionally
+            # rejects any non-zero revision (4th part). So encode date into Minor/Build
+            # and pin Revision to 0. Same-day rebuilds collide on version, which is fine.
             $ts = Get-Date -AsUTC
-            $msixVer = "0.$($ts.Year % 100).$($ts.Month * 100 + $ts.Day).$($ts.Hour * 100 + $ts.Minute)"
+            $msixVer = "0.$($ts.Year % 100).$($ts.Month * 100 + $ts.Day).0"
             echo "VERSION_TAG=nightly-$($ts.ToString('yyyyMMdd-HHmmss'))" >> $env:GITHUB_OUTPUT
             echo "MSIX_VERSION=$msixVer" >> $env:GITHUB_OUTPUT
           }
@@ -436,6 +439,14 @@ jobs:
           Write-Host "Found $($msixFiles.Count) MSIX file(s):"
           $msixFiles | ForEach-Object { Write-Host "  - $($_.Name)  ($([math]::Round($_.Length / 1MB, 2)) MB)" }
           $expectedNames = $msixFiles.Name
+
+          # nightly MSIX uses version 0.YY.MMDD.0 which is always lower than any real
+          # release (>= 2.x), so committing it to Store will fail at version-downgrade
+          # validation. Allow dry-run so the plumbing can still be exercised.
+          $isNightly = @($msixFiles | Where-Object { $_.Name -like '*nightly-*' }).Count -gt 0
+          if ($isNightly -and $env:DRY_RUN -ne "True") {
+              throw "Refusing real Store commit for nightly build (its version is below the currently published one). Use dry-run, or trigger the workflow with a tag / explicit version input."
+          }
 
           if ($env:DRY_RUN -eq "True") {
               Write-Host "::warning::DRY-RUN mode — submission will be created and uploaded but NOT committed."
