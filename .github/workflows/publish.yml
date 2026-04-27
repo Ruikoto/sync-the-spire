@@ -21,16 +21,15 @@ on:
         required: false
         default: false
         type: boolean
-      submit_to_store:
-        description: '提交到 Microsoft Store'
+      store_action:
+        description: 'Microsoft Store 提交动作'
         required: false
-        default: false
-        type: boolean
-      store_dry_run:
-        description: '商店提交 dry-run（创建 submission + 上传，但不 commit；用于调试）'
-        required: false
-        default: true
-        type: boolean
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - dry-run    # 创建 submission + 上传，但不 commit；用于调试
+          - submit     # 真正提交到商店
   push:
     tags:
       - 'v*'
@@ -122,8 +121,8 @@ jobs:
           retention-days: 1
 
   build-msix:
-    # also triggered when submit_to_store is true, regardless of build_target
-    if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'msix' || inputs.submit_to_store == true
+    # also triggered when store_action != 'none', regardless of build_target
+    if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'msix' || inputs.store_action != 'none'
     name: Build MSIX ${{ matrix.rid }}
     runs-on: windows-latest
     strategy:
@@ -398,12 +397,12 @@ jobs:
           git push "$REMOTE" gh-pages
 
   store-submit:
-    # run on tag push, or manual dispatch with submit_to_store=true
+    # run on tag push, or manual dispatch with store_action != 'none'
     # !failure() && !cancelled() keeps it alive even if build (zip) job was skipped
     if: |
       !failure() && !cancelled() &&
       (startsWith(github.ref, 'refs/tags/') ||
-       (github.event_name == 'workflow_dispatch' && inputs.submit_to_store == true))
+       (github.event_name == 'workflow_dispatch' && inputs.store_action != 'none'))
     needs: [build-msix]
     runs-on: windows-latest
     steps:
@@ -424,7 +423,7 @@ jobs:
           CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
           APP_ID: "9PC112T0C074"
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.store_dry_run == true }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.store_action == 'dry-run' }}
         run: |
           $ErrorActionPreference = "Stop"
           $msixDir = "./msix"
