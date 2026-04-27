@@ -4,6 +4,7 @@
 
 let mmMods = [];
 let mmGhosts = [];
+let mmDuplicates = []; // [{ id, name, keptPath, extraPaths: [...] }] — same mod id with multiple manifest files
 let mmLocalModIds = new Set(); // for branch copy "already exists" check
 let mmSelectedBranch = ''; // currently selected branch in copy modal
 
@@ -29,14 +30,73 @@ async function refreshModList() {
         const res = await ipcCall('GET_LOCAL_MODS_DETAILED');
         mmMods = res.payload?.mods || [];
         mmGhosts = res.payload?.ghosts || [];
+        mmDuplicates = res.payload?.duplicates || [];
         mmLocalModIds = new Set(mmMods.map(m => m.id?.toLowerCase()).filter(Boolean));
         $('#mm-loading').classList.add('hidden');
         $('#mm-grid-scroll').classList.remove('hidden');
+        renderDupBanner();
         renderMmGrid();
     } catch (err) {
         $('#mm-loading').classList.add('hidden');
         $('#mm-grid-scroll').classList.remove('hidden');
         $('#mm-grid').innerHTML = `<div class="text-xs text-spire-muted py-8 text-center">加载失败：${esc(err.message || '未知错误')}</div>`;
+    }
+}
+
+// ── duplicate manifest banner ───────────────────────────────────────────────
+
+function renderDupBanner() {
+    const banner = $('#mm-dup-banner');
+    if (!mmDuplicates || mmDuplicates.length === 0) {
+        banner.classList.add('hidden');
+        return;
+    }
+
+    const totalExtras = mmDuplicates.reduce((n, d) => n + (d.extraPaths?.length || 0), 0);
+    const names = mmDuplicates.map(d => d.name || d.id).slice(0, 3).map(esc).join('、');
+    const more = mmDuplicates.length > 3 ? `等 ${mmDuplicates.length} 个` : '';
+    $('#mm-dup-summary').innerHTML =
+        `${names}${more} 存在 ${totalExtras} 份多余的定义文件（同一 MOD ID 出现在多个 .json 中）。` +
+        `<br>这会导致 MOD 数量、差异和管理页面不一致，并可能触发联机报错。`;
+
+    const detail = mmDuplicates.map(d => {
+        const extras = (d.extraPaths || []).map(p => `<div class="font-mono text-spire-muted pl-3">· ${esc(p)}</div>`).join('');
+        return `
+            <div class="border-l-2 border-amber-500/30 pl-2">
+                <div class="text-spire-text">${esc(d.name || d.id)} <span class="text-spire-muted">(${esc(d.id)})</span></div>
+                <div class="text-spire-muted">保留：<span class="font-mono text-green-400">${esc(d.keptPath)}</span></div>
+                <div class="text-spire-muted">多余：</div>
+                ${extras}
+            </div>`;
+    }).join('');
+    $('#mm-dup-detail').innerHTML = detail;
+
+    banner.classList.remove('hidden');
+    lucide.createIcons({ nodes: [banner] });
+}
+
+async function handleCleanDuplicates() {
+    const totalExtras = mmDuplicates.reduce((n, d) => n + (d.extraPaths?.length || 0), 0);
+    const ok = await showConfirm(
+        `将删除 ${totalExtras} 个多余的 MOD 定义文件（.json），保留每个 MOD 修改时间最新的那一份。\n` +
+        `MOD 的其它文件不会被动到。\n\n是否继续？`,
+        '清理重复定义'
+    );
+    if (!ok) return;
+
+    const btn = $('#mm-dup-clean');
+    btn.disabled = true;
+    btn.textContent = '清理中...';
+    try {
+        const res = await ipcCall('CLEAN_DUPLICATE_MANIFESTS');
+        const n = res.payload?.deletedCount || 0;
+        toast(n > 0 ? `已清理 ${n} 个多余文件` : '没有需要清理的文件', 'success');
+        await refreshModList();
+    } catch (err) {
+        toast(`清理失败：${err.message || ''}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '一键清理';
     }
 }
 
@@ -448,6 +508,9 @@ $('#mm-branch-grid').addEventListener('click', async e => {
 // header buttons
 $('#mm-btn-close').addEventListener('click', closeModManager);
 $('#mm-btn-branch-copy').addEventListener('click', openBranchCopyModal);
+
+// duplicate manifest cleanup
+$('#mm-dup-clean').addEventListener('click', handleCleanDuplicates);
 
 // open mod folder in file explorer
 $('#mm-btn-open-folder').addEventListener('click', () => {

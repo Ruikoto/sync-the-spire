@@ -15,9 +15,17 @@ public class ModInstallService
         PropertyNameCaseInsensitive = true
     };
 
+    private readonly ModScannerService _modScanner;
+
+    public ModInstallService(ModScannerService modScanner)
+    {
+        _modScanner = modScanner;
+    }
+
     /// <summary>
     /// extract mod(s) from an archive file into the working tree.
-    /// returns list of installed mod names.
+    /// returns list of installed mod names. if a mod with the same id already
+    /// exists locally, its folder is removed first (newest wins).
     /// </summary>
     public List<string> InstallFromArchive(string archivePath, string workTreePath)
     {
@@ -74,6 +82,11 @@ public class ModInstallService
             {
                 destFolderName = mod.Id!;
             }
+
+            // overwrite any existing local mod with the same id — prevents two manifests
+            // pointing at the same mod, which breaks multiplayer
+            try { _modScanner.RemoveLocalModById(mod.Id!); }
+            catch (Exception ex) { LogService.Warn($"Failed to remove existing mod {mod.Id} before install: {ex.Message}"); }
 
             var destPath = Path.Combine(workTreePath, destFolderName);
             Directory.CreateDirectory(destPath);

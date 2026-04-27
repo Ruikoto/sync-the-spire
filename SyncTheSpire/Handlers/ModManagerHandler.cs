@@ -28,12 +28,21 @@ public class ModManagerHandler : HandlerBase
     }
 
     /// <summary>
-    /// scan local mods with full detail + dependency analysis
+    /// scan local mods with full detail + dependency analysis.
+    /// also surfaces any duplicate-manifest collisions so the UI can warn —
+    /// two .json files with the same mod id break in-game multiplayer.
     /// </summary>
     public void HandleGetLocalModsDetailed()
     {
-        var allMods = _modScanner.GetLocalModsDetailed();
+        var (allMods, dupReport) = _modScanner.GetLocalModsDetailed();
         var (mods, ghosts) = ModScannerService.AnalyzeDependencies(allMods);
+
+        // map id -> name for friendlier duplicate messages
+        var nameById = mods.ToDictionary(
+            m => m.Id ?? "",
+            m => m.Name ?? m.Id ?? "",
+            StringComparer.OrdinalIgnoreCase);
+        var workTree = _configService.WorkTreePath;
 
         Send(IpcResponse.Success("GET_LOCAL_MODS_DETAILED", new
         {
@@ -59,7 +68,39 @@ public class ModManagerHandler : HandlerBase
                 name = g.Name,
                 dependedBy = g.DependedBy,
             }),
+            duplicates = dupReport.Select(d => new
+            {
+                id = d.Id,
+                name = nameById.GetValueOrDefault(d.Id, d.Id),
+                keptPath = ToRelative(workTree, d.KeptPath),
+                extraPaths = d.AllPaths
+                    .Where(p => !string.Equals(p, d.KeptPath, StringComparison.OrdinalIgnoreCase))
+                    .Select(p => ToRelative(workTree, p))
+                    .ToList(),
+            }),
         }));
+    }
+
+    /// <summary>
+    /// delete every redundant manifest .json that shares an id with another manifest.
+    /// keeps the dedup-winning one (newest mtime). leaves all other mod files alone —
+    /// only the duplicate .json is removed, since that's what causes multiplayer errors.
+    /// </summary>
+    public void HandleCleanDuplicateManifests()
+    {
+        var deleted = _modScanner.CleanLocalDuplicateManifests();
+        var workTree = _configService.WorkTreePath;
+        Send(IpcResponse.Success("CLEAN_DUPLICATE_MANIFESTS", new
+        {
+            deletedCount = deleted.Count,
+            deletedPaths = deleted.Select(p => ToRelative(workTree, p)).ToList(),
+        }));
+    }
+
+    private static string ToRelative(string workTree, string fullPath)
+    {
+        try { return Path.GetRelativePath(workTree, fullPath).Replace('\\', '/'); }
+        catch { return fullPath; }
     }
 
     public void HandleDeleteMod(JsonElement? payload)
@@ -284,6 +325,17 @@ public class ModManagerHandler : HandlerBase
                     var destDir = Path.GetFullPath(Path.Combine(_configService.WorkTreePath, folderName));
                     if (!destDir.StartsWith(Path.GetFullPath(_configService.WorkTreePath) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                         continue;
+
+                    // preflight: locate a manifest inside the dragged folder so we can
+                    // overwrite an older mod with the same id (otherwise two manifests
+                    // would coexist and break multiplayer)
+                    var folderModId = FindManifestIdInEntries(entriesEl);
+                    if (!string.IsNullOrEmpty(folderModId))
+                    {
+                        try { _modScanner.RemoveLocalModById(folderModId); }
+                        catch (Exception ex) { LogService.Warn($"Failed to remove existing mod {folderModId} before install: {ex.Message}"); }
+                    }
+
                     int fileCount = 0;
 
                     foreach (var entry in entriesEl.EnumerateArray())
@@ -353,6 +405,10 @@ public class ModManagerHandler : HandlerBase
                         return;
                     }
 
+                    // overwrite any existing mod with the same id (newest wins)
+                    try { _modScanner.RemoveLocalModById(modId); }
+                    catch (Exception ex) { LogService.Warn($"Failed to remove existing mod {modId} before install: {ex.Message}"); }
+
                     var destDir = Path.Combine(_configService.WorkTreePath, modId);
                     Directory.CreateDirectory(destDir);
 
@@ -388,6 +444,31 @@ public class ModManagerHandler : HandlerBase
     {
         PropertyNameCaseInsensitive = true
     };
+
+    /// <summary>
+    /// scan dragged-folder entries (base64-encoded files) for the first .json that
+    /// parses as a valid mod manifest, and return its id. used to know which existing
+    /// mod (if any) to overwrite before writing the new files.
+    /// </summary>
+    private static string? FindManifestIdInEntries(JsonElement entriesEl)
+    {
+        foreach (var entry in entriesEl.EnumerateArray())
+        {
+            var path = entry.TryGetProperty("path", out var pEl) ? pEl.GetString() : null;
+            var data = entry.TryGetProperty("data", out var dEl) ? dEl.GetString() : null;
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(data)) continue;
+            if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+
+            try
+            {
+                var bytes = Convert.FromBase64String(data);
+                var mod = JsonSerializer.Deserialize<ModInfo>(bytes, _jsonOpts);
+                if (!string.IsNullOrEmpty(mod?.Id)) return mod.Id;
+            }
+            catch { /* not a manifest */ }
+        }
+        return null;
+    }
 
     private static void CopyDirectory(string source, string dest)
     {

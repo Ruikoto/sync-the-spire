@@ -51,7 +51,7 @@ public class MessageRouter
         "RESTORE_JUNCTION", "OPEN_FOLDER",
         "LAUNCH_GAME", "SET_CUSTOM_EXE",
         "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES", "INSTALL_MOD_DROPPED",
-        "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH",
+        "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH", "CLEAN_DUPLICATE_MANIFESTS",
         "PREFLIGHT_EXCLUDE_LARGE_FILES", "PREFLIGHT_ENABLE_LFS", "PREFLIGHT_CANCEL", "REBUILD_BRANCHES_ORPHAN",
         "MIGRATE_EXISTING_TO_LFS",
     ];
@@ -112,7 +112,7 @@ public class MessageRouter
             _announcementHandler = new AnnouncementHandler(_webView, _uiContext, ctx.ConfigService);
             _steamFinderHandler = new SteamFinderHandler(_webView, _uiContext, adapter);
             _filesystemHandler = new FilesystemHandler(_webView, _uiContext, ctx.ConfigService, _junctionService, ctx.BackupService, junctionHelper, adapter, _form);
-            _modManagerHandler = new ModManagerHandler(_webView, _uiContext, ctx.ConfigService, ctx.ModScanner, new ModInstallService(), _form);
+            _modManagerHandler = new ModManagerHandler(_webView, _uiContext, ctx.ConfigService, ctx.ModScanner, new ModInstallService(ctx.ModScanner), _form);
         }
         else
         {
@@ -257,6 +257,7 @@ public class MessageRouter
             _gated["GET_BRANCH_MODS_FOR_COPY"] = req => mm.HandleGetBranchModsForCopy(req.Payload);
             _gated["COPY_MOD_FROM_BRANCH"] = req => mm.HandleCopyModFromBranch(req.Payload);
             _gated["INSTALL_MOD_DROPPED"] = req => mm.HandleInstallModDropped(req.Payload);
+            _gated["CLEAN_DUPLICATE_MANIFESTS"] = _ => mm.HandleCleanDuplicateManifests();
         }
     }
 

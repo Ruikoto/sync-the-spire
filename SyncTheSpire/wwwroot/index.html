@@ -1022,6 +1022,23 @@
                 <i data-lucide="upload" style="width:14px;height:14px"></i>
                 <span>点击选择或拖入 MOD 文件 / 文件夹 / 压缩包</span>
             </div>
+            <!-- duplicate manifest warning banner — shown when two .json files target the same mod id -->
+            <div id="mm-dup-banner" class="hidden mx-5 mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="alert-triangle" style="width:16px;height:16px" class="text-amber-400 mt-0.5 shrink-0"></i>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs font-medium text-amber-300 mb-1">检测到重复的 MOD 定义文件</div>
+                        <div id="mm-dup-summary" class="text-xs text-spire-muted leading-relaxed"></div>
+                        <details class="mt-1.5">
+                            <summary class="text-xs text-spire-muted hover:text-spire-text cursor-pointer">展开详情</summary>
+                            <div id="mm-dup-detail" class="mt-1.5 space-y-1.5 text-xs"></div>
+                        </details>
+                    </div>
+                    <button id="mm-dup-clean" class="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 transition-colors">
+                        一键清理
+                    </button>
+                </div>
+            </div>
             <!-- mod grid (scroll wrapper + column layout inside) -->
             <div id="mm-grid-scroll" class="flex-1 overflow-y-auto px-5 py-3">
                 <div id="mm-grid" style="column-count:2;column-gap:12px;">
