@@ -95,7 +95,14 @@ public class MainForm : Form
             return;
         }
 
-        _webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+        // keep default context menu only for editable fields / selected text,
+        // so inputs still get paste/copy but normal page right-clicks stay silent
+        _webView.CoreWebView2.ContextMenuRequested += (_, e) =>
+        {
+            var target = e.ContextMenuTarget;
+            if (!target.IsEditable && !target.HasSelection)
+                e.Handled = true;
+        };
 
         // map the wwwroot folder to a virtual hostname so CDN resources work
         // (file:// protocol blocks external scripts due to security policies)
