@@ -88,27 +88,34 @@ public class GitBranchHandler : HandlerBase
             return;
         }
 
-        try
+        // scan can take seconds on large repos (recursive tree walk + JSON deserialization).
+        // run off the UI thread; Send marshals back via the captured uiContext.
+        // stale results from a previously-selected branch are filtered by the frontend
+        // using the branchName field in the response.
+        Task.Run(() =>
         {
-            var mods = _modScanner.GetBranchMods(branchName);
-            var sorted = mods
-                .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(m => new
-                {
-                    id = m.Id,
-                    name = m.Name,
-                    author = m.Author,
-                    description = m.Description,
-                    version = m.Version
-                });
+            try
+            {
+                var mods = _modScanner.GetBranchMods(branchName);
+                var sorted = mods
+                    .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(m => new
+                    {
+                        id = m.Id,
+                        name = m.Name,
+                        author = m.Author,
+                        description = m.Description,
+                        version = m.Version
+                    });
 
-            Send(IpcResponse.Success("GET_BRANCH_MODS", new { branchName, mods = sorted }));
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[GET_BRANCH_MODS] Failed to scan branch {branchName}", ex);
-            Send(IpcResponse.Error("GET_BRANCH_MODS", $"读取 Mod 列表失败：{ex.Message}"));
-        }
+                Send(IpcResponse.Success("GET_BRANCH_MODS", new { branchName, mods = sorted }));
+            }
+            catch (Exception ex)
+            {
+                LogService.Error($"[GET_BRANCH_MODS] Failed to scan branch {branchName}", ex);
+                Send(IpcResponse.Error("GET_BRANCH_MODS", $"读取 Mod 列表失败：{ex.Message}"));
+            }
+        });
     }
 
     public void HandleGetModDiff()

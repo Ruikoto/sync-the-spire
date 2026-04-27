@@ -105,7 +105,17 @@ public class ConfigHandler : HandlerBase
     /// <summary>
     /// fetch from remote and return ahead/behind counts -- used by the refresh button
     /// </summary>
-    public void HandleRefreshSync()
+    public void HandleRefreshSync() => RefreshSyncCore(s => s.FetchAndGetSyncStatus());
+
+    /// <summary>
+    /// same as HandleRefreshSync but assumes remote refs are already up-to-date (fetch done separately).
+    /// called by MessageRouter's split-gate pattern to avoid holding the gate during network I/O.
+    /// keeping two IPC entry points is intentional — the router uses them to skip the gate
+    /// for the local-only path.
+    /// </summary>
+    public void HandleRefreshSyncLocal() => RefreshSyncCore(s => s.GetSyncStatus());
+
+    private void RefreshSyncCore(Func<GitService, GitService.SyncStatus> getSyncStatus)
     {
         var ws = _configService.Workspace;
         if (!ws.IsConfigured || _gitService == null || !_gitService.IsRepoValid || _gitService.IsOnInitBranch)
@@ -124,46 +134,7 @@ public class ConfigHandler : HandlerBase
             return;
         }
 
-        var sync = _gitService.FetchAndGetSyncStatus();
-        var isJunction = _adapter.SupportsJunction
-            ? _junctionService.IsJunction(ws.GameModPath)
-            : true;
-        var branch = _gitService.GetCurrentBranch();
-
-        Send(IpcResponse.Success("REFRESH_SYNC", new
-        {
-            currentBranch = branch,
-            isJunctionActive = isJunction,
-            hasLocalChanges = _gitService.HasLocalChanges(),
-            ahead = sync.Ahead,
-            behind = sync.Behind,
-            hasRemoteBranch = sync.HasRemoteBranch
-        }));
-    }
-
-    /// <summary>
-    /// same as HandleRefreshSync but assumes remote refs are already up-to-date (fetch done separately).
-    /// called by MessageRouter's split-gate pattern to avoid holding the gate during network I/O.
-    /// </summary>
-    public void HandleRefreshSyncLocal()
-    {
-        var ws = _configService.Workspace;
-        if (!ws.IsConfigured || _gitService == null || !_gitService.IsRepoValid || _gitService.IsOnInitBranch)
-        {
-            Send(IpcResponse.Success("REFRESH_SYNC", new
-            {
-                currentBranch = (string?)null,
-                isJunctionActive = false,
-                hasLocalChanges = false,
-                needsBranchSelection = true,
-                ahead = 0,
-                behind = 0,
-                hasRemoteBranch = false
-            }));
-            return;
-        }
-
-        var sync = _gitService.GetSyncStatus();
+        var sync = getSyncStatus(_gitService);
         var isJunction = _adapter.SupportsJunction
             ? _junctionService.IsJunction(ws.GameModPath)
             : true;
@@ -324,9 +295,17 @@ public class ConfigHandler : HandlerBase
                 }
                 catch
                 {
-                    // clone failed — restore stashed mod files so they aren't lost
-                    if (Directory.Exists(stashPath) && !Directory.Exists(_configService.RepoPath))
-                        Directory.Move(stashPath, _configService.RepoPath);
+                    // clone failed — restore stashed mod files so they aren't lost.
+                    // swallow restore failure so the original clone exception isn't masked
+                    try
+                    {
+                        if (Directory.Exists(stashPath) && !Directory.Exists(_configService.RepoPath))
+                            Directory.Move(stashPath, _configService.RepoPath);
+                    }
+                    catch (Exception restoreEx)
+                    {
+                        LogService.Error($"[INIT_CONFIG] Failed to restore stashed mods after clone failure (stash kept at {stashPath})", restoreEx);
+                    }
                     throw;
                 }
 

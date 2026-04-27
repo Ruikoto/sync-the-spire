@@ -78,10 +78,14 @@ public class RedirectHandler : HandlerBase
             return;
         }
 
-        // M2 fix: use TryGetProperty
-        var enabled = true;
-        if (payload is not null && payload.Value.TryGetProperty("enabled", out var enabledEl))
-            enabled = enabledEl.GetBoolean();
+        // M2 fix: use TryGetProperty. require explicit `enabled` — never default to enabling
+        // a destructive op (creates junction, swaps user save folder)
+        if (payload is null || !payload.Value.TryGetProperty("enabled", out var enabledEl))
+        {
+            Send(IpcResponse.Error("SET_REDIRECT", "Missing 'enabled' field"));
+            return;
+        }
+        var enabled = enabledEl.GetBoolean();
 
         if (enabled)
             _adapter.EnableSaveRedirect(ws.GameModPath);

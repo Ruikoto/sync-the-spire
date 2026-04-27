@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
 
 namespace SyncTheSpire.Services;
 
@@ -37,6 +38,14 @@ public class GitResolver
         "https://sts-dl.rkto.cc/git-for-windows/git/releases/download/v2.49.0.windows.1/MinGit-2.49.0-64-bit.zip";
     private const string GitHubUrl =
         "https://github.com/git-for-windows/git/releases/download/v2.49.0.windows.1/MinGit-2.49.0-64-bit.zip";
+
+    // SHA256 of the upstream release zips. HTTPS catches MITM but won't catch a compromised
+    // proxy mirror — pin known-good hashes so a tampered binary never gets extracted.
+    // recompute via `Get-FileHash` if version bumps.
+    private const string MinGitSha256 =
+        "971CDEE7C0FEAA1E41369C46DA88D1000A24E79A6F50191C820100338FB7ECA5";
+    private const string GitLfsSha256 =
+        "AACA788E04F91676E58654D5ECF96CF03C76768A63B3A6918281A9678884C20C";
 
     private string? _resolvedPath;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -183,6 +192,10 @@ public class GitResolver
                     "无法下载 Git LFS 组件，请检查网络连接后重试。\n" +
                     "或手动将 git-lfs.exe 放到应用目录 tools/mingit/mingw64/bin/ 下。");
 
+            if (!VerifySha256(tempZip, GitLfsSha256))
+                throw new InvalidOperationException(
+                    "下载的 Git LFS 组件校验失败，文件可能已损坏或被篡改。请重试。");
+
             OnProgress?.Invoke(new DownloadProgress("正在解压 Git LFS 组件..."));
 
             var targetDir = Path.GetDirectoryName(CachedGitLfsPath)!;
@@ -258,6 +271,10 @@ public class GitResolver
                     "或手动安装 Git：https://git-scm.com/download/win");
             }
 
+            if (!VerifySha256(tempZip, MinGitSha256))
+                throw new InvalidOperationException(
+                    "下载的 Git 组件校验失败，文件可能已损坏或被篡改。请重试或手动安装 Git。");
+
             OnProgress?.Invoke(new DownloadProgress("正在解压 Git 组件..."));
 
             // clean up any partial extraction from a previous crash
@@ -294,7 +311,7 @@ public class GitResolver
     {
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(15) };
             using var response = client
                 .GetAsync(url, HttpCompletionOption.ResponseHeadersRead)
                 .GetAwaiter().GetResult();
@@ -365,5 +382,16 @@ public class GitResolver
         if (bytes < 1024) return $"{bytes} B";
         if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
         return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private static bool VerifySha256(string filePath, string expectedHex)
+    {
+        using var sha = SHA256.Create();
+        using var fs = File.OpenRead(filePath);
+        var actual = Convert.ToHexString(sha.ComputeHash(fs));
+        var ok = string.Equals(actual, expectedHex, StringComparison.OrdinalIgnoreCase);
+        if (!ok)
+            LogService.Warn($"SHA256 mismatch for {Path.GetFileName(filePath)}: expected {expectedHex}, got {actual}");
+        return ok;
     }
 }
