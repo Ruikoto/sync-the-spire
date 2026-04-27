@@ -93,6 +93,106 @@
         </div>
     </div>
 
+    <!-- import / export config modal -->
+    <div id="config-io-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 p-5">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-medium" data-i18n="setup.configIoTitle">导入 / 导出配置</h3>
+                <button id="config-io-close" type="button"
+                    class="text-spire-muted hover:text-spire-text rounded p-1 transition-colors"
+                    aria-label="Close">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- tabs -->
+            <div class="flex bg-spire-bg rounded-lg border border-spire-border p-0.5 mb-4">
+                <button id="config-io-tab-export" type="button"
+                    class="config-io-tab active flex-1 text-center text-xs py-1.5 rounded-md cursor-pointer transition-all duration-150">
+                    <span data-i18n="setup.exportTab">导出</span>
+                </button>
+                <button id="config-io-tab-import" type="button"
+                    class="config-io-tab flex-1 text-center text-xs py-1.5 rounded-md cursor-pointer transition-all duration-150 text-spire-muted">
+                    <span data-i18n="setup.importTab">导入</span>
+                </button>
+            </div>
+
+            <!-- export panel -->
+            <div id="config-io-panel-export">
+                <p class="text-xs text-spire-muted mb-3" data-i18n="setup.exportTabHint">
+                    选择要包含的内容。仓库地址、鉴权方式、LFS / 文件大小设置始终包含。
+                </p>
+
+                <label class="flex items-start gap-2 cursor-pointer mb-3">
+                    <input type="checkbox" id="export-include-credentials" checked class="mt-0.5 accent-spire-accent">
+                    <div class="flex-1">
+                        <div class="text-xs text-spire-text" data-i18n="setup.exportIncludeCredentials">包含凭证（Token / SSH 私钥密码）</div>
+                        <div class="mt-1 px-2 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-[11px] text-red-300 leading-relaxed"
+                             data-i18n-html="setup.exportCredentialsWarn">
+                            ⚠ 凭证将以可逆方式打包到配置串。仅用于在你自己的设备间迁移，<b>切勿分享给他人</b>。
+                        </div>
+                    </div>
+                </label>
+
+                <label class="flex items-start gap-2 cursor-pointer mb-3">
+                    <input type="checkbox" id="export-include-paths" class="mt-0.5 accent-spire-accent">
+                    <div class="flex-1">
+                        <div class="text-xs text-spire-text" data-i18n="setup.exportIncludePaths">包含本地路径（游戏 / 存档 / SSH 私钥路径）</div>
+                        <div class="text-[11px] text-spire-muted mt-0.5" data-i18n="setup.exportPathsHint">
+                            不同设备的路径通常不一样，分享给他人时建议不勾选。
+                        </div>
+                    </div>
+                </label>
+
+                <div class="mb-3">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[11px] text-spire-muted" data-i18n="setup.exportOutputLabel">生成的配置串</span>
+                        <span id="config-io-export-size" class="text-[10px] text-spire-muted"></span>
+                    </div>
+                    <textarea id="config-io-export-output" readonly
+                        class="w-full h-24 bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed resize-none focus:outline-none focus:border-spire-accent break-all"
+                        style="word-break:break-all;"></textarea>
+                </div>
+
+                <div class="flex justify-end">
+                    <button id="config-io-copy" type="button"
+                        class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors flex items-center gap-1.5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;">
+                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                        </svg>
+                        <span data-i18n="setup.copyToClipboard">复制到剪贴板</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- import panel -->
+            <div id="config-io-panel-import" class="hidden">
+                <p class="text-xs text-spire-muted mb-3" data-i18n="setup.importTabHint">
+                    粘贴配置串后点击导入，会填回表单对应字段；导出时未勾选的字段不会被覆盖。
+                </p>
+                <textarea id="config-io-import-input"
+                    class="w-full h-28 bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed resize-none focus:outline-none focus:border-spire-accent"
+                    data-i18n-placeholder="setup.importPlaceholder"
+                    placeholder="在此粘贴配置串"
+                    style="word-break:break-all;"></textarea>
+                <div class="mt-3 flex justify-end gap-2">
+                    <button id="config-io-paste-clipboard" type="button"
+                        class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-3 py-1.5 transition-colors"
+                        data-i18n="setup.pasteFromClipboard">
+                        从剪贴板粘贴
+                    </button>
+                    <button id="config-io-import" type="button"
+                        class="text-xs bg-spire-accent hover:bg-spire-accentHover text-white rounded-lg px-4 py-1.5 transition-colors"
+                        data-i18n="setup.import">
+                        导入
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- confirm dialog (replaces native confirm()) -->
     <div id="confirm-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
         <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
@@ -400,13 +500,23 @@
         <div class="flex justify-center p-6">
             <div class="w-full max-w-md bg-spire-card rounded-xl border border-spire-border p-6">
                 <div class="flex items-center gap-2 mb-2">
-                    <span id="setup-game-icon" class="flex items-center"></span>
-                    <div id="setup-ws-name-display" class="group flex items-center gap-1.5 cursor-pointer rounded-md px-1 -ml-1 hover:bg-white/5 transition-colors" title="点击重命名工作区" data-i18n-title="setup.renameTooltip">
-                        <h1 id="setup-ws-name" class="text-xl font-bold">Sync the Spire</h1>
-                        <svg class="w-3.5 h-3.5 text-spire-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" style="width:14px;height:14px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <span id="setup-game-icon" class="flex items-center"></span>
+                        <div id="setup-ws-name-display" class="group flex items-center gap-1.5 cursor-pointer rounded-md px-1 -ml-1 hover:bg-white/5 transition-colors" title="点击重命名工作区" data-i18n-title="setup.renameTooltip">
+                            <h1 id="setup-ws-name" class="text-xl font-bold">Sync the Spire</h1>
+                            <svg class="w-3.5 h-3.5 text-spire-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" style="width:14px;height:14px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                        </div>
+                        <input id="setup-ws-name-input" type="text"
+                            class="hidden text-xl font-bold bg-spire-bg border border-spire-accent rounded-lg px-2 py-0.5 focus:outline-none flex-1 min-w-0" />
                     </div>
-                    <input id="setup-ws-name-input" type="text"
-                        class="hidden text-xl font-bold bg-spire-bg border border-spire-accent rounded-lg px-2 py-0.5 focus:outline-none flex-1 min-w-0" />
+                    <button id="btn-config-io" type="button"
+                        class="text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1.5 shrink-0"
+                        title="导入 / 导出配置" data-i18n-title="setup.configIoTooltip">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+                            <path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/>
+                        </svg>
+                        <span data-i18n="setup.configIo">导入 / 导出</span>
+                    </button>
                 </div>
                 <div class="flex items-center justify-between mb-4">
                     <p id="setup-subtitle" class="text-spire-muted text-sm" data-i18n="setup.firstTimeSubtitle">首次配置 — 填写以下信息开始同步</p>

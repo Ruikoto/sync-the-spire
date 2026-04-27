@@ -387,6 +387,9 @@ $('#btn-find-save').addEventListener('click', async () => {
     }
 });
 
+// import / export config — opens a tabbed modal; all wiring lives in showConfigIoModal
+$('#btn-config-io').addEventListener('click', () => { showConfigIoModal(); });
+
 // refresh -- fetch remote and show sync status
 guardClick($('#btn-refresh'), () => {
     startRefreshSync();

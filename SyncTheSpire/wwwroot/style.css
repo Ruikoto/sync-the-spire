@@ -144,6 +144,16 @@ button, select {
     font-weight: 500;
 }
 
+/* segmented import/export tab — same look as auth-tab */
+.config-io-tab {
+    color: var(--spire-muted);
+}
+.config-io-tab.active {
+    background: var(--spire-accent);
+    color: #fff;
+    font-weight: 500;
+}
+
 /* title bar */
 #titlebar-drag {
     -webkit-app-region: drag;
