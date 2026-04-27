@@ -4,34 +4,39 @@
  * Existing Tailwind tokens (bg-spire-bg etc.) read these via tailwind.config.js.
  */
 :root {
-    /* warm paper light theme — clean, slightly tinted, avoids the stock white-and-purple SaaS look */
-    --spire-bg:            #F5F4F0;
-    --spire-bg-subtle:     #ECEAE3;
+    /* Light theme — "macOS Settings" feel:
+       a neutral grey page with WHITE cards that float on it via shadow.
+       Borders are nearly invisible (depth comes from shadow, not lines).
+       The accent is a deliberate, slightly muted indigo — present enough to feel
+       intentional, restrained enough not to read as a deep-blue swatch slapped on. */
+    --spire-bg:            #E9EBEF;
+    --spire-bg-subtle:     #DEE1E6;
     --spire-card:          #FFFFFF;
-    --spire-border:        #E3E1DA;
-    --spire-border-strong: #CDCAC1;
-    --spire-text:          #1E1D1A;
-    --spire-muted:         #706C64;
+    --spire-border:        #E1E3E8;
+    --spire-border-strong: #C5C8D0;
+    --spire-text:          #14161D;
+    --spire-muted:         #5E626E;
 
-    --spire-accent:        #4F46E5;
-    --spire-accent-hover:  #4338CA;
-    --spire-accent-soft:   rgba(79, 70, 229, 0.08);
-    --spire-accent-rgb:    79, 70, 229;
+    --spire-accent:        #5754C8;
+    --spire-accent-hover:  #4441AB;
+    --spire-accent-soft:   rgba(87, 84, 200, 0.10);
+    --spire-accent-rgb:    87, 84, 200;
 
-    --spire-danger:        #DC2626;
-    --spire-danger-hover:  #B91C1C;
-    --spire-danger-rgb:    220, 38, 38;
+    --spire-danger:        #C0392B;
+    --spire-danger-hover:  #9C2A1F;
+    --spire-danger-rgb:    192, 57, 43;
 
-    --spire-success:       #16A34A;
-    --spire-warn:          #B45309;
+    --spire-success:       #16803D;
+    --spire-warn:          #9A6207;
 
-    --spire-overlay-soft:  rgba(0, 0, 0, 0.04);
-    --spire-overlay:       rgba(0, 0, 0, 0.06);
-    --spire-overlay-hover: rgba(0, 0, 0, 0.08);
-    --spire-scrim:         rgba(15, 23, 42, 0.32);
+    --spire-overlay-soft:  rgba(15, 17, 24, 0.04);
+    --spire-overlay:       rgba(15, 17, 24, 0.06);
+    --spire-overlay-hover: rgba(15, 17, 24, 0.09);
+    --spire-scrim:         rgba(15, 17, 24, 0.42);
 
-    --spire-shadow-modal:  0 18px 48px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
-    --spire-shadow-tooltip: 0 6px 18px rgba(15, 23, 42, 0.12);
+    --spire-shadow-modal:   0 20px 50px rgba(15, 17, 24, 0.16), 0 4px 12px rgba(15, 17, 24, 0.05);
+    --spire-shadow-tooltip: 0 6px 18px rgba(15, 17, 24, 0.12);
+    --spire-shadow-card:    0 1px 2px rgba(15, 17, 24, 0.04), 0 6px 16px rgba(15, 17, 24, 0.04);
 }
 
 html.dark {
@@ -63,6 +68,7 @@ html.dark {
 
     --spire-shadow-modal:  0 4px 16px rgba(0, 0, 0, 0.4);
     --spire-shadow-tooltip: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --spire-shadow-card:    none;          /* dark mode relies on visible borders, not shadow */
 }
 
 /* smooth surface color transitions when switching themes — but only after first paint
@@ -684,4 +690,39 @@ html:not(.dark) #save-unlink-modal > div,
 html:not(.dark) #mod-diff-modal > div,
 html:not(.dark) #loading-overlay > div {
     box-shadow: var(--spire-shadow-modal);
+}
+
+/* Light-mode card depth: dashboard / settings cards (.rounded-xl) get a soft shadow
+   so they read as "paper sheets floating on a desk", not flat panels.
+   Scoped to .rounded-xl so inputs, titlebar, dropdowns aren't accidentally lifted.
+   Modal selectors above set --spire-shadow-modal (heavier) and win on specificity. */
+html:not(.dark) .bg-spire-card.rounded-xl,
+html:not(.dark) .workspace-card,
+html:not(.dark) .wizard-game-card {
+    box-shadow: var(--spire-shadow-card);
+}
+
+/* Dashboard action buttons (上传/拉取/打开/启动游戏) — keep the colour-coding but pull
+   the saturation way down so the row reads as four refined chips, not a sticker pack.
+   Each one gets a thin coloured underline so identity comes from a hint, not a fill. */
+html:not(.dark) .bg-spire-accent\/10  { background-color: rgba(var(--spire-accent-rgb), 0.07); }
+html:not(.dark) .bg-spire-accent\/15  { background-color: rgba(var(--spire-accent-rgb), 0.09); }
+html:not(.dark) .bg-spire-accent\/20  { background-color: rgba(var(--spire-accent-rgb), 0.13); }
+html:not(.dark) .hover\:bg-spire-accent\/10:hover { background-color: rgba(var(--spire-accent-rgb), 0.11); }
+html:not(.dark) .hover\:bg-spire-accent\/25:hover { background-color: rgba(var(--spire-accent-rgb), 0.18); }
+
+html:not(.dark) .bg-spire-success\/10        { background-color: rgba(22, 128, 61, 0.07); }
+html:not(.dark) .hover\:bg-spire-success\/20:hover { background-color: rgba(22, 128, 61, 0.13); }
+
+html:not(.dark) .bg-spire-warn\/10           { background-color: rgba(154, 98, 7, 0.08); }
+html:not(.dark) .bg-spire-warn\/20           { background-color: rgba(154, 98, 7, 0.14); }
+
+html:not(.dark) .bg-spire-danger\/20         { background-color: rgba(var(--spire-danger-rgb), 0.12); }
+
+/* Titlebar separator: the page-bg-vs-card-bg contrast is now noticeable, so the
+   header doesn't visually merge into the workspace area. Add a hairline shadow
+   under the titlebar instead of a hard border for a more polished separation. */
+html:not(.dark) #titlebar {
+    box-shadow: 0 1px 0 rgba(15, 17, 24, 0.06);
+    border-bottom-color: transparent;
 }
