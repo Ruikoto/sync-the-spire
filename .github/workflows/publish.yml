@@ -26,6 +26,11 @@ on:
         required: false
         default: false
         type: boolean
+      store_dry_run:
+        description: '商店提交 dry-run（创建 submission + 上传，但不 commit；用于调试）'
+        required: false
+        default: true
+        type: boolean
   push:
     tags:
       - 'v*'
@@ -392,131 +397,251 @@ jobs:
           git commit -m "chore: update version.json for $TAG"
           git push "$REMOTE" gh-pages
 
-  # store-submit:
-  #   # run on tag push, or manual dispatch with submit_to_store=true
-  #   # !failure() && !cancelled() keeps it alive even if build (zip) job was skipped
-  #   if: |
-  #     !failure() && !cancelled() &&
-  #     (startsWith(github.ref, 'refs/tags/') ||
-  #      (github.event_name == 'workflow_dispatch' && inputs.submit_to_store == true))
-  #   needs: [build-msix]
-  #   runs-on: windows-latest
-  #   steps:
-  #     - name: Download MSIX artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         pattern: msix-*
-  #         path: ./msix
-  #         merge-multiple: true
+  store-submit:
+    # run on tag push, or manual dispatch with submit_to_store=true
+    # !failure() && !cancelled() keeps it alive even if build (zip) job was skipped
+    if: |
+      !failure() && !cancelled() &&
+      (startsWith(github.ref, 'refs/tags/') ||
+       (github.event_name == 'workflow_dispatch' && inputs.submit_to_store == true))
+    needs: [build-msix]
+    runs-on: windows-latest
+    steps:
+      - name: Download MSIX artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: msix-*
+          path: ./msix
+          merge-multiple: true
 
-  #     # Submit via Partner Center REST API directly.
-  #     # msstore CLI has a bug where it clones the previous submission's packages
-  #     # but never marks them as PendingDelete, so old packages persist.
-  #     - name: Submit to Microsoft Store
-  #       env:
-  #         TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
-  #         CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
-  #         CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-  #         APP_ID: "9PC112T0C074"
-  #       run: |
-  #         $ErrorActionPreference = "Stop"
-  #         $msixDir = "./msix"
+      # Partner Center V1 DevCenter Submission API (the one that supports MSIX/PWA).
+      # The new "Microsoft Store Submission API" at api.store.microsoft.com is MSI/EXE only.
+      # msstore CLI clones the previous submission's packages but doesn't mark them PendingDelete,
+      # which leaves the old binaries in place — so we drive REST directly.
+      - name: Submit to Microsoft Store
+        env:
+          TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+          APP_ID: "9PC112T0C074"
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.store_dry_run == true }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msixDir = "./msix"
+          $apiBase = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID"
 
-  #         $msixFiles = Get-ChildItem -Path $msixDir -Filter *.msix
-  #         if ($msixFiles.Count -eq 0) {
-  #             Write-Error "No MSIX files found in downloaded artifacts!"
-  #             exit 1
-  #         }
-  #         Write-Host "Found $($msixFiles.Count) package(s): $($msixFiles.Name -join ', ')"
+          $msixFiles = @(Get-ChildItem -Path $msixDir -Filter *.msix)
+          if ($msixFiles.Count -eq 0) {
+              throw "No MSIX files found in downloaded artifacts."
+          }
+          Write-Host "Found $($msixFiles.Count) MSIX file(s):"
+          $msixFiles | ForEach-Object { Write-Host "  - $($_.Name)  ($([math]::Round($_.Length / 1MB, 2)) MB)" }
+          $expectedNames = $msixFiles.Name
 
-  #         # acquire Azure AD token for Partner Center API
-  #         Write-Host "Acquiring access token..."
-  #         $tokenResp = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$env:TENANT_ID/oauth2/token" -Method Post -Body @{
-  #             grant_type    = "client_credentials"
-  #             client_id     = $env:CLIENT_ID
-  #             client_secret = $env:CLIENT_SECRET
-  #             resource      = "https://manage.devcenter.microsoft.com"
-  #         }
-  #         $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          if ($env:DRY_RUN -eq "True") {
+              Write-Host "::warning::DRY-RUN mode — submission will be created and uploaded but NOT committed."
+          }
 
-  #         # delete pending submission if one exists (only one in-flight allowed)
-  #         Write-Host "Checking for pending submissions..."
-  #         $appInfo = Invoke-RestMethod -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID" -Headers $headers
-  #         if ($appInfo.pendingApplicationSubmission) {
-  #             $pendingId = $appInfo.pendingApplicationSubmission.id
-  #             Write-Host "Deleting stale pending submission $pendingId..."
-  #             Invoke-RestMethod -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$pendingId" -Headers $headers -Method Delete
-  #         }
+          # ---- 1. acquire Azure AD token ----
+          Write-Host "::group::Acquiring access token"
+          $tokenResp = Invoke-RestMethod `
+              -Uri "https://login.microsoftonline.com/$env:TENANT_ID/oauth2/token" `
+              -Method Post `
+              -ContentType "application/x-www-form-urlencoded" `
+              -Body @{
+                  grant_type    = "client_credentials"
+                  client_id     = $env:CLIENT_ID
+                  client_secret = $env:CLIENT_SECRET
+                  resource      = "https://manage.devcenter.microsoft.com"
+              }
+          $headers = @{ Authorization = "Bearer $($tokenResp.access_token)" }
+          Write-Host "Token acquired (expires_in=$($tokenResp.expires_in)s)"
+          Write-Host "::endgroup::"
 
-  #         # create new submission (cloned from last published)
-  #         Write-Host "Creating new submission..."
-  #         $submission = Invoke-RestMethod -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions" -Headers $headers -Method Post
-  #         $submissionId = $submission.id
-  #         $uploadUrl = $submission.fileUploadUrl
-  #         Write-Host "Submission $submissionId created."
+          # ---- 2. clean up any stale pending submission (only one in-flight allowed) ----
+          Write-Host "::group::Checking for pending submissions"
+          $appInfo = Invoke-RestMethod -Uri $apiBase -Headers $headers
+          if ($appInfo.pendingApplicationSubmission) {
+              $pendingId = $appInfo.pendingApplicationSubmission.id
+              Write-Host "Deleting stale pending submission $pendingId..."
+              Invoke-RestMethod -Uri "$apiBase/submissions/$pendingId" -Headers $headers -Method Delete
+          } else {
+              Write-Host "No pending submission."
+          }
+          Write-Host "::endgroup::"
 
-  #         # mark old packages PendingDelete, add new ones as PendingUpload
-  #         $packages = [System.Collections.ArrayList]::new()
-  #         if ($submission.applicationPackages) {
-  #             foreach ($pkg in $submission.applicationPackages) {
-  #                 $pkg.fileStatus = "PendingDelete"
-  #                 $packages.Add($pkg) | Out-Null
-  #             }
-  #             Write-Host "Marked $($packages.Count) old package(s) for deletion."
-  #         }
-  #         foreach ($file in $msixFiles) {
-  #             $packages.Add([ordered]@{
-  #                 fileName   = $file.Name
-  #                 fileStatus = "PendingUpload"
-  #             }) | Out-Null
-  #         }
-  #         $submission.applicationPackages = @($packages)
+          # ---- 3. create new submission (cloned from last published) ----
+          Write-Host "::group::Creating new submission"
+          $submission = Invoke-RestMethod -Uri "$apiBase/submissions" -Headers $headers -Method Post
+          $submissionId = $submission.id
+          $uploadUrl = $submission.fileUploadUrl
+          Write-Host "Submission $submissionId created."
+          Write-Host "Cloned applicationPackages: $($submission.applicationPackages.Count)"
+          $submission.applicationPackages | ForEach-Object {
+              Write-Host "  cloned: $($_.fileName)  status=$($_.fileStatus)"
+          }
+          Write-Host "::endgroup::"
 
-  #         # update submission metadata
-  #         Write-Host "Updating submission metadata..."
-  #         $body = $submission | ConvertTo-Json -Depth 20 -Compress
-  #         Invoke-RestMethod `
-  #             -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId" `
-  #             -Headers ($headers + @{ "Content-Type" = "application/json; charset=utf-8" }) `
-  #             -Method Put -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
+          # ---- 4. mutate applicationPackages: old -> PendingDelete, new -> PendingUpload ----
+          Write-Host "::group::Updating package list"
+          $newPackages = New-Object System.Collections.ArrayList
+          if ($submission.applicationPackages) {
+              foreach ($pkg in $submission.applicationPackages) {
+                  $pkg.fileStatus = "PendingDelete"
+                  [void]$newPackages.Add($pkg)
+              }
+          }
+          foreach ($file in $msixFiles) {
+              # use pscustomobject so the array stays homogeneous through ConvertTo-Json
+              [void]$newPackages.Add([pscustomobject]@{
+                  fileName   = $file.Name
+                  fileStatus = "PendingUpload"
+              })
+          }
+          $submission.applicationPackages = @($newPackages)
+          Write-Host "New applicationPackages list:"
+          $submission.applicationPackages | ForEach-Object { Write-Host "  $($_.fileName) -> $($_.fileStatus)" }
+          Write-Host "::endgroup::"
 
-  #         # upload package zip
-  #         Write-Host "Uploading package zip..."
-  #         $zipPath = "$env:TEMP\packages.zip"
-  #         Compress-Archive -Path "$msixDir\*.msix" -DestinationPath $zipPath -Force
-  #         $zipBytes = [System.IO.File]::ReadAllBytes($zipPath)
-  #         Invoke-WebRequest -Uri $uploadUrl -Method Put -Body $zipBytes `
-  #             -ContentType "application/zip" `
-  #             -Headers @{ "x-ms-blob-type" = "BlockBlob" }
+          # ---- 5. PUT updated submission ----
+          Write-Host "::group::PUT submission metadata"
+          $body = $submission | ConvertTo-Json -Depth 20 -Compress
+          Invoke-RestMethod `
+              -Uri "$apiBase/submissions/$submissionId" `
+              -Headers $headers `
+              -Method Put `
+              -ContentType "application/json; charset=utf-8" `
+              -Body $body | Out-Null
+          Write-Host "PUT ok ($($body.Length) bytes)."
+          Write-Host "::endgroup::"
 
-  #         # commit
-  #         Write-Host "Committing submission..."
-  #         Invoke-RestMethod `
-  #             -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId/commit" `
-  #             -Headers $headers -Method Post
+          # ---- 6. build a FLAT zip (no parent dir) — fileName in applicationPackages must
+          #         match the entry name inside the zip exactly, or the server silently
+          #         ignores the upload and your "successful" submission has no new bits.
+          Write-Host "::group::Building flat zip"
+          $zipPath = Join-Path $env:RUNNER_TEMP "packages.zip"
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+          try {
+              foreach ($file in $msixFiles) {
+                  [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                      $archive, $file.FullName, $file.Name, [System.IO.Compression.CompressionLevel]::NoCompression
+                  ) | Out-Null
+                  Write-Host "  added: $($file.Name)"
+              }
+          } finally {
+              $archive.Dispose()
+          }
+          $zipSize = (Get-Item $zipPath).Length
+          Write-Host "Zip built: $zipPath  ($([math]::Round($zipSize / 1MB, 2)) MB)"
 
-  #         # poll until processing completes
-  #         Write-Host "Waiting for submission processing..."
-  #         $terminalStates = @("CommitFailed", "Certification", "Published", "Failed", "Release")
-  #         do {
-  #             Start-Sleep -Seconds 30
-  #             $status = Invoke-RestMethod `
-  #                 -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId/status" `
-  #                 -Headers $headers
-  #             Write-Host "Submission Status - $($status.status)"
-  #         } while ($status.status -notin $terminalStates)
+          # verify zip entries match expected fileNames
+          $verifyArchive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+              $entryNames = $verifyArchive.Entries.FullName
+          } finally {
+              $verifyArchive.Dispose()
+          }
+          Write-Host "Zip entry names: $($entryNames -join ', ')"
+          $missing = $expectedNames | Where-Object { $_ -notin $entryNames }
+          if ($missing) { throw "Zip is missing entries: $($missing -join ', ')" }
+          Write-Host "::endgroup::"
 
-  #         if ($status.status -in @("CommitFailed", "Failed")) {
-  #             Write-Host "Submission failed!"
-  #             $status | ConvertTo-Json -Depth 5
-  #             exit 1
-  #         }
+          # ---- 7. SAS PUT to Azure Blob ----
+          # Use HttpClient — Invoke-WebRequest's -InFile path can corrupt large blobs and
+          # lacks the streaming control we need for a multi-hundred-MB upload.
+          Write-Host "::group::Uploading zip to SAS URL"
+          Add-Type -AssemblyName System.Net.Http
+          $client = [System.Net.Http.HttpClient]::new()
+          $client.Timeout = [TimeSpan]::FromMinutes(30)
+          try {
+              $stream = [System.IO.File]::OpenRead($zipPath)
+              $content = [System.Net.Http.StreamContent]::new($stream)
+              $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new("application/zip")
+              $content.Headers.ContentLength = $zipSize
+              $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Put, $uploadUrl)
+              $req.Content = $content
+              $req.Headers.Add("x-ms-blob-type", "BlockBlob")
+              $sw = [System.Diagnostics.Stopwatch]::StartNew()
+              $resp = $client.SendAsync($req).GetAwaiter().GetResult()
+              $sw.Stop()
+              if (-not $resp.IsSuccessStatusCode) {
+                  $errBody = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                  throw "SAS upload failed: $($resp.StatusCode) $($resp.ReasonPhrase) — $errBody"
+              }
+              $stream.Dispose()
+              Write-Host "Upload OK in $([math]::Round($sw.Elapsed.TotalSeconds, 1))s."
+          } finally {
+              $client.Dispose()
+          }
+          Write-Host "::endgroup::"
 
-  #         # show final package list for verification
-  #         $finalSub = Invoke-RestMethod `
-  #             -Uri "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:APP_ID/submissions/$submissionId" `
-  #             -Headers $headers
-  #         Write-Host "Submitted packages:"
-  #         $finalSub.applicationPackages | Where-Object { $_.fileStatus -ne "PendingDelete" } | ForEach-Object {
-  #             Write-Host "  $($_.fileName) ($($_.fileStatus))"
-  #         }
+          # ---- 8. GET-after-PUT verification — the smoking-gun detector for silent
+          #         server-side rejection of our package list. If our PendingUpload entries
+          #         aren't reflected back, committing would publish an empty update.
+          Write-Host "::group::Verifying server-side state before commit"
+          $verifySub = Invoke-RestMethod -Uri "$apiBase/submissions/$submissionId" -Headers $headers
+          Write-Host "Server-side applicationPackages after PUT:"
+          $verifySub.applicationPackages | ForEach-Object {
+              Write-Host "  $($_.fileName) -> $($_.fileStatus)"
+          }
+          $serverPendingUpload = @($verifySub.applicationPackages | Where-Object { $_.fileStatus -eq "PendingUpload" })
+          if ($serverPendingUpload.Count -ne $msixFiles.Count) {
+              throw "Mismatch: expected $($msixFiles.Count) PendingUpload entries, server reports $($serverPendingUpload.Count). The PUT didn't take. ABORT before commit."
+          }
+          $serverNames = $serverPendingUpload.fileName | Sort-Object
+          $localNames = $expectedNames | Sort-Object
+          if ([string]::Join(',', $serverNames) -ne [string]::Join(',', $localNames)) {
+              throw "Mismatch: server PendingUpload names ($($serverNames -join ', ')) differ from local MSIX ($($localNames -join ', '))."
+          }
+          Write-Host "Server state matches local — safe to commit."
+          Write-Host "::endgroup::"
+
+          if ($env:DRY_RUN -eq "True") {
+              Write-Host "::warning::DRY-RUN: skipping commit. Submission $submissionId left in pending state — delete it manually or re-run without dry-run."
+              return
+          }
+
+          # ---- 9. commit ----
+          Write-Host "::group::Committing submission"
+          Invoke-RestMethod -Uri "$apiBase/submissions/$submissionId/commit" -Headers $headers -Method Post | Out-Null
+          Write-Host "Commit posted."
+          Write-Host "::endgroup::"
+
+          # ---- 10. poll until processing completes ----
+          # Terminal states (per docs): CommitFailed, Certification, Release, Published, Canceled.
+          # "PreProcessing" / "CommitStarted" are transient.
+          Write-Host "::group::Polling submission status"
+          $terminalStates = @("CommitFailed", "Certification", "Release", "Published", "Canceled")
+          $deadline = (Get-Date).AddMinutes(30)
+          do {
+              Start-Sleep -Seconds 30
+              $status = Invoke-RestMethod -Uri "$apiBase/submissions/$submissionId/status" -Headers $headers
+              Write-Host "[$((Get-Date).ToString('HH:mm:ss'))] Status: $($status.status)"
+              if ($status.statusDetails) {
+                  if ($status.statusDetails.errors) {
+                      $status.statusDetails.errors | ForEach-Object { Write-Host "  error: $($_.code) — $($_.details)" }
+                  }
+                  if ($status.statusDetails.warnings) {
+                      $status.statusDetails.warnings | ForEach-Object { Write-Host "  warning: $($_.code) — $($_.details)" }
+                  }
+              }
+              if ((Get-Date) -gt $deadline) { throw "Polling timeout (30 minutes)." }
+          } while ($status.status -notin $terminalStates)
+          Write-Host "::endgroup::"
+
+          if ($status.status -in @("CommitFailed", "Canceled")) {
+              Write-Host "::error::Submission ended in $($status.status)."
+              $status | ConvertTo-Json -Depth 10
+              exit 1
+          }
+
+          # show final package list for verification
+          $finalSub = Invoke-RestMethod -Uri "$apiBase/submissions/$submissionId" -Headers $headers
+          Write-Host "Final submitted packages:"
+          $finalSub.applicationPackages | Where-Object { $_.fileStatus -ne "PendingDelete" } | ForEach-Object {
+              Write-Host "  $($_.fileName) ($($_.fileStatus))"
+          }
+          Write-Host "::notice::Submission $submissionId reached state: $($status.status)"
