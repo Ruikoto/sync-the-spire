@@ -463,15 +463,17 @@ jobs:
           if ($appInfo.pendingApplicationSubmission) {
               $pendingId = $appInfo.pendingApplicationSubmission.id
               Write-Host "Deleting stale pending submission $pendingId..."
-              Invoke-RestMethod -Uri "$apiBase/submissions/$pendingId" -Headers $headers -Method Delete
+              Invoke-RestMethod -Uri "$apiBase/submissions/$pendingId" -Headers $headers -Method Delete -ContentType "application/json"
           } else {
               Write-Host "No pending submission."
           }
           Write-Host "::endgroup::"
 
           # ---- 3. create new submission (cloned from last published) ----
+          # Partner Center insists on Content-Type: application/json even on body-less POST,
+          # otherwise it returns InvalidParameterValue/mediaType.
           Write-Host "::group::Creating new submission"
-          $submission = Invoke-RestMethod -Uri "$apiBase/submissions" -Headers $headers -Method Post
+          $submission = Invoke-RestMethod -Uri "$apiBase/submissions" -Headers $headers -Method Post -ContentType "application/json"
           $submissionId = $submission.id
           $uploadUrl = $submission.fileUploadUrl
           Write-Host "Submission $submissionId created."
@@ -605,7 +607,7 @@ jobs:
 
           # ---- 9. commit ----
           Write-Host "::group::Committing submission"
-          Invoke-RestMethod -Uri "$apiBase/submissions/$submissionId/commit" -Headers $headers -Method Post | Out-Null
+          Invoke-RestMethod -Uri "$apiBase/submissions/$submissionId/commit" -Headers $headers -Method Post -ContentType "application/json" | Out-Null
           Write-Host "Commit posted."
           Write-Host "::endgroup::"
 
