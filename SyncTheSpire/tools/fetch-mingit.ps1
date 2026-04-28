@@ -70,12 +70,16 @@ try {
     $lfsTarget = Join-Path $OutDir 'mingw64\bin\git-lfs.exe'
     Copy-Item $lfsExe.FullName -Destination $lfsTarget -Force
 
-    # prune dead weight: cmd/ is a thin git.exe launcher we don't use (we spawn
-    # mingw64/bin/git.exe directly), and locale dirs are git's UI translations
-    # which our IPC layer never surfaces. Combined ~15 MB.
+    # prune dead weight:
+    #   cmd/                       — thin git.exe launcher; we spawn mingw64/bin/git.exe directly
+    #   mingw64/share/locale/      — git's UI translations; never surfaced through IPC
+    #   usr/share/locale/          — msys utility translations; same story
+    #   mingw64/bin/scalar.exe     — standalone tool for huge mono-repos; git itself doesn't call it,
+    #                                we don't either. 14 MB of unique LZX-incompressible bytes.
     Remove-Item -Recurse -Force (Join-Path $OutDir 'cmd')                  -ErrorAction SilentlyContinue
     Remove-Item -Recurse -Force (Join-Path $OutDir 'mingw64\share\locale') -ErrorAction SilentlyContinue
     Remove-Item -Recurse -Force (Join-Path $OutDir 'usr\share\locale')     -ErrorAction SilentlyContinue
+    Remove-Item -Force          (Join-Path $OutDir 'mingw64\bin\scalar.exe') -ErrorAction SilentlyContinue
 
     Write-Host "MinGit + git-lfs ready at $OutDir"
 } finally {

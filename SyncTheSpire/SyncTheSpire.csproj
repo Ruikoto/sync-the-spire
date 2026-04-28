@@ -11,6 +11,11 @@
          no StringComparison.Current*, no implicit culture parse/format. all DateTime/number
          formatting uses explicit invariant patterns. -->
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- drop satellite resource DLLs for languages we don't ship. these only affect .NET / WebView2
+         framework error messages (UI text comes from our own i18n.js, not framework resources).
+         saves ~9 MB raw, a few MB inside the MSIX (resource files compress well, but they're unique
+         enough that LZX can't dedup them across runtimes). -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationIcon>assets\icon.ico</ApplicationIcon>
     <!-- local builds get nightly-YYYYMMDD-HHmmss, CI overrides via -p:InformationalVersion=v1.0.0 -->
     <InformationalVersion>nightly-$([System.DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))</InformationalVersion>
