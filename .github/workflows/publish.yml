@@ -201,6 +201,52 @@ jobs:
             -p:InformationalVersion=${{ steps.version.outputs.VERSION_TAG }} `
             -o ./publish_output
 
+      # TEMP DIAGNOSTIC — find out why MSIX size didn't drop after prune + InvariantGlobalization.
+      # Remove once we've identified the offender.
+      - name: Inspect publish_output (msix)
+        run: |
+          $root = "./publish_output"
+          $totalMb = [math]::Round((Get-ChildItem $root -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
+          Write-Host "::group::publish_output total = $totalMb MB"
+
+          Write-Host "`n-- top 15 largest files --"
+          Get-ChildItem $root -Recurse -File | Sort-Object Length -Descending |
+            Select-Object -First 15 |
+            ForEach-Object { "{0,8:N1} MB  {1}" -f ($_.Length / 1MB), ($_.FullName.Replace((Resolve-Path $root).Path + '\', '')) } |
+            Out-Host
+
+          Write-Host "`n-- ICU presence (InvariantGlobalization audit) --"
+          $icu = Get-ChildItem $root -Recurse -File -Include 'icudt*.dat','icu*.dll' -ErrorAction SilentlyContinue
+          if ($icu) { $icu | ForEach-Object { "  PRESENT: $($_.Name)  $([math]::Round($_.Length / 1MB, 2)) MB" } }
+          else      { Write-Host "  none — InvariantGlobalization is taking effect" }
+
+          Write-Host "`n-- mingit prune audit --"
+          $cmd    = Test-Path "$root/tools/mingit/cmd"
+          $loc1   = Test-Path "$root/tools/mingit/mingw64/share/locale"
+          $loc2   = Test-Path "$root/tools/mingit/usr/share/locale"
+          Write-Host "  cmd/                       exists = $cmd  (expected: False)"
+          Write-Host "  mingw64/share/locale/      exists = $loc1 (expected: False)"
+          Write-Host "  usr/share/locale/          exists = $loc2 (expected: False)"
+
+          Write-Host "`n-- top-level breakdown --"
+          Get-ChildItem $root | ForEach-Object {
+            if ($_.PSIsContainer) {
+              $sz = (Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum
+              "{0,8:N1} MB  {1}/" -f ($sz / 1MB), $_.Name
+            } else {
+              "{0,8:N1} MB  {1}" -f ($_.Length / 1MB), $_.Name
+            }
+          } | Sort-Object -Descending | Out-Host
+
+          Write-Host "`n-- mingit subtree breakdown --"
+          if (Test-Path "$root/tools/mingit") {
+            Get-ChildItem "$root/tools/mingit" -Recurse -Directory | ForEach-Object {
+              $sz = (Get-ChildItem $_.FullName -File | Measure-Object Length -Sum).Sum
+              if ($sz -gt 1MB) { "{0,8:N1} MB  {1}" -f ($sz / 1MB), ($_.FullName.Replace((Resolve-Path $root).Path + '\', '')) }
+            } | Sort-Object -Descending | Out-Host
+          }
+          Write-Host "::endgroup::"
+
       - name: Stage MSIX Layout
         run: |
           $layout = "./msix_layout"
@@ -221,6 +267,22 @@ jobs:
           if (Test-Path "SyncTheSpire/assets/store/*.png") {
             Copy-Item -Path "SyncTheSpire/assets/store/*.png" -Destination "$layout/assets/store/"
           }
+
+      # TEMP DIAGNOSTIC — confirm Stage MSIX Layout didn't re-introduce pruned content.
+      # Remove together with the post-publish diagnostic.
+      - name: Inspect msix_layout
+        run: |
+          $root = "./msix_layout"
+          $totalMb = [math]::Round((Get-ChildItem $root -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
+          Write-Host "::group::msix_layout total = $totalMb MB"
+
+          $icu = Get-ChildItem $root -Recurse -File -Include 'icudt*.dat','icu*.dll' -ErrorAction SilentlyContinue
+          if ($icu) { $icu | ForEach-Object { "  ICU: $($_.Name)  $([math]::Round($_.Length / 1MB, 2)) MB" } }
+          else      { Write-Host "  ICU: none" }
+          Write-Host "  cmd/                       exists = $(Test-Path $root/tools/mingit/cmd)"
+          Write-Host "  mingw64/share/locale/      exists = $(Test-Path $root/tools/mingit/mingw64/share/locale)"
+          Write-Host "  usr/share/locale/          exists = $(Test-Path $root/tools/mingit/usr/share/locale)"
+          Write-Host "::endgroup::"
 
       - name: Create MSIX Package
         run: |
