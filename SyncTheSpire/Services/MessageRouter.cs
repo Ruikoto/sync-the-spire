@@ -78,10 +78,6 @@ public class MessageRouter
         _uiContext = SynchronizationContext.Current
                      ?? throw new InvalidOperationException("MessageRouter must be created on the UI thread");
 
-        // wire up MinGit download progress to IPC loading overlay
-        gitResolver.OnProgress = p =>
-            Send(IpcResponse.Progress("GIT_DOWNLOAD", p.Message, p.Percent));
-
         // init handlers with current workspace context (may be null for fresh install)
         _currentContext = initialContext;
         BuildHandlers();

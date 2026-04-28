@@ -37,3 +37,6 @@ tmpClaude*
 ## node_modules
 node_modules/
 package-lock.json
+
+## bundled MinGit + git-lfs (CI downloads at build time; local dev populates manually)
+SyncTheSpire/tools/mingit/

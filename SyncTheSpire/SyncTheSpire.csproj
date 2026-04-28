@@ -34,6 +34,16 @@
     <Content Include="assets\sts2.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\sv.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\mc.png" CopyToOutputDirectory="PreserveNewest" />
+    <!--
+      bundled MinGit + git-lfs. CI populates tools/mingit/ before publish; for local dev, drop
+      MinGit-2.49.0-64-bit.zip and git-lfs-windows-amd64-v3.6.1.zip contents into tools/mingit/
+      manually. ExcludeFromSingleFile keeps the binaries beside the exe instead of bundling
+      them into the single-file payload (otherwise we couldn't spawn git.exe by path).
+    -->
+    <Content Include="tools\mingit\**"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             ExcludeFromSingleFile="true" />
   </ItemGroup>
 
 </Project>

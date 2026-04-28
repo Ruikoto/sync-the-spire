@@ -80,6 +80,24 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Stage bundled MinGit + git-lfs
+        # binaries are gitignored — CI fetches the pinned versions and drops them where csproj
+        # expects them so the publish step copies them into the publish output. ARM64 ships
+        # the same x64 binaries (run via x64 emulation; MinGit/LFS have no ARM64 builds).
+        run: |
+          $tools = "SyncTheSpire/tools/mingit"
+          if (Test-Path $tools) { Remove-Item -Recurse -Force $tools }
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+
+          Invoke-WebRequest -Uri "https://github.com/git-for-windows/git/releases/download/v2.49.0.windows.1/MinGit-2.49.0-64-bit.zip" -OutFile mingit.zip
+          Expand-Archive -Path mingit.zip -DestinationPath $tools -Force
+
+          Invoke-WebRequest -Uri "https://github.com/git-lfs/git-lfs/releases/download/v3.6.1/git-lfs-windows-amd64-v3.6.1.zip" -OutFile gitlfs.zip
+          Expand-Archive -Path gitlfs.zip -DestinationPath gitlfs-extracted -Force
+          $lfs = Get-ChildItem gitlfs-extracted -Recurse -Filter git-lfs.exe | Select-Object -First 1
+          if (-not $lfs) { throw "git-lfs.exe not found in extracted archive" }
+          Copy-Item $lfs.FullName -Destination "$tools/mingw64/bin/git-lfs.exe"
+
       - name: Publish
         run: |
           $r2r = "${{ matrix.self_contained }}"
@@ -105,6 +123,11 @@ jobs:
           # but we also ship it alongside for users who want to tinker with the frontend
           if (Test-Path "./publish_output/wwwroot") {
             Copy-Item -Recurse -Path "./publish_output/wwwroot" -Destination "./package/wwwroot"
+          }
+          # bundled git/git-lfs — ExcludeFromSingleFile keeps them beside the exe in publish_output;
+          # ship them alongside so the resolver can spawn git.exe by path
+          if (Test-Path "./publish_output/tools") {
+            Copy-Item -Recurse -Path "./publish_output/tools" -Destination "./package/tools"
           }
           if (Test-Path "README.md") { Copy-Item -Path "README.md" -Destination "./package/README.md" }
 
@@ -169,12 +192,23 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Download MinGit
+      - name: Stage bundled MinGit + git-lfs
+        # binaries are gitignored — CI fetches the pinned versions and drops them where csproj
+        # expects them so the publish step copies them into the MSIX layout. ARM64 ships
+        # the same x64 binaries (run via x64 emulation; MinGit/LFS have no ARM64 builds).
         run: |
-          # MinGit is x64-only; ARM64 Windows runs it via x86-64 emulation
-          $url = "https://github.com/git-for-windows/git/releases/download/v2.49.0.windows.1/MinGit-2.49.0-64-bit.zip"
-          Invoke-WebRequest -Uri $url -OutFile mingit.zip
-          Expand-Archive -Path mingit.zip -DestinationPath ./mingit-extracted -Force
+          $tools = "SyncTheSpire/tools/mingit"
+          if (Test-Path $tools) { Remove-Item -Recurse -Force $tools }
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+
+          Invoke-WebRequest -Uri "https://github.com/git-for-windows/git/releases/download/v2.49.0.windows.1/MinGit-2.49.0-64-bit.zip" -OutFile mingit.zip
+          Expand-Archive -Path mingit.zip -DestinationPath $tools -Force
+
+          Invoke-WebRequest -Uri "https://github.com/git-lfs/git-lfs/releases/download/v3.6.1/git-lfs-windows-amd64-v3.6.1.zip" -OutFile gitlfs.zip
+          Expand-Archive -Path gitlfs.zip -DestinationPath gitlfs-extracted -Force
+          $lfs = Get-ChildItem gitlfs-extracted -Recurse -Filter git-lfs.exe | Select-Object -First 1
+          if (-not $lfs) { throw "git-lfs.exe not found in extracted archive" }
+          Copy-Item $lfs.FullName -Destination "$tools/mingw64/bin/git-lfs.exe"
 
       - name: Publish (non-SingleFile for MSIX)
         run: |
@@ -195,12 +229,8 @@ jobs:
           $layout = "./msix_layout"
           New-Item -ItemType Directory -Force -Path $layout
 
-          # app binaries
+          # app binaries (publish output already includes tools/mingit via csproj Content)
           Copy-Item -Recurse -Path "./publish_output/*" -Destination "$layout/"
-
-          # bundled MinGit
-          New-Item -ItemType Directory -Force -Path "$layout/tools/mingit"
-          Copy-Item -Recurse -Path "./mingit-extracted/*" -Destination "$layout/tools/mingit/"
 
           # inject version and architecture into manifest
           $arch = if ("${{ matrix.rid }}" -eq "win-x64") { "x64" } else { "arm64" }

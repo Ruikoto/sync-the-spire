@@ -175,7 +175,7 @@ public class GitBranchHandler : HandlerBase
         // user must see it since otherwise the working tree silently contains pointer text files)
         _gitService.OnTransferProgress = p =>
             Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}... {p.Percent}%", p.Percent, p.Detail));
-        _gitService.OnLfsDownloadProgress = msg =>
+        _gitService.OnLfsMessage = msg =>
             Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", msg));
 
         // save current work first
@@ -185,7 +185,7 @@ public class GitBranchHandler : HandlerBase
         finally
         {
             _gitService.OnTransferProgress = null;
-            _gitService.OnLfsDownloadProgress = null;
+            _gitService.OnLfsMessage = null;
         }
 
         // make sure junction is pointing correctly
@@ -312,13 +312,13 @@ public class GitBranchHandler : HandlerBase
         Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
         _gitService.OnTransferProgress = p =>
             Send(IpcResponse.Progress("RESET_TO_REMOTE", $"正在同步云端配置... {p.Percent}%", p.Percent, p.Detail));
-        _gitService.OnLfsDownloadProgress = msg =>
+        _gitService.OnLfsMessage = msg =>
             Send(IpcResponse.Progress("RESET_TO_REMOTE", msg));
         try { _gitService.ResetToRemote(); }
         finally
         {
             _gitService.OnTransferProgress = null;
-            _gitService.OnLfsDownloadProgress = null;
+            _gitService.OnLfsMessage = null;
         }
 
         if (_adapter.SupportsJunction)
@@ -403,10 +403,10 @@ public class GitBranchHandler : HandlerBase
         }
 
         Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", "正在安装 Git LFS..."));
-        _gitService.OnLfsDownloadProgress = msg =>
+        _gitService.OnLfsMessage = msg =>
             Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", msg));
         try { _gitService.EnableLfs(); }
-        finally { _gitService.OnLfsDownloadProgress = null; }
+        finally { _gitService.OnLfsMessage = null; }
 
         Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", $"正在标记 {filePaths.Count} 个大文件为 LFS 存储..."));
         _gitService.TrackLfsPatterns(filePaths);
@@ -480,10 +480,10 @@ public class GitBranchHandler : HandlerBase
         _gitService.SilentCommitIfDirty();
 
         Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", "正在安装 Git LFS..."));
-        _gitService.OnLfsDownloadProgress = msg =>
+        _gitService.OnLfsMessage = msg =>
             Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", msg));
         try { _gitService.EnableLfs(); }
-        finally { _gitService.OnLfsDownloadProgress = null; }
+        finally { _gitService.OnLfsMessage = null; }
 
         // skip TrackLfsPatterns: `lfs migrate import` writes its own .gitattributes entries
         // into the rewritten history. running `git lfs track` here would only dirty the

@@ -45,9 +45,10 @@ public class GitService
     public Action<GitTransferProgress>? OnTransferProgress { get; set; }
 
     /// <summary>
-    /// fires during git-lfs download if the binary needs to be fetched
+    /// surfaces LFS-related warnings to the UI (install/checkout failures, etc.).
+    /// the binary itself is bundled, so there's no download progress to report.
     /// </summary>
-    public Action<string>? OnLfsDownloadProgress { get; set; }
+    public Action<string>? OnLfsMessage { get; set; }
 
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
@@ -263,12 +264,10 @@ public class GitService
     /// </summary>
     private string RunGitLfsCli(string args, int timeout = 120_000)
     {
-        var lfsPath = _resolver.GetGitLfsPath()
-            ?? throw new InvalidOperationException("git-lfs.exe 不可用，请先启用大文件上传功能。");
         LogService.Info($"git-lfs.exe {args}");
         var psi = new ProcessStartInfo
         {
-            FileName = lfsPath,
+            FileName = _resolver.GetGitLfsPath(),
             WorkingDirectory = WorkTreePath,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -881,27 +880,15 @@ public class GitService
 
     /// <summary>
     /// install LFS hooks in the separated git dir and mark workspace as LFS-enabled.
-    /// downloads git-lfs.exe if not already available.
     /// </summary>
     public void EnableLfs()
     {
-        EnsureGitLfsWithProgress();
         RunGitLfsCli("install --local");
 
         var ws = _config.Workspace;
         ws.LfsEnabled = true;
         _config.SaveWorkspace();
         LogService.Info("Git LFS enabled for workspace");
-    }
-
-    // bridge resolver progress to OnLfsDownloadProgress for the duration of the call,
-    // restoring the previous handler afterwards so the MinGit progress hook isn't lost
-    private void EnsureGitLfsWithProgress()
-    {
-        var prev = _resolver.OnProgress;
-        _resolver.OnProgress = p => OnLfsDownloadProgress?.Invoke(p.Message);
-        try { _resolver.EnsureGitLfs(); }
-        finally { _resolver.OnProgress = prev; }
     }
 
     /// <summary>
@@ -1006,7 +993,7 @@ public class GitService
     // real content instead of pointer text — required after reset / branch checkout, but
     // wasted work right after clone where the working tree is about to be wiped anyway.
     // failures here are non-fatal to the caller (clone/reset already succeeded) but the user
-    // needs to know: we surface a visible warning via OnLfsDownloadProgress so at least
+    // needs to know: we surface a visible warning via OnLfsMessage so at least
     // some UI lands instead of a silent log line.
     private void DetectAndInstallLfsIfNeeded(bool materialize = true)
     {
@@ -1016,8 +1003,6 @@ public class GitService
 
         try
         {
-            // bridge resolver progress so the LFS download isn't silent for the user
-            EnsureGitLfsWithProgress();
             RunGitLfsCli("install --local");
 
             if (materialize)
@@ -1028,7 +1013,7 @@ public class GitService
                 catch (Exception chEx)
                 {
                     LogService.Warn($"lfs checkout failed: {chEx.Message}");
-                    OnLfsDownloadProgress?.Invoke(
+                    OnLfsMessage?.Invoke(
                         "⚠ 大文件内容拉取失败，部分文件可能为占位符。请检查网络后再次点击拉取。");
                 }
             }
@@ -1045,7 +1030,7 @@ public class GitService
         {
             LogService.Warn($"LFS auto-detect failed: {ex.Message}");
             // surface to the user — a silent failure here means game reads pointer text and breaks
-            OnLfsDownloadProgress?.Invoke(
+            OnLfsMessage?.Invoke(
                 $"⚠ 检测到仓库使用大文件（LFS）但组件安装失败：{ex.Message}");
         }
     }
