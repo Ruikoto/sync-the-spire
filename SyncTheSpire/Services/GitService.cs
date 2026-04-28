@@ -82,11 +82,25 @@ public class GitService
 
     /// <summary>
     /// set up env vars shared by all git.exe invocations:
-    /// SSH key, HTTPS auth header, safe.directory, terminal prompt suppression.
+    /// PATH, SSH key, HTTPS auth header, safe.directory, terminal prompt suppression.
     /// </summary>
     private void ConfigureGitEnv(ProcessStartInfo psi, bool setGitDir = true)
     {
         var ws = _config.Workspace;
+
+        // git.exe's compiled-in --exec-path is mingw64/libexec/git-core, but MinGit's
+        // native remote helpers (git-remote-http(s).exe etc.) live in mingw64/bin instead;
+        // ssh.exe used for SSH auth lives in usr/bin. without those dirs on PATH,
+        // `git fetch/push https://...` dies with "remote-helper 'https' aborted" and SSH
+        // fails to resolve. system-installed git masks this through cmd/git.exe wrapper or
+        // its installer's PATH entries; we spawn mingw64/bin/git.exe directly with no
+        // system git on the machine, so we have to prepend the dirs ourselves.
+        var gitBinDir = Path.GetDirectoryName(_resolver.GetGitPath())!;
+        var usrBinDir = Path.Combine(gitBinDir, "..", "..", "usr", "bin");
+        var existingPath = Environment.GetEnvironmentVariable("PATH") ?? "";
+        psi.Environment["PATH"] = string.IsNullOrEmpty(existingPath)
+            ? $"{gitBinDir};{usrBinDir}"
+            : $"{gitBinDir};{usrBinDir};{existingPath}";
 
         if (!string.IsNullOrWhiteSpace(ws.SshKeyPath))
         {
