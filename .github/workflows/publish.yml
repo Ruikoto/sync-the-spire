@@ -98,6 +98,13 @@ jobs:
           if (-not $lfs) { throw "git-lfs.exe not found in extracted archive" }
           Copy-Item $lfs.FullName -Destination "$tools/mingw64/bin/git-lfs.exe"
 
+          # prune dead weight: cmd/ is a thin git.exe launcher we don't use (we spawn
+          # mingw64/bin/git.exe directly), and locale dirs are git's UI translations
+          # which our IPC layer never surfaces. Combined ~15 MB.
+          Remove-Item -Recurse -Force "$tools/cmd" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$tools/mingw64/share/locale" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$tools/usr/share/locale" -ErrorAction SilentlyContinue
+
       - name: Publish
         run: |
           $r2r = "${{ matrix.self_contained }}"
@@ -213,6 +220,13 @@ jobs:
           if (-not $lfs) { throw "git-lfs.exe not found in extracted archive" }
           Copy-Item $lfs.FullName -Destination "$tools/mingw64/bin/git-lfs.exe"
 
+          # prune dead weight: cmd/ is a thin git.exe launcher we don't use (we spawn
+          # mingw64/bin/git.exe directly), and locale dirs are git's UI translations
+          # which our IPC layer never surfaces. Combined ~15 MB.
+          Remove-Item -Recurse -Force "$tools/cmd" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$tools/mingw64/share/locale" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$tools/usr/share/locale" -ErrorAction SilentlyContinue
+
       - name: Publish (non-SingleFile for MSIX)
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} `
@@ -319,21 +333,23 @@ jobs:
 
           ### 📥 下载指南 / Download Guide
 
-          请选择你需要的版本。如果你不知道要下载哪个，请下载 👉 **[推荐版本 (Recommended)](%%PROXY%%/%%X64_FULL%%)** 👈。
+          请选择你需要的版本。如果你不知道要下载哪个，请下载 👉 **[推荐版本 (Recommended)](%%PROXY%%/%%X64_LITE%%)** 👈。
+
+          > 推荐版本为「非自包含 (Framework-Dependent)」，体积更小。运行需要 [.NET 10 桌面运行时](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0/runtime)（Windows Desktop Runtime x64/ARM64），打开应用提示缺少 .NET 时按页面指引安装一次即可。如果不想额外装运行时，请选择「自包含 (Self-Contained)」版本。
 
           #### 🇨🇳 中国大陆用户推荐 (Proxy)
 
-          | 架构 (Arch) | 自包含 (Self-Contained) <br> *(无需运行环境，体积稍大)* | 非自包含 (Framework-Dependent) <br> *(需要 .NET 运行时，体积小)* |
+          | 架构 (Arch) | 非自包含 (Framework-Dependent) <br> *(体积小，需 .NET 10 运行时)* | 自包含 (Self-Contained) <br> *(无需运行时，体积大)* |
           | :--- | :---: | :---: |
-          | **Windows x64** <br> *(绝大多数电脑)* | [**下载 / Download**](%%PROXY%%/%%X64_FULL%%) | [下载 / Download](%%PROXY%%/%%X64_LITE%%) |
-          | **Windows ARM64** <br> *(Surface Pro X, Mac VM)* | [**下载 / Download**](%%PROXY%%/%%ARM64_FULL%%) | [下载 / Download](%%PROXY%%/%%ARM64_LITE%%) |
+          | **Windows x64** <br> *(绝大多数电脑)* | [**下载 / Download**](%%PROXY%%/%%X64_LITE%%) | [下载 / Download](%%PROXY%%/%%X64_FULL%%) |
+          | **Windows ARM64** <br> *(Surface Pro X, Mac VM)* | [**下载 / Download**](%%PROXY%%/%%ARM64_LITE%%) | [下载 / Download](%%PROXY%%/%%ARM64_FULL%%) |
 
           #### GitHub Direct
 
-          | 架构 (Arch) | 自包含 (Self-Contained) | 非自包含 (Framework-Dependent) |
+          | 架构 (Arch) | 非自包含 (Framework-Dependent) | 自包含 (Self-Contained) |
           | :--- | :---: | :---: |
-          | **Windows x64** | [下载 / Download](%%BASE%%/%%X64_FULL%%) | [下载 / Download](%%BASE%%/%%X64_LITE%%) |
-          | **Windows ARM64** | [下载 / Download](%%BASE%%/%%ARM64_FULL%%) | [下载 / Download](%%BASE%%/%%ARM64_LITE%%) |
+          | **Windows x64** | [下载 / Download](%%BASE%%/%%X64_LITE%%) | [下载 / Download](%%BASE%%/%%X64_FULL%%) |
+          | **Windows ARM64** | [下载 / Download](%%BASE%%/%%ARM64_LITE%%) | [下载 / Download](%%BASE%%/%%ARM64_FULL%%) |
 
           ---
           NOTES
@@ -393,13 +409,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # build version.json — use --rawfile so multi-line changelog is preserved as-is
+          # build version.json — use --rawfile so multi-line changelog is preserved as-is.
+          # in-app updater points users at the framework-dependent zip (smaller download);
+          # release-notes table still surfaces both variants for users without .NET runtime.
           jq -n \
             --arg ver "$TAG" \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg rel_url "https://github.com/$REPO/releases/tag/$TAG" \
-            --arg dl_x64 "$PROXY/$NAME-$TAG-win-x64.zip" \
-            --arg dl_arm "$PROXY/$NAME-$TAG-win-arm64.zip" \
+            --arg dl_x64 "$PROXY/$NAME-$TAG-win-x64-dependent.zip" \
+            --arg dl_arm "$PROXY/$NAME-$TAG-win-arm64-dependent.zip" \
             --rawfile changelog ../changelog.md \
             --argjson force "$FORCE" \
             --arg force_below "$FORCE_BELOW" \
