@@ -50,4 +50,14 @@
              ExcludeFromSingleFile="true" />
   </ItemGroup>
 
+  <!-- fail fast if the bundle is missing — the Content glob above silently matches zero files
+       when tools/mingit/ is empty, which would produce a broken exe that only crashes at runtime.
+       Skipped during design-time builds so IntelliSense in a fresh clone doesn't get red-squiggled. -->
+  <Target Name="EnsureMinGitBundled" BeforeTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git.exe')"
+           Text="Bundled git.exe not found at $(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git.exe. Run 'pwsh $(MSBuildThisFileDirectory)tools\fetch-mingit.ps1' to populate it (CI does this automatically)." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git-lfs.exe')"
+           Text="Bundled git-lfs.exe not found at $(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git-lfs.exe. Run 'pwsh $(MSBuildThisFileDirectory)tools\fetch-mingit.ps1' to populate it (CI does this automatically)." />
+  </Target>
+
 </Project>

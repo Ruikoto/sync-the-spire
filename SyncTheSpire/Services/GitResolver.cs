@@ -3,7 +3,7 @@ namespace SyncTheSpire.Services;
 /// <summary>
 /// resolves paths to bundled git.exe and git-lfs.exe shipped under tools/mingit/.
 /// no system-PATH lookup, no fallback, no download — both binaries must exist next to the app.
-/// CI populates them during publish; local dev populates them manually (see tools/mingit/README).
+/// CI populates them during publish; local dev runs `pwsh ./SyncTheSpire/tools/fetch-mingit.ps1`.
 /// </summary>
 public class GitResolver
 {
