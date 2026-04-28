@@ -7,6 +7,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- skip ICU data; saves ~8 MB on self-contained. audited safe: no CultureInfo.Current*,
+         no StringComparison.Current*, no implicit culture parse/format. all DateTime/number
+         formatting uses explicit invariant patterns. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationIcon>assets\icon.ico</ApplicationIcon>
     <!-- local builds get nightly-YYYYMMDD-HHmmss, CI overrides via -p:InformationalVersion=v1.0.0 -->
     <InformationalVersion>nightly-$([System.DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))</InformationalVersion>

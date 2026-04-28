@@ -60,7 +60,7 @@ public class NsfwDetectionService
     {
         foreach (var keyword in NsfwKeywords)
             if (text.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-                return keyword.ToUpper();
+                return keyword.ToUpperInvariant();
         return null;
     }
 
