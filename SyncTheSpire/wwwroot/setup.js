@@ -269,10 +269,16 @@ function gatherExportableConfig({ credentials, paths }) {
         nickname: $('#cfg-nickname').value.trim(),
         authType,
         maxFileSizeMode: document.querySelector('input[name="file-size-mode"]:checked')?.value || 'auto',
-        maxFileSizeManualMib: parseInt($('#file-size-mib')?.value || '99', 10),
         lfsEnabled: !!wsState.lfsEnabled,
         lfsTrackedPatterns: wsState.lfsTrackedPatterns || [],
     };
+    // only emit the manual MiB value when the user actually filled one — otherwise
+    // we'd push a default onto the receiving form
+    const mibRaw = $('#file-size-mib')?.value;
+    if (mibRaw && mibRaw.trim()) {
+        const mib = parseInt(mibRaw, 10);
+        if (Number.isFinite(mib)) cfg.maxFileSizeManualMib = mib;
+    }
     if (authType === 'https') cfg.username = $('#cfg-user').value.trim();
 
     if (credentials) {
@@ -283,6 +289,7 @@ function gatherExportableConfig({ credentials, paths }) {
         cfg.gameInstallPath = $('#cfg-path').value.trim();
         cfg.saveFolderPath  = $('#cfg-save').value.trim();
         if (authType === 'ssh') cfg.sshKeyPath = $('#cfg-ssh-key').value.trim();
+        if (wsState.customExePath) cfg.customExePath = wsState.customExePath;
     }
     return cfg;
 }
@@ -325,25 +332,35 @@ function applyImportedConfig(cfg) {
     if (cfg.saveFolderPath != null)  $('#cfg-save').value = cfg.saveFolderPath;
     if (cfg.sshKeyPath != null)      $('#cfg-ssh-key').value = cfg.sshKeyPath;
 
-    if (cfg.maxFileSizeMode) {
+    // whitelist before feeding into a CSS selector — a hostile payload could otherwise break querySelector
+    if (cfg.maxFileSizeMode === 'auto' || cfg.maxFileSizeMode === 'manual') {
         const mode = cfg.maxFileSizeMode;
         const radio = document.querySelector(`input[name="file-size-mode"][value="${mode}"]`);
         if (radio) radio.checked = true;
         $('#file-size-manual-row')?.classList.toggle('hidden', mode !== 'manual');
         $('#file-size-warn')?.classList.toggle('hidden', mode === 'auto');
     }
-    if (cfg.maxFileSizeManualMib != null) $('#file-size-mib').value = cfg.maxFileSizeManualMib;
+    if (typeof cfg.maxFileSizeManualMib === 'number' && Number.isFinite(cfg.maxFileSizeManualMib)) {
+        $('#file-size-mib').value = cfg.maxFileSizeManualMib;
+    }
 
-    if (cfg.lfsEnabled != null || cfg.lfsTrackedPatterns != null) {
+    const lfsPatterns = Array.isArray(cfg.lfsTrackedPatterns)
+        && cfg.lfsTrackedPatterns.every(p => typeof p === 'string')
+            ? cfg.lfsTrackedPatterns : null;
+    if (cfg.lfsEnabled != null || lfsPatterns) {
         const wsState = getWsState();
-        if (cfg.lfsEnabled != null)         wsState.lfsEnabled = !!cfg.lfsEnabled;
-        if (cfg.lfsTrackedPatterns != null) wsState.lfsTrackedPatterns = cfg.lfsTrackedPatterns;
+        if (cfg.lfsEnabled != null) wsState.lfsEnabled = !!cfg.lfsEnabled;
+        if (lfsPatterns)            wsState.lfsTrackedPatterns = lfsPatterns;
         updateLfsStatus(wsState.lfsEnabled, wsState.lfsTrackedPatterns);
+    }
+
+    if (typeof cfg.customExePath === 'string') {
+        getWsState().customExePath = cfg.customExePath;
     }
 }
 
-// open the import/export modal. handles export auto-regen on option changes,
-// import parsing + cross-gameType confirm + form merge — fully self-contained.
+// open the import/export modal. export only generates on copy (string never hits screen),
+// import parses + confirms cross-gameType + merges into the form — fully self-contained.
 async function showConfigIoModal() {
     const modal = $('#config-io-modal');
     const tabExport = $('#config-io-tab-export');
@@ -352,35 +369,18 @@ async function showConfigIoModal() {
     const panelImport = $('#config-io-panel-import');
     const credCb = $('#export-include-credentials');
     const pathCb = $('#export-include-paths');
-    const exportOut = $('#config-io-export-output');
-    const exportSize = $('#config-io-export-size');
     const importIn = $('#config-io-import-input');
     const btnCopy = $('#config-io-copy');
     const btnPasteClip = $('#config-io-paste-clipboard');
     const btnImport = $('#config-io-import');
     const btnClose = $('#config-io-close');
 
-    // reset to a clean state every open
-    credCb.checked = true;
+    // default to neither group selected — the encoded string never lands on screen,
+    // it goes straight to the clipboard on copy. minimises accidental disclosure.
+    credCb.checked = false;
     pathCb.checked = false;
     importIn.value = '';
-    exportOut.value = '';
-    exportSize.textContent = '';
     selectTab('export');
-
-    async function regenExport() {
-        try {
-            const encoded = await encodeConfig(gatherExportableConfig({
-                credentials: credCb.checked,
-                paths: pathCb.checked,
-            }));
-            exportOut.value = encoded;
-            exportSize.textContent = `${encoded.length} ${I18n.t('setup.exportSizeChars')}`;
-        } catch {
-            exportOut.value = '';
-            exportSize.textContent = '';
-        }
-    }
 
     function selectTab(name) {
         const isExport = name === 'export';
@@ -390,14 +390,16 @@ async function showConfigIoModal() {
         tabImport.classList.toggle('text-spire-muted', isExport);
         panelExport.classList.toggle('hidden', !isExport);
         panelImport.classList.toggle('hidden', isExport);
-        if (isExport) regenExport();
-        else setTimeout(() => importIn.focus(), 0);
+        if (!isExport) setTimeout(() => importIn.focus(), 0);
     }
 
     async function onCopy() {
-        if (!exportOut.value) return;
         try {
-            await navigator.clipboard.writeText(exportOut.value);
+            const encoded = await encodeConfig(gatherExportableConfig({
+                credentials: credCb.checked,
+                paths: pathCb.checked,
+            }));
+            await navigator.clipboard.writeText(encoded);
             toast(I18n.t('setup.copySuccess'), 'success');
         } catch {
             toast(I18n.t('setup.copyFailed'), 'error');
@@ -433,8 +435,6 @@ async function showConfigIoModal() {
         modal.classList.add('hidden');
         tabExport.removeEventListener('click', onTabExport);
         tabImport.removeEventListener('click', onTabImport);
-        credCb.removeEventListener('change', regenExport);
-        pathCb.removeEventListener('change', regenExport);
         btnCopy.removeEventListener('click', onCopy);
         btnPasteClip.removeEventListener('click', onPasteClip);
         btnImport.removeEventListener('click', onImport);
@@ -449,8 +449,6 @@ async function showConfigIoModal() {
 
     tabExport.addEventListener('click', onTabExport);
     tabImport.addEventListener('click', onTabImport);
-    credCb.addEventListener('change', regenExport);
-    pathCb.addEventListener('change', regenExport);
     btnCopy.addEventListener('click', onCopy);
     btnPasteClip.addEventListener('click', onPasteClip);
     btnImport.addEventListener('click', onImport);

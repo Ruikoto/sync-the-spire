@@ -126,7 +126,7 @@
                 </p>
 
                 <label class="flex items-start gap-2 cursor-pointer mb-3">
-                    <input type="checkbox" id="export-include-credentials" checked class="mt-0.5 accent-spire-accent">
+                    <input type="checkbox" id="export-include-credentials" class="mt-0.5 accent-spire-accent">
                     <div class="flex-1">
                         <div class="text-xs text-spire-text" data-i18n="setup.exportIncludeCredentials">包含凭证（Token / SSH 私钥密码）</div>
                         <div class="mt-1 px-2 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-[11px] text-red-300 leading-relaxed"
@@ -139,22 +139,12 @@
                 <label class="flex items-start gap-2 cursor-pointer mb-3">
                     <input type="checkbox" id="export-include-paths" class="mt-0.5 accent-spire-accent">
                     <div class="flex-1">
-                        <div class="text-xs text-spire-text" data-i18n="setup.exportIncludePaths">包含本地路径（游戏 / 存档 / SSH 私钥路径）</div>
+                        <div class="text-xs text-spire-text" data-i18n="setup.exportIncludePaths">包含本地路径（游戏 / 存档 / SSH 私钥路径 / 自定义启动 EXE）</div>
                         <div class="text-[11px] text-spire-muted mt-0.5" data-i18n="setup.exportPathsHint">
-                            不同设备的路径通常不一样，分享给他人时建议不勾选。
+                            本地路径通常包含你的 Windows 用户名，且不同设备路径常不同。分享给他人时建议不勾选。
                         </div>
                     </div>
                 </label>
-
-                <div class="mb-3">
-                    <div class="flex items-center justify-between mb-1.5">
-                        <span class="text-[11px] text-spire-muted" data-i18n="setup.exportOutputLabel">生成的配置串</span>
-                        <span id="config-io-export-size" class="text-[10px] text-spire-muted"></span>
-                    </div>
-                    <textarea id="config-io-export-output" readonly
-                        class="w-full h-24 bg-spire-bg border border-spire-border rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed resize-none focus:outline-none focus:border-spire-accent break-all"
-                        style="word-break:break-all;"></textarea>
-                </div>
 
                 <div class="flex justify-end">
                     <button id="config-io-copy" type="button"
