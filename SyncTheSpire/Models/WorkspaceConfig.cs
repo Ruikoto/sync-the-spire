@@ -71,11 +71,9 @@ public class WorkspaceConfig
     [JsonPropertyName("excludedLargeFiles")]
     public List<string> ExcludedLargeFiles { get; set; } = [];
 
+    // auto-maintained by DetectAndInstallLfsIfNeeded; not a user-facing toggle.
     [JsonPropertyName("lfsEnabled")]
     public bool LfsEnabled { get; set; }
-
-    [JsonPropertyName("lfsTrackedPatterns")]
-    public List<string> LfsTrackedPatterns { get; set; } = [];
 
     [JsonPropertyName("maxFileSizeMode")]
     public string MaxFileSizeMode { get; set; } = "auto"; // "auto" | "manual" | "unlimited"

@@ -195,7 +195,11 @@ public class GitBranchHandler : HandlerBase
         if (_adapter.SupportsJunction)
             _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
-        Send(IpcResponse.Success("SYNC_OTHER_BRANCH", new { message = $"已同步到 {branchName}" }));
+        Send(IpcResponse.Success("SYNC_OTHER_BRANCH", new
+        {
+            message = $"已同步到 {branchName}",
+            lfsWarning = _gitService.LastLfsWarning
+        }));
     }
 
     public void HandleCreateMyBranch(JsonElement? payload)
@@ -233,40 +237,60 @@ public class GitBranchHandler : HandlerBase
 
         var ws = _configService.Workspace;
 
-        // preflight: scan for oversized files before committing
+        // pre-push preflight — covers both working tree and unpushed commits.
+        // unlimited mode: skip preflight entirely; rely on post-push fallback below.
         if (ws.MaxFileSizeMode != "unlimited")
         {
             var limit = _gitService.GetEffectiveSizeLimitBytes();
-            var largeFiles = _gitService.ScanLargeFiles(limit);
-            if (largeFiles.Count > 0)
-            {
-                var limitMib = limit == long.MaxValue ? 0 : (int)(limit / (1024 * 1024));
-                var autoReason = ws.MaxFileSizeMode == "auto"
-                    ? GetAutoLimitReason(ws.RepoUrl, limitMib)
-                    : null;
+            var workTreeLarge = _gitService.ScanLargeFiles(limit);
+            var unpushedLarge = _gitService.ScanLargeFilesInUnpushedCommits(limit);
 
-                Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH", new
-                {
-                    kind = "largeFiles",
-                    files = largeFiles.Select(f => new { path = f.RelativePath, sizeMib = (double)f.SizeBytes / (1024 * 1024) }).ToArray(),
-                    limitMib,
-                    autoReason
-                }));
+            if (workTreeLarge.Count > 0 || unpushedLarge.Count > 0)
+            {
+                Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH",
+                    BuildPreflightConflictPayload(workTreeLarge, unpushedLarge, limit, ws)));
                 return;
             }
         }
 
         Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
-
         _gitService.OnTransferProgress = p =>
             Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", $"正在上传... {p.Percent}%", p.Percent, p.Detail));
 
-        var pushed = _gitService.CommitAndPush();
-        _gitService.OnTransferProgress = null;
+        bool pushed;
+        try
+        {
+            pushed = _gitService.CommitAndPush();
+        }
+        catch (InvalidOperationException ex) when (
+            ws.MaxFileSizeMode == "unlimited" && IsSizeRelatedFailure(ex.Message))
+        {
+            // unlimited fallback: push failed for size reasons — re-scan with host default
+            // limit so the user sees what actually triggered the rejection. CommitAndPush
+            // already soft-reset the just-created commit, so working tree shows the files.
+            _gitService.OnTransferProgress = null;
+
+            var fallbackLimit = GetHostDefaultLimitBytes(ws.RepoUrl);
+            var workTreeLarge = _gitService.ScanLargeFiles(fallbackLimit);
+            var unpushedLarge = _gitService.ScanLargeFilesInUnpushedCommits(fallbackLimit);
+
+            if (workTreeLarge.Count > 0 || unpushedLarge.Count > 0)
+            {
+                Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH",
+                    BuildPreflightConflictPayload(workTreeLarge, unpushedLarge, fallbackLimit, ws)));
+                return;
+            }
+
+            // re-scan didn't find anything — surface the original error
+            throw;
+        }
+        finally
+        {
+            _gitService.OnTransferProgress = null;
+        }
 
         if (!pushed)
         {
-            // branches diverged — let the user pick a resolution
             Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH", new
             {
                 message = "云端存在更新的配置，与本地改动冲突。"
@@ -277,14 +301,105 @@ public class GitBranchHandler : HandlerBase
         Send(IpcResponse.Success("SAVE_AND_PUSH_MY_BRANCH", new { message = "已保存并上传！" }));
     }
 
+    private object BuildPreflightConflictPayload(
+        List<GitService.LargeFile> workTree,
+        List<GitService.UnpushedLargeFile> unpushed,
+        long limit,
+        WorkspaceConfig ws)
+    {
+        var limitMib = limit == long.MaxValue ? 0 : (int)(limit / (1024 * 1024));
+        var autoReason = ws.MaxFileSizeMode == "auto"
+            ? GetAutoLimitReason(ws.RepoUrl, limitMib) : null;
+
+        string kind;
+        if (workTree.Count > 0 && unpushed.Count > 0) kind = "largeFilesMixed";
+        else if (workTree.Count > 0)                   kind = "largeFiles";
+        else                                           kind = "largeFilesInUnpushed";
+
+        var resetTarget = ResolveResetTargetKind();
+
+        return new
+        {
+            kind,
+            limitMib,
+            autoReason,
+            files = workTree.Select(f => new
+            {
+                path = f.RelativePath,
+                sizeMib = (double)f.SizeBytes / (1024 * 1024)
+            }).ToArray(),
+            unpushedFiles = unpushed.Select(f => new
+            {
+                path = f.RelativePath,
+                sizeMib = (double)f.SizeBytes / (1024 * 1024),
+                commitSha = f.CommitSha[..7],
+                commitSubject = f.CommitSubject
+            }).ToArray(),
+            unpushedCommitCount = unpushed.Select(f => f.CommitSha).Distinct().Count(),
+            resetTarget
+        };
+    }
+
+    // inspect repo state cheaply to decide whether reset CTA is offerable.
+    // "origin" → origin/<branch> exists; "init" → fall back to _init; "none" → neither.
+    private string ResolveResetTargetKind()
+    {
+        try
+        {
+            using var repo = _gitService.OpenRepository();
+            var branch = repo.Head.FriendlyName;
+            if (repo.Branches[$"origin/{branch}"] != null) return "origin";
+            if (repo.Branches[GitService.InitBranch] != null) return "init";
+            return "none";
+        }
+        catch
+        {
+            return "none";
+        }
+    }
+
+    // fallback limit when in unlimited mode and the push fails — give the user
+    // a sensible host-default to scan against (so the modal makes sense).
+    private long GetHostDefaultLimitBytes(string repoUrl)
+    {
+        // mirror GetEffectiveSizeLimitBytes' auto-mode logic without honoring user override.
+        // if the host is unknown, use 49 MiB as the conservative default.
+        var host = GitService.GetRepoHost(repoUrl);
+        var hostLimits = new (string HostContains, int Mib)[]
+        {
+            ("github.com",    99),
+            ("atomgit.com",   99),
+            ("gitcode.com",   99),
+            ("gitlab.com",    99),
+            ("bitbucket.org", 99),
+            ("gitee.com",     49),
+        };
+        foreach (var (h, mib) in hostLimits)
+            if (host.Contains(h, StringComparison.OrdinalIgnoreCase))
+                return (long)mib * 1024 * 1024;
+        return 49L * 1024 * 1024;
+    }
+
+    // shared with FriendlyGitError for cross-call detection. keep in sync.
+    private static bool IsSizeRelatedFailure(string msg)
+    {
+        if (string.IsNullOrEmpty(msg)) return false;
+        return msg.Contains("File size exceeds", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("exceeds the maximum", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("larger than", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("HTTP 413", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("repository size limit", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("over quota", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("data quota", StringComparison.OrdinalIgnoreCase)
+            || (msg.Contains("pre-receive hook declined", StringComparison.OrdinalIgnoreCase)
+                && msg.Contains("size", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string GetAutoLimitReason(string repoUrl, int limitMib)
     {
         var host = GitService.GetRepoHost(repoUrl);
         return $"自动检测到当前平台 ({host}) 的文件大小限制为 {limitMib} MiB";
     }
-
-    private bool IsGiteeRepo() =>
-        GitService.GetRepoHost(_configService.Workspace.RepoUrl).Contains("gitee.com");
 
     public void HandleForcePush()
     {
@@ -327,7 +442,11 @@ public class GitBranchHandler : HandlerBase
         if (_adapter.SupportsJunction)
             _junctionHelper.EnsureJunction(_configService.Workspace.GameModPath, _configService.RepoPath);
 
-        Send(IpcResponse.Success("RESET_TO_REMOTE", new { message = "已同步为云端配置！" }));
+        Send(IpcResponse.Success("RESET_TO_REMOTE", new
+        {
+            message = "已同步为云端配置！",
+            lfsWarning = _gitService.LastLfsWarning
+        }));
     }
 
     public void HandlePreflightExcludeLargeFiles(JsonElement? payload)
@@ -374,139 +493,27 @@ public class GitBranchHandler : HandlerBase
         Send(IpcResponse.Success("PREFLIGHT_EXCLUDE_LARGE_FILES", new { message = "已保存并上传！" }));
     }
 
-    public void HandlePreflightEnableLfs(JsonElement? payload)
+    public void HandleResetUnpushedCommits()
     {
-        // track large files by their exact paths — no extension guessing
-        var filePaths = payload?.GetProperty("files").EnumerateArray()
-            .Select(f => f.GetString() ?? "").Where(f => f != "")
-            .Select(f => f.Replace('\\', '/'))
-            .ToList() ?? [];
-
-        if (filePaths.Count == 0)
+        if (_gitService.IsOnInitBranch)
         {
-            Send(IpcResponse.Error("PREFLIGHT_ENABLE_LFS", "未收到超限文件列表，无法启用 LFS。"));
+            Send(IpcResponse.Error("RESET_UNPUSHED_COMMITS", "请先选择或创建一个分支"));
             return;
         }
 
-        // Gitee free tier doesn't support LFS — bounce the call back as a Conflict so the
-        // frontend can show a real confirm dialog. A Progress-tagged warning flashes past
-        // before the user can read it. `giteeAck: true` in payload means the user has already
-        // confirmed they want to proceed anyway.
-        var giteeAck = payload?.TryGetProperty("giteeAck", out var ackEl) == true &&
-                       ackEl.ValueKind == JsonValueKind.True;
-        if (!giteeAck && IsGiteeRepo())
+        Send(IpcResponse.Progress("RESET_UNPUSHED_COMMITS", "正在撤销未推送的提交..."));
+
+        var result = _gitService.SoftResetToUnpushedBoundary();
+
+        var msg = result.RevertedCommitCount == 0
+            ? "没有未推送的提交需要撤销。"
+            : $"已撤销 {result.RevertedCommitCount} 个未推送的提交。这些更改已还原到待提交状态，请重新选择处理方式。";
+
+        Send(IpcResponse.Success("RESET_UNPUSHED_COMMITS", new
         {
-            Send(IpcResponse.Conflict("PREFLIGHT_ENABLE_LFS", new
-            {
-                kind = "gitee",
-                files = filePaths,
-                message = "Gitee 免费账户不支持 Git LFS，启用后推送会失败。是否仍要继续？"
-            }));
-            return;
-        }
-
-        Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", "正在安装 Git LFS..."));
-        _gitService.OnLfsMessage = msg =>
-            Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", msg));
-        try { _gitService.EnableLfs(); }
-        finally { _gitService.OnLfsMessage = null; }
-
-        Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", $"正在标记 {filePaths.Count} 个大文件为 LFS 存储..."));
-        _gitService.TrackLfsPatterns(filePaths);
-
-        Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS", "正在保存并上传..."));
-        _gitService.OnTransferProgress = p =>
-            Send(IpcResponse.Progress("PREFLIGHT_ENABLE_LFS",
-                $"正在上传... {p.Percent}%", p.Percent, p.Detail));
-        bool pushed;
-        try { pushed = _gitService.CommitAndPush(); }
-        finally { _gitService.OnTransferProgress = null; }
-
-        if (!pushed)
-        {
-            Send(IpcResponse.Conflict("PREFLIGHT_ENABLE_LFS",
-                new { message = "云端存在更新的配置，与本地改动冲突。" }));
-            return;
-        }
-
-        Send(IpcResponse.Success("PREFLIGHT_ENABLE_LFS", new
-        {
-            message = $"已启用 Git LFS，{filePaths.Count} 个大文件将以 LFS 方式上传。",
-            trackedPaths = filePaths
-        }));
-    }
-
-    public void HandleMigrateExistingToLfs(JsonElement? payload)
-    {
-        // auto-scan — no user input required
-        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", "正在扫描超限文件..."));
-        var limit = _gitService.GetEffectiveSizeLimitBytes();
-        var largeFiles = _gitService.ScanLargeFiles(limit);
-
-        if (largeFiles.Count == 0)
-        {
-            Send(IpcResponse.Success("MIGRATE_EXISTING_TO_LFS", new
-            {
-                message = "当前工作区未检测到超限文件，无需迁移。"
-            }));
-            return;
-        }
-
-        var filePaths = largeFiles
-            .Select(f => f.RelativePath.Replace('\\', '/'))
-            .ToList();
-
-        // Gitee ack — see HandlePreflightEnableLfs for rationale
-        var giteeAck = payload?.TryGetProperty("giteeAck", out var ackEl) == true &&
-                       ackEl.ValueKind == JsonValueKind.True;
-        if (!giteeAck && IsGiteeRepo())
-        {
-            Send(IpcResponse.Conflict("MIGRATE_EXISTING_TO_LFS", new
-            {
-                kind = "gitee",
-                message = "Gitee 免费账户不支持 Git LFS，启用后推送会失败。是否仍要继续？"
-            }));
-            return;
-        }
-
-        // gather all local non-protected branches so the history rewrite covers the whole repo
-        var branches = _gitService.GetMigratableLocalBranches();
-        if (branches.Count == 0)
-        {
-            Send(IpcResponse.Error("MIGRATE_EXISTING_TO_LFS",
-                "没有可迁移的分支（受保护分支和 init 分支会被跳过）。"));
-            return;
-        }
-
-        // `git lfs migrate import` refuses to run on a dirty working tree — snapshot
-        // any pending edits into a commit first so the rewrite can proceed
-        _gitService.SilentCommitIfDirty();
-
-        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", "正在安装 Git LFS..."));
-        _gitService.OnLfsMessage = msg =>
-            Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS", msg));
-        try { _gitService.EnableLfs(); }
-        finally { _gitService.OnLfsMessage = null; }
-
-        // skip TrackLfsPatterns: `lfs migrate import` writes its own .gitattributes entries
-        // into the rewritten history. running `git lfs track` here would only dirty the
-        // working tree and make migrate import refuse to run.
-        Send(IpcResponse.Progress("MIGRATE_EXISTING_TO_LFS",
-            $"正在重写 {branches.Count} 个分支的历史并推送（可能需要几分钟）..."));
-        _gitService.MigrateToLfsAndPush(filePaths, branches);
-
-        // record patterns for the settings UI (migrate already wrote .gitattributes in-tree)
-        var ws = _configService.Workspace;
-        foreach (var p in filePaths)
-            if (!ws.LfsTrackedPatterns.Contains(p, StringComparer.OrdinalIgnoreCase))
-                ws.LfsTrackedPatterns.Add(p);
-        _configService.SaveWorkspace();
-
-        Send(IpcResponse.Success("MIGRATE_EXISTING_TO_LFS", new
-        {
-            message = $"LFS 迁移完成！已将 {filePaths.Count} 个文件在 {branches.Count} 个分支上转为 LFS 存储。",
-            trackedPaths = filePaths,
-            migratedBranches = branches
+            message = msg,
+            revertedCommitCount = result.RevertedCommitCount,
+            resetTarget = result.Target
         }));
     }
 

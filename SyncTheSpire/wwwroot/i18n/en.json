@@ -266,14 +266,7 @@
     "fileSizeLimitRelaxTitle": "Raise size limit?",
     "fileSizeLimitRelaxMessage": "You're raising or removing the file size limit. If it exceeds your platform's actual limit, pushes will fail. Continue?",
     "cleanBranches": "Clean Branch History",
-    "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history.",
-    "lfs": "Large File Upload (Git LFS)",
-    "lfsEnabled": "Enabled",
-    "lfsDisabled": "Not enabled",
-    "lfsTracked": "Tracking: {patterns}",
-    "lfsMigrate": "Enable LFS for Existing Large Files",
-    "lfsMigrateDesc": "Convert large files already in repo history to LFS storage to shrink the repo.",
-    "lfsSuccess": "Git LFS enabled. Large files will be uploaded via LFS."
+    "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history."
   },
   "modals": {
     "welcome": {
@@ -308,29 +301,27 @@
     },
     "preflight": {
       "title": "Oversized Files Detected",
+      "titleUnpushed": "Unpushed commits contain oversized files",
+      "titleMixed": "Both working tree and unpushed commits have oversized files",
       "desc": "The following files exceed the {limitMib} MiB limit{reason}. Choose how to proceed:",
+      "descUnpushed": "These files have been committed locally but not yet pushed, and exceed the {limitMib} MiB limit. {reason}",
+      "descMixed": "Both working tree and unpushed commits contain files larger than {limitMib} MiB. {reason}",
       "autoReason": " ({reason})",
-      "excludeAndPush": "Exclude these files and continue",
-      "enableLfs": "Enable large file upload (Git LFS)",
-      "lfsNote": "Uses Git LFS; first-time setup rewrites history",
+      "workTreeHeader": "New / modified files in working tree:",
+      "unpushedHeader": "Files in unpushed commits:",
+      "excludeAndPush": "Exclude working-tree files and continue",
+      "resetUnpushedAndRetry": "Undo unpushed commits and reselect",
+      "resetUnpushedConfirm": "{count} unpushed commits will be reverted to pending changes. No content will be lost, but you'll need to decide how to handle them. Continue?",
+      "resetUnpushedConfirmTitle": "Undo unpushed commits",
+      "noResetHint": "Cannot automatically undo unpushed commits (no remote tracking and no _init branch). Please use \"Clean branch history\" to rebuild.",
       "cancel": "Cancel"
-    },
-    "migrateLfs": {
-      "title": "Enable LFS for Existing Large Files",
-      "desc": "Automatically scans for files exceeding the size limit and converts their history to LFS storage.",
-      "warning": "This rewrites branch history and force-pushes. Other devices will auto-catch-up on next sync.",
-      "confirm": "Start Migration",
-      "success": "LFS migration complete! History rewritten, large files now stored via LFS.",
-      "error": "LFS migration failed"
-    },
-    "giteeLfs": {
-      "title": "Gitee doesn't support LFS",
-      "message": "Gitee's free tier doesn't support Git LFS — pushes will fail after enabling it. Consider moving to GitHub, AtomGit, or another LFS-supporting platform. Proceed anyway?"
     },
     "cleanBranches": {
       "title": "Clean Branch History",
       "warning": "This will rewrite the entire commit history of the selected branches and force-push to the remote. Other devices will automatically catch up on next sync. This cannot be undone.",
       "selectBranches": "Select branches to clean",
+      "selectCurrent": "Current branch only",
+      "currentTag": "(current)",
       "selectAll": "Select all",
       "deselectAll": "Deselect all",
       "noBranches": "No branches available",
@@ -379,7 +370,9 @@
     "upToDate": "Already on the latest version",
     "updateCheckFailed": "Failed to check for updates. Check your network.",
     "gamePathFound": "Game install path auto-detected",
-    "savePathFound": "Save path auto-detected"
+    "savePathFound": "Save path auto-detected",
+    "resetUnpushedDone": "Unpushed commits undone.",
+    "resetUnpushedFailed": "Failed to undo unpushed commits."
   },
   "quotes": {
     "sts2": [

@@ -62,11 +62,6 @@ function prefillConfigForm(cfg) {
     if (manualRow) manualRow.classList.toggle('hidden', mode !== 'manual');
     if (warnEl) warnEl.classList.toggle('hidden', mode === 'auto');
 
-    // LFS status
-    const ws = getWsState();
-    ws.lfsEnabled = !!cfg.lfsEnabled;
-    ws.lfsTrackedPatterns = cfg.lfsTrackedPatterns || [];
-    updateLfsStatus(ws.lfsEnabled, ws.lfsTrackedPatterns);
 }
 
 // ── steam account picker — returns Promise<string|null> (full save path) ────
@@ -269,8 +264,6 @@ function gatherExportableConfig({ credentials, paths }) {
         nickname: $('#cfg-nickname').value.trim(),
         authType,
         maxFileSizeMode: document.querySelector('input[name="file-size-mode"]:checked')?.value || 'auto',
-        lfsEnabled: !!wsState.lfsEnabled,
-        lfsTrackedPatterns: wsState.lfsTrackedPatterns || [],
     };
     // only emit the manual MiB value when the user actually filled one — otherwise
     // we'd push a default onto the receiving form
@@ -342,16 +335,6 @@ function applyImportedConfig(cfg) {
     }
     if (typeof cfg.maxFileSizeManualMib === 'number' && Number.isFinite(cfg.maxFileSizeManualMib)) {
         $('#file-size-mib').value = cfg.maxFileSizeManualMib;
-    }
-
-    const lfsPatterns = Array.isArray(cfg.lfsTrackedPatterns)
-        && cfg.lfsTrackedPatterns.every(p => typeof p === 'string')
-            ? cfg.lfsTrackedPatterns : null;
-    if (cfg.lfsEnabled != null || lfsPatterns) {
-        const wsState = getWsState();
-        if (cfg.lfsEnabled != null) wsState.lfsEnabled = !!cfg.lfsEnabled;
-        if (lfsPatterns)            wsState.lfsTrackedPatterns = lfsPatterns;
-        updateLfsStatus(wsState.lfsEnabled, wsState.lfsTrackedPatterns);
     }
 
     if (typeof cfg.customExePath === 'string') {

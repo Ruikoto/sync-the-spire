@@ -174,8 +174,6 @@ public class ConfigHandler : HandlerBase
             gitUserName,
             maxFileSizeMode = ws.MaxFileSizeMode,
             maxFileSizeManualMib = ws.MaxFileSizeManualMib,
-            lfsEnabled = ws.LfsEnabled,
-            lfsTrackedPatterns = ws.LfsTrackedPatterns,
             // don't return token or sshPassphrase
         }));
     }

@@ -50,6 +50,14 @@ public class GitService
     /// </summary>
     public Action<string>? OnLfsMessage { get; set; }
 
+    /// <summary>
+    /// non-null after DetectAndInstallLfsIfNeeded if LFS hooks install or checkout failed.
+    /// caller (handler) reads this in the success response so frontend toasts a warning
+    /// instead of "synced!" while the working tree may still hold pointer text files.
+    /// reset to null at the start of each detection cycle.
+    /// </summary>
+    public string? LastLfsWarning { get; private set; }
+
     private string RepoPath => _config.RepoPath;
     private string GitDirPath => _config.GitDirPath;
     private string WorkTreePath => _config.WorkTreePath;
@@ -827,6 +835,9 @@ public class GitService
 
     public record LargeFile(string RelativePath, long SizeBytes);
 
+    public record UnpushedLargeFile(
+        string RelativePath, long SizeBytes, string CommitSha, string CommitSubject);
+
     public record OrphanResult(string Branch, bool Success, string? Error);
 
     /// <summary>
@@ -891,6 +902,213 @@ public class GitService
     }
 
     /// <summary>
+    /// scan unpushed commits (HEAD ^remotes) for blobs exceeding the size limit. catches
+    /// the gap left by ScanLargeFiles when files were already committed but never pushed —
+    /// e.g. previous push failed mid-way, or SilentCommitIfDirty silently committed during
+    /// a branch switch. one entry per path (largest size wins, latest commit wins on tie).
+    /// fully defensive: any git command failure returns an empty list, since shallow boundary
+    /// or stale object DB can make rev-walk / cat-file throw. push will then surface the
+    /// error itself via FriendlyGitError if there really is a problem.
+    /// </summary>
+    public List<UnpushedLargeFile> ScanLargeFilesInUnpushedCommits(long limitBytes)
+    {
+        if (limitBytes == long.MaxValue) return [];
+
+        string commitsRaw;
+        try
+        {
+            // --max-count=1000 guards against bizarre cases (forgotten upstream + huge history)
+            commitsRaw = RunGitCli("rev-list HEAD --not --remotes --max-count=1000");
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"[ScanLargeFilesInUnpushedCommits] rev-list failed: {ex.Message}");
+            return [];
+        }
+
+        var commits = commitsRaw
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.Trim())
+            .Where(s => s.Length == 40)
+            .ToList();
+        if (commits.Count == 0) return [];
+
+        var byPath = new Dictionary<string, UnpushedLargeFile>(StringComparer.Ordinal);
+
+        foreach (var sha in commits)
+        {
+            string treeRaw;
+            try
+            {
+                // -z null-delimits paths, --root makes initial commit list its blobs too
+                treeRaw = RunGitCli($"diff-tree --root --no-commit-id -r -z {sha}");
+            }
+            catch (Exception ex)
+            {
+                LogService.Warn($"[ScanLargeFilesInUnpushedCommits] diff-tree {sha[..7]} failed: {ex.Message}");
+                continue;
+            }
+
+            // diff-tree -z output for non-rename: "<mode> <type> <oid> <status>\t<path>\0"
+            // we parse line by line on \0 boundaries
+            foreach (var entry in ParseDiffTreeZ(treeRaw))
+            {
+                if (entry.Status == 'D') continue;          // delete doesn't go in push pack
+                if (entry.Type != "blob") continue;
+
+                long size;
+                try
+                {
+                    var sizeStr = RunGitCli($"cat-file -s {entry.Oid}").Trim();
+                    if (!long.TryParse(sizeStr, out size)) continue;
+                }
+                catch
+                {
+                    continue; // missing in shallow boundary — skip
+                }
+
+                if (size <= limitBytes) continue;
+
+                string subject = GetCommitSubject(sha);
+                if (byPath.TryGetValue(entry.Path, out var existing))
+                {
+                    if (size > existing.SizeBytes)
+                        byPath[entry.Path] = new UnpushedLargeFile(entry.Path, size, sha, subject);
+                }
+                else
+                {
+                    byPath[entry.Path] = new UnpushedLargeFile(entry.Path, size, sha, subject);
+                }
+            }
+        }
+
+        return byPath.Values.OrderByDescending(f => f.SizeBytes).ToList();
+    }
+
+    private record DiffTreeEntry(string Mode, string Type, string Oid, char Status, string Path);
+
+    private static IEnumerable<DiffTreeEntry> ParseDiffTreeZ(string raw)
+    {
+        // diff-tree -z emits null-separated records. for non-rename:
+        //   ":<src_mode> <dst_mode> <src_oid> <dst_oid> <status>\0<path>\0"
+        // for rename/copy (R/C):
+        //   ":<src_mode> <dst_mode> <src_oid> <dst_oid> <status><score>\0<src_path>\0<dst_path>\0"
+        // we only care about blob OIDs so this is sufficient.
+        var parts = raw.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        int i = 0;
+        while (i < parts.Length)
+        {
+            var meta = parts[i];
+            if (!meta.StartsWith(':')) { i++; continue; }
+            // ":100644 100644 abc... def... M"
+            var tokens = meta[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length < 5) { i++; continue; }
+            var dstMode = tokens[1];
+            var dstOid = tokens[3];
+            var statusToken = tokens[4];
+            var status = statusToken[0];
+            var type = dstMode == "160000" ? "commit" : "blob"; // submodules are commits
+            i++;
+            if (i >= parts.Length) break;
+            var path = parts[i]; i++;
+            if (status == 'R' || status == 'C')
+            {
+                // dst path is the second one
+                if (i >= parts.Length) break;
+                path = parts[i]; i++;
+            }
+            yield return new DiffTreeEntry(dstMode, type, dstOid, status, path);
+        }
+    }
+
+    private string GetCommitSubject(string sha)
+    {
+        try
+        {
+            // %s = subject; trim trailing newline
+            return RunGitCli($"log -1 --format=%s {sha}").Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    public record ResetResult(string Target, int RevertedCommitCount);
+
+    /// <summary>
+    /// soft-reset HEAD to the most recent pushed commit so unpushed commits' contents
+    /// are spilled back into the working tree as staged changes. caller is expected to
+    /// re-run preflight to surface any large-file issues. target selection:
+    ///   - origin/&lt;branch&gt; if remote tracking exists
+    ///   - _init branch tip if no remote tracking (new branch case)
+    ///   - throws if neither — caller should fall back to RebuildBranchesAsOrphan UX
+    /// refuses on protected branches as a safety belt (CommitAndPush already enforces
+    /// this at the push layer; we double-check here so the dangerous reset never runs).
+    /// </summary>
+    public ResetResult SoftResetToUnpushedBoundary()
+    {
+        using var repo = OpenRepo();
+        var branch = repo.Head.FriendlyName;
+        if (IsProtectedBranch(branch))
+            throw new InvalidOperationException($"不允许在受保护分支上重置：{branch}");
+
+        // make sure origin/<branch> ref is fresh — shallow clones may have a stale ref
+        try { FetchAll(repo); }
+        catch (Exception ex) { LogService.Warn($"[SoftReset] fetch failed (non-fatal): {ex.Message}"); }
+
+        string targetRefSpec;
+        string targetKind;
+        var remoteBranch = repo.Branches[$"origin/{branch}"];
+        if (remoteBranch != null)
+        {
+            targetRefSpec = $"origin/{branch}";
+            targetKind = "origin";
+        }
+        else
+        {
+            var initRef = repo.Branches[InitBranch];
+            if (initRef == null)
+                throw new InvalidOperationException(
+                    "无法确定重置目标：当前分支没有远端跟踪，且本地没有 _init 分支。" +
+                    "请使用「清理分支历史」功能彻底重建。");
+            targetRefSpec = InitBranch;
+            targetKind = "init";
+        }
+
+        int count = 0;
+        try
+        {
+            var raw = RunGitCli($"rev-list --count HEAD ^{targetRefSpec}");
+            int.TryParse(raw.Trim(), out count);
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"[SoftReset] rev-list count failed: {ex.Message}");
+        }
+
+        if (count == 0)
+        {
+            LogService.Info("[SoftReset] no unpushed commits to reset");
+            return new ResetResult("none", 0);
+        }
+
+        try
+        {
+            RunGitCli($"reset --soft \"{targetRefSpec}\"");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // shallow boundary: origin/<branch> ref exists but commit object isn't local
+            throw new InvalidOperationException(
+                $"重置失败：可能因仓库为浅克隆且远端历史不完整。原因：{ex.Message}");
+        }
+
+        LogService.Info($"[SoftReset] reset {count} unpushed commits to {targetRefSpec}");
+        return new ResetResult(targetKind, count);
+    }
+
+    /// <summary>
     /// append exclude patterns to git's info/exclude, deduplicating existing entries
     /// </summary>
     public void AppendExcludeRules(IEnumerable<string> patterns)
@@ -911,121 +1129,6 @@ public class GitService
             writer.WriteLine(p);
     }
 
-    /// <summary>
-    /// install LFS hooks in the separated git dir and mark workspace as LFS-enabled.
-    /// </summary>
-    public void EnableLfs()
-    {
-        RunGitLfsCli("install --local");
-
-        var ws = _config.Workspace;
-        ws.LfsEnabled = true;
-        _config.SaveWorkspace();
-        LogService.Info("Git LFS enabled for workspace");
-    }
-
-    /// <summary>
-    /// run `git lfs track` for each pattern, update .gitattributes in working tree.
-    /// only adds patterns not already tracked.
-    /// </summary>
-    public void TrackLfsPatterns(IEnumerable<string> patterns)
-    {
-        var ws = _config.Workspace;
-        var toAdd = patterns
-            .Where(p => !ws.LfsTrackedPatterns.Contains(p, StringComparer.OrdinalIgnoreCase))
-            .ToList();
-
-        foreach (var pattern in toAdd)
-        {
-            RunGitLfsCli($"track \"{pattern}\"");
-            ws.LfsTrackedPatterns.Add(pattern);
-            LogService.Info($"LFS tracking: {pattern}");
-        }
-
-        if (toAdd.Count > 0)
-            _config.SaveWorkspace();
-    }
-
-    /// <summary>
-    /// list local branch names (via git.exe so stale LibGit2Sharp DB isn't an issue).
-    /// protected branches and the sentinel _init branch are filtered out.
-    /// </summary>
-    public List<string> GetMigratableLocalBranches()
-    {
-        var output = RunGitCli("branch --format=%(refname:short)");
-        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(l => l.Trim())
-            .Where(l => !string.IsNullOrEmpty(l) && !IsProtectedBranch(l) && l != InitBranch)
-            .ToList();
-    }
-
-    /// <summary>
-    /// rewrite branch history to replace blobs with LFS pointers, then force push.
-    /// runs a single `migrate import` covering every branch in <paramref name="branches"/>,
-    /// then checks out and force-pushes each branch in turn.
-    /// for files that are already committed — use TrackLfsPatterns + CommitAndPush for new files instead.
-    /// </summary>
-    public void MigrateToLfsAndPush(IEnumerable<string> patterns, IReadOnlyList<string> branches)
-    {
-        if (branches.Count == 0)
-            throw new InvalidOperationException("没有可迁移的分支");
-        foreach (var b in branches)
-            if (IsProtectedBranch(b))
-                throw new InvalidOperationException($"不允许在受保护的分支上执行 LFS 迁移：{b}");
-
-        var patternList = patterns.ToList();
-        if (patternList.Count == 0)
-            throw new InvalidOperationException("没有要迁移的文件");
-
-        // sanity check: history rewrite + force push is a heavy operation, refuse if remote
-        // doesn't match the configured workspace url
-        using (var validateRepo = OpenRepo())
-        {
-            var ws = _config.Workspace;
-            var origin = validateRepo.Network.Remotes["origin"];
-            if (origin is null)
-                throw new InvalidOperationException("Git 仓库未配置 origin 远端");
-            if (!string.Equals(origin.Url, ws.RepoUrl, StringComparison.Ordinal))
-                throw new InvalidOperationException(
-                    $"远端地址不一致，期望 \"{ws.RepoUrl}\"，实际为 \"{origin.Url}\"。请重新初始化配置。");
-        }
-
-        // build args manually — one --include= and one --include-ref= per item.
-        // quoting each flag individually keeps paths/refs with spaces safe, and the
-        // comma-separated form of --include would misparse anything containing a comma.
-        var args = new StringBuilder("migrate import");
-        foreach (var pat in patternList) args.Append($" \"--include={pat}\"");
-        foreach (var br in branches) args.Append($" \"--include-ref=refs/heads/{br}\"");
-
-        LogService.Info($"Starting LFS migration: {branches.Count} branch(es), {patternList.Count} pattern(s)");
-        RunGitLfsCli(args.ToString(), timeout: 600_000);
-
-        var savedBranch = GetCurrentBranch();
-
-        foreach (var br in branches)
-        {
-            RunGitCli($"checkout \"{br}\"");
-
-            // open fresh repo view (migrate rewrote history, previous SHA references are stale)
-            using var repo = OpenRepo();
-            var localTip = repo.Head.Tip?.Sha
-                ?? throw new InvalidOperationException($"分支 {br} 没有任何提交，无法推送");
-
-            LogService.Info($"LFS migration complete for {br}, force pushing");
-            RunGitCli($"push --force-with-lease -u origin \"{br}\"", timeout: 300_000);
-            VerifyPushResult(br, localTip);
-            LogService.Info($"LFS migration push verified for {br}");
-        }
-
-        // restore original branch if it exists and wasn't in the migration set —
-        // best-effort but log the reason so a corrupted repo / disk-full doesn't go silent
-        if (!string.IsNullOrEmpty(savedBranch) && savedBranch != InitBranch && !branches.Contains(savedBranch))
-        {
-            try { RunGitCli($"checkout \"{savedBranch}\""); }
-            catch (Exception ex) { LogService.Warn($"Failed to restore branch {savedBranch}: {ex.Message}"); }
-        }
-    }
-
     // detect LFS filter rules in .gitattributes and install git-lfs hooks if found.
     // when materialize is true, also runs `lfs checkout` so the working tree ends up with
     // real content instead of pointer text — required after reset / branch checkout, but
@@ -1035,6 +1138,8 @@ public class GitService
     // some UI lands instead of a silent log line.
     private void DetectAndInstallLfsIfNeeded(bool materialize = true)
     {
+        LastLfsWarning = null;
+
         var gitattributes = Path.Combine(WorkTreePath, ".gitattributes");
         if (!File.Exists(gitattributes)) return;
         if (!File.ReadAllText(gitattributes).Contains("filter=lfs")) return;
@@ -1045,14 +1150,12 @@ public class GitService
 
             if (materialize)
             {
-                // materialize pointer files into real content — without this, freshly-reset
-                // working trees still look like text files containing "version https://git-lfs..."
                 try { RunGitLfsCli("checkout", timeout: 600_000); }
                 catch (Exception chEx)
                 {
                     LogService.Warn($"lfs checkout failed: {chEx.Message}");
-                    OnLfsMessage?.Invoke(
-                        "⚠ 大文件内容拉取失败，部分文件可能为占位符。请检查网络后再次点击拉取。");
+                    LastLfsWarning = "⚠ 大文件内容拉取失败，部分文件可能为占位符，游戏可能无法正常读取。请检查网络后再次点击拉取。";
+                    OnLfsMessage?.Invoke(LastLfsWarning);
                 }
             }
 
@@ -1067,9 +1170,8 @@ public class GitService
         catch (Exception ex)
         {
             LogService.Warn($"LFS auto-detect failed: {ex.Message}");
-            // surface to the user — a silent failure here means game reads pointer text and breaks
-            OnLfsMessage?.Invoke(
-                $"⚠ 检测到仓库使用大文件（LFS）但组件安装失败：{ex.Message}");
+            LastLfsWarning = $"⚠ 检测到仓库使用大文件（LFS）但组件安装失败：{ex.Message}";
+            OnLfsMessage?.Invoke(LastLfsWarning);
         }
     }
 

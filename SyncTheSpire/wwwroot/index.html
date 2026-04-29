@@ -661,21 +661,6 @@
                                 调高或取消此限制可能导致推送失败后本地仓库卡在坏状态。
                             </div>
                         </div>
-                        <!-- LFS status + migrate -->
-                        <div class="mt-3 pt-3 border-t border-spire-border">
-                            <div class="flex items-center justify-between mb-1.5">
-                                <span class="text-xs text-spire-muted" data-i18n="settings.lfs">大文件上传（Git LFS）</span>
-                                <span id="lfs-status-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-spire-bg border border-spire-border text-spire-muted" data-i18n="settings.lfsDisabled">未启用</span>
-                            </div>
-                            <div id="lfs-tracked-list" class="hidden text-[10px] text-spire-muted mb-2 leading-relaxed"></div>
-                            <button id="btn-migrate-lfs" type="button"
-                                class="w-full text-xs text-spire-text border border-spire-border hover:border-spire-accent rounded-lg py-1.5 transition-colors flex items-center justify-center gap-1.5">
-                                <span data-i18n="settings.lfsMigrate">为历史大文件启用 LFS</span>
-                            </button>
-                            <p class="mt-1 text-[10px] text-spire-muted leading-relaxed" data-i18n="settings.lfsMigrateDesc">
-                                将仓库历史中已有的大文件转换为 LFS 存储，清理仓库体积。
-                            </p>
-                        </div>
                         <!-- clean branches (only relevant once configured) -->
                         <div class="mt-3 pt-3 border-t border-spire-border">
                         <button id="btn-clean-branches" type="button"
@@ -1022,41 +1007,41 @@
 
     <!-- large file preflight modal -->
     <div id="preflight-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
-        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
-            <h3 class="text-sm font-medium mb-2" data-i18n="modals.preflight.title">检测到超大文件</h3>
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 p-5">
+            <h3 id="preflight-title" class="text-sm font-medium mb-2" data-i18n="modals.preflight.title">检测到超大文件</h3>
             <p id="preflight-desc" class="text-xs text-spire-muted mb-3 leading-relaxed"></p>
-            <ul id="preflight-file-list" class="mb-4 max-h-32 overflow-y-auto space-y-1"></ul>
+
+            <!-- working-tree section: visible when payload contains files[] -->
+            <div id="preflight-section-worktree" class="hidden mb-3">
+                <p class="text-[10px] text-spire-muted mb-1" data-i18n="modals.preflight.workTreeHeader">工作区中的新增/修改文件：</p>
+                <ul id="preflight-file-list" class="max-h-32 overflow-y-auto space-y-1"></ul>
+            </div>
+
+            <!-- unpushed-commits section: visible when payload contains unpushedFiles[] -->
+            <div id="preflight-section-unpushed" class="hidden mb-3">
+                <p class="text-[10px] text-spire-muted mb-1" data-i18n="modals.preflight.unpushedHeader">已提交但未推送的大文件：</p>
+                <ul id="preflight-unpushed-list" class="max-h-32 overflow-y-auto space-y-1"></ul>
+            </div>
+
             <div class="flex flex-col gap-2">
+                <!-- exclude-and-push: visible when work-tree files exist -->
                 <button id="preflight-btn-exclude"
-                    class="w-full bg-spire-accent hover:bg-spire-accentHover text-white text-xs font-medium rounded-lg py-2 transition-colors"
-                    data-i18n="modals.preflight.excludeAndPush">排除这些文件并继续</button>
-                <button id="preflight-btn-lfs"
-                    class="w-full border border-spire-border text-spire-muted hover:text-spire-text text-xs rounded-lg py-2 transition-colors flex flex-col items-center gap-0.5">
-                    <span data-i18n="modals.preflight.enableLfs">启用大文件上传（Git LFS）</span>
-                    <span class="text-[10px] text-spire-muted" data-i18n="modals.preflight.lfsNote">基于 Git LFS，首次启用会重写历史</span>
-                </button>
+                    class="hidden w-full bg-spire-accent hover:bg-spire-accentHover text-white text-xs font-medium rounded-lg py-2 transition-colors"
+                    data-i18n="modals.preflight.excludeAndPush">排除工作区文件并继续</button>
+
+                <!-- reset unpushed: visible when unpushed large files exist AND resetTarget != "none" -->
+                <button id="preflight-btn-reset-unpushed"
+                    class="hidden w-full bg-spire-accent/80 hover:bg-spire-accent text-white text-xs font-medium rounded-lg py-2 transition-colors"
+                    data-i18n="modals.preflight.resetUnpushedAndRetry">撤销未推送的提交并重新选择</button>
+
+                <!-- resetTarget == "none": only show informative hint, no button -->
+                <p id="preflight-no-reset-hint"
+                    class="hidden text-[10px] text-spire-warn bg-spire-warn/10 border border-spire-warn/30 rounded px-2 py-1 leading-relaxed"
+                    data-i18n="modals.preflight.noResetHint">无法自动撤销未推送的提交（缺少远端跟踪和 _init 分支）。请使用「清理分支历史」彻底重建。</p>
+
                 <button id="preflight-btn-cancel"
                     class="w-full text-spire-muted hover:text-spire-text text-xs rounded-lg py-1.5 transition-colors"
                     data-i18n="modals.preflight.cancel">取消</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- migrate existing files to LFS modal -->
-    <div id="migrate-lfs-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
-        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-sm mx-4 p-5">
-            <h3 class="text-sm font-medium mb-1" data-i18n="modals.migrateLfs.title">为历史大文件启用 LFS</h3>
-            <p class="text-xs text-spire-muted mb-3 leading-relaxed" data-i18n="modals.migrateLfs.desc">自动扫描当前仓库中超过大小限制的文件，将其历史提交转为 LFS 存储。</p>
-            <p class="text-[10px] text-spire-warn bg-spire-warn/10 border border-spire-warn/30 rounded px-2 py-1 mb-4 leading-relaxed" data-i18n="modals.migrateLfs.warning">
-                此操作会重写分支历史并强制推送，其他设备下次同步时会自动追上。
-            </p>
-            <div class="flex gap-2">
-                <button id="migrate-lfs-cancel" type="button"
-                    class="text-sm text-spire-muted hover:text-spire-text border border-spire-border font-medium rounded-lg py-2 px-4 transition-colors"
-                    data-i18n="common.cancel">取消</button>
-                <button id="migrate-lfs-confirm" type="button"
-                    class="flex-1 bg-spire-accent hover:bg-spire-accentHover text-white font-medium rounded-lg py-2 text-sm transition-colors"
-                    data-i18n="modals.migrateLfs.confirm">开始迁移</button>
             </div>
         </div>
     </div>
@@ -1073,6 +1058,8 @@
             </p>
             <p class="text-xs text-spire-muted mb-2" data-i18n="modals.cleanBranches.selectBranches">选择要清理的分支</p>
             <div class="flex gap-2 mb-2">
+                <button id="clean-branches-select-current" class="text-xs text-spire-accent hover:text-spire-accentHover transition-colors" data-i18n="modals.cleanBranches.selectCurrent">仅当前分支</button>
+                <span class="text-spire-border">|</span>
                 <button id="clean-branches-select-all" class="text-xs text-spire-accent hover:text-spire-accentHover transition-colors" data-i18n="modals.cleanBranches.selectAll">全选</button>
                 <span class="text-spire-border">|</span>
                 <button id="clean-branches-deselect-all" class="text-xs text-spire-muted hover:text-spire-text transition-colors" data-i18n="modals.cleanBranches.deselectAll">取消全选</button>

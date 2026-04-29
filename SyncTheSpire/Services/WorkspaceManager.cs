@@ -116,7 +116,6 @@ public class WorkspaceManager
                 GameModPathLegacy = ws.GameModPathLegacy,
                 SaveFolderPath = ws.SaveFolderPath,
                 LfsEnabled = ws.LfsEnabled,
-                LfsTrackedPatterns = [..ws.LfsTrackedPatterns],
                 ExcludedLargeFiles = [..ws.ExcludedLargeFiles],
                 MaxFileSizeMode = ws.MaxFileSizeMode,
                 MaxFileSizeManualMib = ws.MaxFileSizeManualMib,

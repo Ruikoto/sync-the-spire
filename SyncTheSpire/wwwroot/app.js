@@ -160,7 +160,9 @@ on('SWITCH_TO_VANILLA', data => {
 on('SYNC_OTHER_BRANCH', data => {
     if (data.status === 'success') {
         getWsState().lastSyncStatus = null;
-        toast(data.payload?.message || 'Synced!', 'success');
+        const lfsWarn = data.payload?.lfsWarning;
+        if (lfsWarn) toast(lfsWarn, 'warn');
+        else toast(data.payload?.message || 'Synced!', 'success');
         sendMessage('GET_STATUS');
     }
 });
@@ -181,8 +183,9 @@ on('SAVE_AND_PUSH_MY_BRANCH', async data => {
         sendMessage('GET_STATUS');
     }
     if (data.status === 'conflict') {
-        // large file preflight — route to preflight modal instead of conflict dialog
-        if (data.payload?.kind === 'largeFiles') {
+        // large-file preflight — three kinds are now handled
+        const kind = data.payload?.kind;
+        if (kind === 'largeFiles' || kind === 'largeFilesInUnpushed' || kind === 'largeFilesMixed') {
             showPreflightModal(data.payload);
             return;
         }
@@ -203,7 +206,9 @@ on('FORCE_PUSH', data => {
 
 on('RESET_TO_REMOTE', data => {
     if (data.status === 'success') {
-        toast(data.payload?.message || 'Synced!', 'success');
+        const lfsWarn = data.payload?.lfsWarning;
+        if (lfsWarn) toast(lfsWarn, 'warn');
+        else toast(data.payload?.message || 'Synced!', 'success');
         sendMessage('GET_STATUS');
     }
 });
@@ -980,31 +985,6 @@ if (btnCleanBranches) {
     });
 }
 
-// update LFS status badge + tracked pattern list in advanced settings
-function updateLfsStatus(enabled, patterns) {
-    const badge = $('#lfs-status-badge');
-    const list = $('#lfs-tracked-list');
-    if (badge) {
-        badge.textContent = enabled ? I18n.t('settings.lfsEnabled') : I18n.t('settings.lfsDisabled');
-        badge.className = enabled
-            ? 'text-[10px] px-1.5 py-0.5 rounded border border-spire-success/40 bg-spire-success/10 text-spire-success'
-            : 'text-[10px] px-1.5 py-0.5 rounded bg-spire-bg border border-spire-border text-spire-muted';
-    }
-    if (list) {
-        if (enabled && patterns?.length > 0) {
-            list.textContent = I18n.t('settings.lfsTracked', { patterns: patterns.join(', ') });
-            list.classList.remove('hidden');
-        } else {
-            list.classList.add('hidden');
-        }
-    }
-}
-
-// migrate LFS button — auto-scan on server side, no user input needed
-$('#btn-migrate-lfs')?.addEventListener('click', () => {
-    openMigrateLfsModal();
-});
-
 // advanced settings accordion
 $('#btn-advanced-toggle')?.addEventListener('click', () => {
     const body = $('#advanced-settings-body');
@@ -1036,56 +1016,15 @@ on('PREFLIGHT_EXCLUDE_LARGE_FILES', async data => {
     }
 });
 
-on('PREFLIGHT_ENABLE_LFS', async data => {
-    if (data.status === 'progress') {
-        showLoading(data.message);
-    } else if (data.status === 'success') {
-        hideLoading();
-        toast(data.payload?.message || I18n.t('settings.lfsSuccess'), 'success');
-        const ws = getWsState();
-        ws.lfsEnabled = true;
-        if (data.payload?.trackedPaths) ws.lfsTrackedPatterns = [...new Set([...(ws.lfsTrackedPatterns || []), ...data.payload.trackedPaths])];
-        updateLfsStatus(ws.lfsEnabled, ws.lfsTrackedPatterns);
-    } else if (data.status === 'conflict') {
-        hideLoading();
-        // gitee-on-LFS needs its own confirm — user proceeds only if they really want to
-        if (data.payload?.kind === 'gitee') {
-            const ok = await showConfirm(
-                data.payload.message || I18n.t('modals.giteeLfs.message'),
-                I18n.t('modals.giteeLfs.title')
-            );
-            if (ok) sendMessage('PREFLIGHT_ENABLE_LFS', { files: data.payload.files || [], giteeAck: true });
-            return;
-        }
-        const choice = await showConflictDialog(data.payload?.message);
-        if (choice === 'force') sendMessage('FORCE_PUSH');
-        else if (choice === 'reset') sendMessage('RESET_TO_REMOTE');
+on('RESET_UNPUSHED_COMMITS', data => {
+    if (data.status === 'success') {
+        toast(data.payload?.message || I18n.t('toast.resetUnpushedDone'), 'success');
+        // refresh status (UI will show the spilled changes as "has local changes")
+        sendMessage('GET_STATUS');
+        // automatically retry the push so user immediately sees preflight on the work-tree files
+        sendMessage('SAVE_AND_PUSH_MY_BRANCH');
     } else if (data.status === 'error') {
-        hideLoading();
-        toast(data.message || 'LFS 启用失败', 'error');
-    }
-});
-
-on('MIGRATE_EXISTING_TO_LFS', async data => {
-    if (data.status === 'progress') {
-        showLoading(data.message);
-    } else if (data.status === 'success') {
-        hideLoading();
-        toast(data.payload?.message || I18n.t('modals.migrateLfs.success'), 'success');
-        const ws = getWsState();
-        ws.lfsEnabled = true;
-        if (data.payload?.trackedPaths) ws.lfsTrackedPatterns = [...new Set([...(ws.lfsTrackedPatterns || []), ...data.payload.trackedPaths])];
-        updateLfsStatus(ws.lfsEnabled, ws.lfsTrackedPatterns);
-    } else if (data.status === 'conflict' && data.payload?.kind === 'gitee') {
-        hideLoading();
-        const ok = await showConfirm(
-            data.payload.message || I18n.t('modals.giteeLfs.message'),
-            I18n.t('modals.giteeLfs.title')
-        );
-        if (ok) sendMessage('MIGRATE_EXISTING_TO_LFS', { giteeAck: true });
-    } else if (data.status === 'error') {
-        hideLoading();
-        toast(data.message || I18n.t('modals.migrateLfs.error'), 'error');
+        toast(data.message || I18n.t('toast.resetUnpushedFailed'), 'error');
     }
 });
 

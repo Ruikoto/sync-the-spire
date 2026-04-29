@@ -52,8 +52,8 @@ public class MessageRouter
         "LAUNCH_GAME", "SET_CUSTOM_EXE",
         "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES", "INSTALL_MOD_DROPPED",
         "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH", "CLEAN_DUPLICATE_MANIFESTS",
-        "PREFLIGHT_EXCLUDE_LARGE_FILES", "PREFLIGHT_ENABLE_LFS", "PREFLIGHT_CANCEL", "REBUILD_BRANCHES_ORPHAN",
-        "MIGRATE_EXISTING_TO_LFS",
+        "PREFLIGHT_EXCLUDE_LARGE_FILES", "PREFLIGHT_CANCEL", "REBUILD_BRANCHES_ORPHAN",
+        "RESET_UNPUSHED_COMMITS",
     ];
 
     // current workspace context (null if no workspace active yet)
@@ -230,10 +230,9 @@ public class MessageRouter
             _gated["FORCE_PUSH"] = _ => gb.HandleForcePush();
             _gated["RESET_TO_REMOTE"] = _ => gb.HandleResetToRemote();
             _gated["PREFLIGHT_EXCLUDE_LARGE_FILES"] = req => gb.HandlePreflightExcludeLargeFiles(req.Payload);
-            _gated["PREFLIGHT_ENABLE_LFS"] = req => gb.HandlePreflightEnableLfs(req.Payload);
             _gated["PREFLIGHT_CANCEL"] = _ => Send(IpcResponse.Success("PREFLIGHT_CANCEL", new { }));
             _gated["REBUILD_BRANCHES_ORPHAN"] = req => gb.HandleRebuildBranchesOrphan(req.Payload);
-            _gated["MIGRATE_EXISTING_TO_LFS"] = req => gb.HandleMigrateExistingToLfs(req.Payload);
+            _gated["RESET_UNPUSHED_COMMITS"] = _ => gb.HandleResetUnpushedCommits();
         }
 
         if (_saveHandler is { } sh)
@@ -664,11 +663,27 @@ public class MessageRouter
         if (msg.Contains("timed out"))
             return "操作超时，请检查网络连接后重试。";
 
-        // large file size limit rejection
-        if (msg.Contains("File size exceeds") || msg.Contains("exceeds the maximum") ||
-            msg.Contains("larger than") || msg.Contains("HTTP 413") ||
+        // repo total size / quota (GitHub: "Repository size limit exceeded";
+        // Gitee: "repository over quota" / "超过仓库总大小"; GitLab: data quota)
+        if (msg.Contains("repository size limit", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("over quota", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("data quota", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("超过") && msg.Contains("总大小"))
+            return "云端仓库已满（仓库总大小或配额已超限）。请使用「清理分支历史」清除已提交的历史大文件，或迁移到容量更大的平台。";
+
+        // LFS-specific (over quota or single-object exceed) — message is prefixed "LFS:"
+        if (msg.Contains("LFS:", StringComparison.OrdinalIgnoreCase) &&
+            (msg.Contains("exceed", StringComparison.OrdinalIgnoreCase) ||
+             msg.Contains("quota",  StringComparison.OrdinalIgnoreCase)))
+            return "云端 LFS 配额已超限或单文件超出 LFS 限制。本工具不再提供 LFS 写支持，建议使用「清理分支历史」处理。";
+
+        // generic single-file size rejection
+        if (msg.Contains("File size exceeds") ||
+            msg.Contains("exceeds the maximum") ||
+            msg.Contains("larger than") ||
+            msg.Contains("HTTP 413") ||
             (msg.Contains("pre-receive hook declined") && msg.Contains("size")))
-            return "有文件超过了云端平台的单文件上传限制。可以在提交前排除这些文件，或为本仓库启用大文件上传（基于 Git LFS）。";
+            return "有文件超过了云端平台的单文件上传限制。可以在提交前排除这些文件，或使用「清理分支历史」清除已提交的历史大文件。";
 
         // shallow update error — usually from force-pushing orphan to a shallow clone
         if (msg.Contains("shallow update not allowed"))

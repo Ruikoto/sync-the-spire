@@ -266,14 +266,7 @@
     "fileSizeLimitRelaxTitle": "调高大小限制？",
     "fileSizeLimitRelaxMessage": "你正在调高或取消文件大小限制。如果超过云端平台实际限制，推送会失败。是否继续？",
     "cleanBranches": "清理分支历史",
-    "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。",
-    "lfs": "大文件上传（Git LFS）",
-    "lfsEnabled": "已启用",
-    "lfsDisabled": "未启用",
-    "lfsTracked": "跟踪规则：{patterns}",
-    "lfsMigrate": "为历史大文件启用 LFS",
-    "lfsMigrateDesc": "将仓库历史中已有的大文件转换为 LFS 存储，清理仓库体积。",
-    "lfsSuccess": "Git LFS 已启用，大文件将以 LFS 方式上传。"
+    "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。"
   },
   "modals": {
     "welcome": {
@@ -308,29 +301,27 @@
     },
     "preflight": {
       "title": "检测到超大文件",
+      "titleUnpushed": "未推送的提交中包含超大文件",
+      "titleMixed": "工作区与未推送提交都有超大文件",
       "desc": "以下文件超过了 {limitMib} MiB 的限制{reason}，推送前请选择处理方式：",
+      "descUnpushed": "以下文件已被提交但尚未推送，超过 {limitMib} MiB 限制，无法直接推送。{reason}",
+      "descMixed": "工作区与未推送的提交中均存在超过 {limitMib} MiB 的文件。{reason}",
       "autoReason": "（{reason}）",
-      "excludeAndPush": "排除这些文件并继续",
-      "enableLfs": "启用大文件上传（Git LFS）",
-      "lfsNote": "基于 Git LFS，首次启用会重写历史",
+      "workTreeHeader": "工作区中的新增/修改文件：",
+      "unpushedHeader": "已提交但未推送的大文件：",
+      "excludeAndPush": "排除工作区文件并继续",
+      "resetUnpushedAndRetry": "撤销未推送的提交并重新选择",
+      "resetUnpushedConfirm": "将把 {count} 个未推送的提交还原为待提交状态。这些更改不会丢失，但需要你重新决定如何处理它们。继续吗？",
+      "resetUnpushedConfirmTitle": "撤销未推送的提交",
+      "noResetHint": "无法自动撤销未推送的提交（缺少远端跟踪和 _init 分支）。请使用「清理分支历史」彻底重建。",
       "cancel": "取消"
-    },
-    "migrateLfs": {
-      "title": "为历史大文件启用 LFS",
-      "desc": "自动扫描当前仓库中超过大小限制的文件，将其历史提交转为 LFS 存储。",
-      "warning": "此操作会重写分支历史并强制推送，其他设备下次同步时会自动追上。",
-      "confirm": "开始迁移",
-      "success": "LFS 迁移完成！历史已重写，大文件将使用 LFS 存储。",
-      "error": "LFS 迁移失败"
-    },
-    "giteeLfs": {
-      "title": "Gitee 不支持 LFS",
-      "message": "Gitee 免费账户不支持 Git LFS，启用后推送会失败。建议改用 GitHub、AtomGit 等支持 LFS 的平台。是否仍要继续？"
     },
     "cleanBranches": {
       "title": "清理分支历史",
       "warning": "此操作会重写所选分支的全部提交历史并强制推送到云端。其他设备下次同步时会自动追上新历史。不可撤销。",
       "selectBranches": "选择要清理的分支",
+      "selectCurrent": "仅当前分支",
+      "currentTag": "(当前)",
       "selectAll": "全选",
       "deselectAll": "取消全选",
       "noBranches": "暂无可清理的分支",
@@ -379,7 +370,9 @@
     "upToDate": "当前已是最新版本",
     "updateCheckFailed": "检查更新失败，请检查网络连接",
     "gamePathFound": "已自动检测到游戏安装路径",
-    "savePathFound": "已自动检测到存档路径"
+    "savePathFound": "已自动检测到存档路径",
+    "resetUnpushedDone": "已撤销未推送的提交。",
+    "resetUnpushedFailed": "撤销未推送的提交失败。"
   },
   "quotes": {
     "sts2": [
