@@ -164,9 +164,10 @@ public class GitService
         ConfigureGitEnv(psi);
 
         using var proc = Process.Start(psi)!;
-        // read stderr async to avoid deadlock when pipe buffer fills
+        // read both streams async — sync read on either stream would deadlock when pipe
+        // buffer fills (e.g. ls-files / branch --format on large repos)
         var stderrTask = proc.StandardError.ReadToEndAsync();
-        var stdout = proc.StandardOutput.ReadToEnd();
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
 
         if (!proc.WaitForExit(timeout))
         {
@@ -174,6 +175,7 @@ public class GitService
             throw new InvalidOperationException($"git {psi.ArgumentList.FirstOrDefault()} timed out after {timeout / 1000}s");
         }
 
+        var stdout = stdoutTask.Result;
         var stderr = stderrTask.Result;
         if (proc.ExitCode != 0)
             throw new InvalidOperationException($"git {psi.ArgumentList.FirstOrDefault()} failed: {stderr.Trim()}");
@@ -293,8 +295,9 @@ public class GitService
         ConfigureGitEnv(psi);
 
         using var proc = Process.Start(psi)!;
+        // read both streams async to avoid pipe-buffer deadlock when output is large
         var stderrTask = proc.StandardError.ReadToEndAsync();
-        var stdout = proc.StandardOutput.ReadToEnd();
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
 
         if (!proc.WaitForExit(timeout))
         {
@@ -302,6 +305,7 @@ public class GitService
             throw new InvalidOperationException($"git-lfs {psi.ArgumentList.FirstOrDefault()} timed out after {timeout / 1000}s");
         }
 
+        var stdout = stdoutTask.Result;
         var stderr = stderrTask.Result;
         if (proc.ExitCode != 0)
             throw new InvalidOperationException($"git-lfs {psi.ArgumentList.FirstOrDefault()} failed: {stderr.Trim()}");
@@ -989,7 +993,8 @@ public class GitService
 
             // open fresh repo view (migrate rewrote history, previous SHA references are stale)
             using var repo = OpenRepo();
-            var localTip = repo.Head.Tip.Sha;
+            var localTip = repo.Head.Tip?.Sha
+                ?? throw new InvalidOperationException($"分支 {br} 没有任何提交，无法推送");
 
             LogService.Info($"LFS migration complete for {br}, force pushing");
             RunGitCli($"push --force-with-lease -u origin \"{br}\"", timeout: 300_000);
@@ -997,9 +1002,13 @@ public class GitService
             LogService.Info($"LFS migration push verified for {br}");
         }
 
-        // restore original branch if it exists and wasn't in the migration set
+        // restore original branch if it exists and wasn't in the migration set —
+        // best-effort but log the reason so a corrupted repo / disk-full doesn't go silent
         if (!string.IsNullOrEmpty(savedBranch) && savedBranch != InitBranch && !branches.Contains(savedBranch))
-            try { RunGitCli($"checkout \"{savedBranch}\""); } catch { }
+        {
+            try { RunGitCli($"checkout \"{savedBranch}\""); }
+            catch (Exception ex) { LogService.Warn($"Failed to restore branch {savedBranch}: {ex.Message}"); }
+        }
     }
 
     // detect LFS filter rules in .gitattributes and install git-lfs hooks if found.
@@ -1246,6 +1255,10 @@ public class GitService
     /// <summary>
     /// run git.exe fetch with one retry on auth failure — credential helpers
     /// (e.g. GCM) may need a warm-up round on first invocation after app start.
+    /// the 1s wait is rare (only on first auth failure) and we're already inside
+    /// a Task.Run dispatched from MessageRouter, so blocking a thread-pool thread
+    /// once per fetch retry is acceptable; converting the whole call chain to
+    /// async would touch dozens of methods for negligible gain.
     /// </summary>
     private void RunGitCliFetch()
     {
@@ -1256,6 +1269,7 @@ public class GitService
         catch (InvalidOperationException ex) when (ex.Message.Contains("Authentication failed"))
         {
             LogService.Warn("git.exe fetch auth failed, retrying after credential helper warm-up...");
+            // sync sleep is intentional — see method-level comment above
             Thread.Sleep(1000);
             RunGitCliWithProgress("fetch --all --prune --progress");
         }
@@ -1288,7 +1302,8 @@ public class GitService
             throw new InvalidOperationException(
                 $"远端地址不一致，期望 \"{ws.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
 
-        var localTip = repo.Head.Tip.Sha;
+        var localTip = repo.Head.Tip?.Sha
+            ?? throw new InvalidOperationException("当前分支没有任何提交，无法推送");
         var branchName = repo.Head.FriendlyName;
         LogService.Info($"Pushing branch {branchName} to origin");
 
@@ -1361,7 +1376,8 @@ public class GitService
             throw new InvalidOperationException(
                 $"远端地址不一致，期望 \"{ws.RepoUrl}\"，实际为 \"{remote.Url}\"。请重新初始化配置。");
 
-        var localTip = repo.Head.Tip.Sha;
+        var localTip = repo.Head.Tip?.Sha
+            ?? throw new InvalidOperationException("当前分支没有任何提交，无法推送");
         var branchName = repo.Head.FriendlyName;
         LogService.Info($"Force pushing branch {branchName} (--force-with-lease)");
 
