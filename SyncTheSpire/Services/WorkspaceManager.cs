@@ -107,6 +107,14 @@ public class WorkspaceManager
                 GameInstallPath = ws.GameInstallPath,
                 GameModPathLegacy = ws.GameModPathLegacy,
                 SaveFolderPath = ws.SaveFolderPath,
+                LfsEnabled = ws.LfsEnabled,
+                LfsTrackedPatterns = [..ws.LfsTrackedPatterns],
+                ExcludedLargeFiles = [..ws.ExcludedLargeFiles],
+                MaxFileSizeMode = ws.MaxFileSizeMode,
+                MaxFileSizeManualMib = ws.MaxFileSizeManualMib,
+                CustomExePath = ws.CustomExePath,
+                RepoPathOverride = ws.RepoPathOverride,
+                GitDirPathOverride = ws.GitDirPathOverride,
             }).ToList(),
         };
 
