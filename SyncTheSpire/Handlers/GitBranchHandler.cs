@@ -51,11 +51,14 @@ public class GitBranchHandler : HandlerBase
             return;
         }
 
-        var branches = _gitService.GetRemoteBranches();
+        // share a single Repository across branch listing + NSFW scan to avoid
+        // double-opening (LibGit2Sharp init takes file lock + loads index)
+        using var repo = _gitService.OpenRepository();
+        var branches = _gitService.GetRemoteBranches(repo);
         var current = _gitService.GetCurrentBranch();
 
         // scan all branches for NSFW signals (folder names, mod names, etc.)
-        var nsfwMap = _nsfwDetection.CheckBranchesNsfw(branches.Select(b => b.Name));
+        var nsfwMap = _nsfwDetection.CheckBranchesNsfw(branches.Select(b => b.Name), repo);
 
         // flatten BranchInfo to plain objects so JSON stays predictable
         var list = branches.Select(b =>

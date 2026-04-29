@@ -75,11 +75,19 @@ public class WorkspaceManager
             _config = new AppConfigV2();
         }
 
-        // decrypt secrets for all workspaces
+        // decrypt secrets for all workspaces — track which ones lost their credentials
+        // so the UI can prompt the user to re-enter rather than failing on the next push
+        // with an opaque "Authentication failed"
         foreach (var ws in _config.Workspaces)
         {
-            ws.Token = DpapiDecrypt(ws.Token);
-            ws.SshPassphrase = DpapiDecrypt(ws.SshPassphrase);
+            ws.Token = DpapiDecrypt(ws.Token, out var tokenFailed);
+            ws.SshPassphrase = DpapiDecrypt(ws.SshPassphrase, out var sshFailed);
+            if (tokenFailed || sshFailed)
+            {
+                LogService.Warn(
+                    $"Workspace {ws.Id} ({ws.Name}): DPAPI decrypt failed for {(tokenFailed ? "token" : "")}{(tokenFailed && sshFailed ? "+" : "")}{(sshFailed ? "ssh-passphrase" : "")} — user must re-enter credentials");
+                ws.CredentialsLost = true;
+            }
         }
     }
 
@@ -107,6 +115,14 @@ public class WorkspaceManager
                 GameInstallPath = ws.GameInstallPath,
                 GameModPathLegacy = ws.GameModPathLegacy,
                 SaveFolderPath = ws.SaveFolderPath,
+                LfsEnabled = ws.LfsEnabled,
+                LfsTrackedPatterns = [..ws.LfsTrackedPatterns],
+                ExcludedLargeFiles = [..ws.ExcludedLargeFiles],
+                MaxFileSizeMode = ws.MaxFileSizeMode,
+                MaxFileSizeManualMib = ws.MaxFileSizeManualMib,
+                CustomExePath = ws.CustomExePath,
+                RepoPathOverride = ws.RepoPathOverride,
+                GitDirPathOverride = ws.GitDirPathOverride,
             }).ToList(),
         };
 
@@ -144,9 +160,10 @@ public class WorkspaceManager
             return;
         }
 
-        // decrypt v1 secrets
-        v1.Token = DpapiDecrypt(v1.Token);
-        v1.SshPassphrase = DpapiDecrypt(v1.SshPassphrase);
+        // decrypt v1 secrets — track failures so the migrated workspace can flag CredentialsLost
+        v1.Token = DpapiDecrypt(v1.Token, out var v1TokenFailed);
+        v1.SshPassphrase = DpapiDecrypt(v1.SshPassphrase, out var v1SshFailed);
+        var v1CredsLost = v1TokenFailed || v1SshFailed;
 
         // 3. create workspace config from v1
         var wsId = Guid.NewGuid().ToString();
@@ -165,6 +182,7 @@ public class WorkspaceManager
             GameInstallPath = v1.GameInstallPath,
             GameModPathLegacy = v1.GameModPathLegacy,
             SaveFolderPath = v1.SaveFolderPath,
+            CredentialsLost = v1CredsLost,
         };
 
         // 4. attempt to move data directories into workspace folder
@@ -471,7 +489,17 @@ public class WorkspaceManager
     }
 
     internal static string DpapiDecrypt(string stored)
+        => DpapiDecrypt(stored, out _);
+
+    /// <summary>
+    /// decrypt a DPAPI-protected string. on failure, sets failed=true and returns empty
+    /// so the caller can surface a "re-enter credentials" prompt instead of silently
+    /// passing an empty password to the next git auth attempt (which produces a generic
+    /// 401 with no diagnostic value).
+    /// </summary>
+    internal static string DpapiDecrypt(string stored, out bool failed)
     {
+        failed = false;
         if (string.IsNullOrEmpty(stored)) return stored;
 
         if (stored.StartsWith(EncPrefix))
@@ -485,6 +513,7 @@ public class WorkspaceManager
             catch (Exception ex)
             {
                 LogService.Warn($"DPAPI decrypt failed: {ex.Message}");
+                failed = true;
                 return string.Empty;
             }
         }

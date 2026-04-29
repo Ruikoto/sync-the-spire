@@ -31,11 +31,21 @@ public class NsfwDetectionService
 
     /// <summary>
     /// scan each branch for NSFW signals: branch name, folder names, and mod names.
-    /// pure object-db read, no checkout involved.
+    /// pure object-db read, no checkout involved. opens a fresh Repository — for callers
+    /// that already have one, prefer the overload that takes an external Repository.
     /// </summary>
     public Dictionary<string, NsfwResult> CheckBranchesNsfw(IEnumerable<string> branchNames)
     {
         using var repo = OpenRepo();
+        return CheckBranchesNsfw(branchNames, repo);
+    }
+
+    /// <summary>
+    /// same as CheckBranchesNsfw but reuses a caller-supplied Repository to avoid
+    /// the file-lock + index-load cost of opening one per call (HandleGetBranches is hot).
+    /// </summary>
+    public Dictionary<string, NsfwResult> CheckBranchesNsfw(IEnumerable<string> branchNames, Repository repo)
+    {
         var result = new Dictionary<string, NsfwResult>();
 
         foreach (var name in branchNames)

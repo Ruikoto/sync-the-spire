@@ -120,7 +120,8 @@ public class MessageRouter
             var stubJH = new JunctionHelper(_junctionService, stubBackup, Send);
             var stubAdapter = GameAdapterRegistry.Get("sts2");
 
-            _configHandler = new ConfigHandler(_webView, _uiContext, stubCs, null!, _junctionService, stubJH, stubAdapter, _workspaceManager);
+            // pass null for GitService — ConfigHandler now accepts GitService? and null-checks all reads
+            _configHandler = new ConfigHandler(_webView, _uiContext, stubCs, null, _junctionService, stubJH, stubAdapter, _workspaceManager);
             _gitBranchHandler = null;
             _saveHandler = null;
             _redirectHandler = new RedirectHandler(_webView, _uiContext, stubCs, _junctionService, stubAdapter);

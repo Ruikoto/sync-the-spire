@@ -15,6 +15,10 @@ public class ModInstallService
         PropertyNameCaseInsensitive = true
     };
 
+    // soft cap on cumulative extracted size — defends against zip-bomb archives
+    // (a few KB compressed expanding to GBs). 2 GiB is well above any legitimate mod.
+    private const long MaxExtractedSize = 2L * 1024 * 1024 * 1024;
+
     private readonly ModScannerService _modScanner;
 
     public ModInstallService(ModScannerService modScanner)
@@ -64,6 +68,7 @@ public class ModInstallService
             throw new InvalidOperationException("压缩包中未找到有效的 MOD 定义文件（需要包含 id 字段的 .json 文件）");
 
         var installed = new List<string>();
+        long totalExtracted = 0;
 
         foreach (var (mod, manifestKey, modRoot) in manifests)
         {
@@ -123,9 +128,21 @@ public class ModInstallService
                 var fileDir = Path.GetDirectoryName(fileDest);
                 if (fileDir != null) Directory.CreateDirectory(fileDir);
 
+                // copy with running-total guard so a malicious archive can't fill the disk —
+                // entry.Size is unreliable (uncompressed size from header may be spoofed),
+                // so we count actual bytes written and abort partway through if we exceed the cap
                 using var entryStream = entry.OpenEntryStream();
                 using var fs = File.Create(fileDest);
-                entryStream.CopyTo(fs);
+                var buffer = new byte[81920];
+                int read;
+                while ((read = entryStream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    totalExtracted += read;
+                    if (totalExtracted > MaxExtractedSize)
+                        throw new InvalidOperationException(
+                            $"压缩包解压后大小超过限制（{MaxExtractedSize / (1024 * 1024 * 1024)} GiB），可能是异常压缩包，已中止");
+                    fs.Write(buffer, 0, read);
+                }
             }
 
             installed.Add(mod.Name ?? mod.Id!);

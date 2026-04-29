@@ -95,4 +95,12 @@ public class WorkspaceConfig
             "anonymous" => true,
             _ => false
         };
+
+    /// <summary>
+    /// runtime-only flag (not persisted): set when DPAPI decrypt failed during load.
+    /// indicates token/passphrase were dropped and the user must re-enter them before
+    /// auth-requiring git operations can succeed.
+    /// </summary>
+    [JsonIgnore]
+    public bool CredentialsLost { get; set; }
 }
