@@ -13,7 +13,8 @@ namespace SyncTheSpire.Handlers;
 public class ConfigHandler : HandlerBase
 {
     private readonly ConfigService _configService;
-    private readonly GitService _gitService;
+    // null when there's no active workspace (stub state). all callers must null-check.
+    private readonly GitService? _gitService;
     private readonly JunctionService _junctionService;
     private readonly JunctionHelper _junctionHelper;
     private readonly IGameAdapter _adapter;
@@ -23,7 +24,7 @@ public class ConfigHandler : HandlerBase
         CoreWebView2 webView,
         SynchronizationContext uiContext,
         ConfigService configService,
-        GitService gitService,
+        GitService? gitService,
         JunctionService junctionService,
         JunctionHelper junctionHelper,
         IGameAdapter adapter,
@@ -185,6 +186,11 @@ public class ConfigHandler : HandlerBase
             return;
         }
 
+        // INIT_CONFIG always runs after MessageRouter rebuilds handlers with a real
+        // workspace context, so _gitService is guaranteed non-null here.
+        var gitService = _gitService
+            ?? throw new InvalidOperationException("GitService 未初始化，请先创建工作区");
+
         var raw = payload.Value.GetRawText();
         var cfg = JsonSerializer.Deserialize<WorkspaceConfig>(raw);
         if (cfg is null)
@@ -257,10 +263,10 @@ public class ConfigHandler : HandlerBase
 
         // check if remote URL changed — if so, nuke the old repo and re-clone
         // (could be a completely different repo, can't just update the remote)
-        var needsClone = !_gitService.IsRepoValid;
+        var needsClone = !gitService.IsRepoValid;
         if (!needsClone)
         {
-            var currentUrl = _gitService.GetCurrentRemoteUrl();
+            var currentUrl = gitService.GetCurrentRemoteUrl();
             if (!string.Equals(currentUrl, cfg.RepoUrl, StringComparison.Ordinal))
                 needsClone = true;
         }
@@ -270,9 +276,9 @@ public class ConfigHandler : HandlerBase
             Send(IpcResponse.Progress("INIT_CONFIG", "正在从远程仓库拉取文件，请稍候..."));
 
             // wire up real-time progress from git transfer + LFS warnings during post-clone auto-detect
-            _gitService.OnTransferProgress = p =>
+            gitService.OnTransferProgress = p =>
                 Send(IpcResponse.Progress("INIT_CONFIG", $"正在从远程仓库拉取文件... {p.Percent}%", p.Percent, p.Detail));
-            _gitService.OnLfsMessage = msg =>
+            gitService.OnLfsMessage = msg =>
                 Send(IpcResponse.Progress("INIT_CONFIG", msg));
 
             if (_adapter.SupportsJunction)
@@ -291,7 +297,7 @@ public class ConfigHandler : HandlerBase
 
                 try
                 {
-                    _gitService.CloneRepo();
+                    gitService.CloneRepo();
                 }
                 catch
                 {
@@ -323,11 +329,11 @@ public class ConfigHandler : HandlerBase
                 FileSystemHelper.ForceDeleteDirectory(_configService.RepoPath);
                 FileSystemHelper.ForceDeleteDirectory(_configService.GitDirPath);
 
-                _gitService.CloneRepo();
+                gitService.CloneRepo();
             }
 
-            _gitService.OnTransferProgress = null;
-            _gitService.OnLfsMessage = null;
+            gitService.OnTransferProgress = null;
+            gitService.OnLfsMessage = null;
         }
 
         // junction mode: link game folder to repo working tree

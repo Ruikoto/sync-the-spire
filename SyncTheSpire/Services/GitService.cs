@@ -317,6 +317,13 @@ public class GitService
     /// </summary>
     private Repository OpenRepo() => new(GitDirPath);
 
+    /// <summary>
+    /// expose Repository ownership to handlers that need to make multiple queries
+    /// in a single batch (e.g. branch list + NSFW scan), avoiding repeated open cost.
+    /// caller is responsible for disposing.
+    /// </summary>
+    public Repository OpenRepository() => OpenRepo();
+
     // ── clone ────────────────────────────────────────────────────────────
 
     public void CloneRepo()
@@ -400,7 +407,15 @@ public class GitService
     public List<BranchInfo> GetRemoteBranches()
     {
         using var repo = OpenRepo();
+        return GetRemoteBranches(repo);
+    }
 
+    /// <summary>
+    /// list remote branches reusing a caller-supplied Repository. lets handlers batch
+    /// branch listing with other queries (e.g. NSFW scan) in one open repo session.
+    /// </summary>
+    public List<BranchInfo> GetRemoteBranches(Repository repo)
+    {
         // fetch first so we have the latest refs
         FetchAll(repo);
 
