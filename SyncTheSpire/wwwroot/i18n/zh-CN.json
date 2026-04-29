@@ -266,7 +266,13 @@
     "fileSizeLimitRelaxTitle": "调高大小限制？",
     "fileSizeLimitRelaxMessage": "你正在调高或取消文件大小限制。如果超过云端平台实际限制，推送会失败。是否继续？",
     "cleanBranches": "清理分支历史",
-    "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。"
+    "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。",
+    "excludedLargeFiles": "已排除的大文件",
+    "excludedLargeFilesDesc": "这些文件已被加入本机的排除列表，不会上传到云端。点击删除按钮可恢复其参与下次同步。",
+    "removeExcluded": "恢复同步",
+    "removeExcludedConfirmTitle": "恢复同步？",
+    "removeExcludedConfirm": "「{path}」将重新参与下次推送的大文件检测。如果它仍然超过云端限制，下次推送会再次弹出排除选项。继续吗？",
+    "excludedLargeFilesRemoved": "已从排除列表移除"
   },
   "modals": {
     "welcome": {
@@ -372,7 +378,8 @@
     "gamePathFound": "已自动检测到游戏安装路径",
     "savePathFound": "已自动检测到存档路径",
     "resetUnpushedDone": "已撤销未推送的提交。",
-    "resetUnpushedFailed": "撤销未推送的提交失败。"
+    "resetUnpushedFailed": "撤销未推送的提交失败。",
+    "removeExcludedFailed": "从排除列表移除失败"
   },
   "quotes": {
     "sts2": [

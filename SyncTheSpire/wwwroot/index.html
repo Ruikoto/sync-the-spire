@@ -661,6 +661,17 @@
                                 调高或取消此限制可能导致推送失败后本地仓库卡在坏状态。
                             </div>
                         </div>
+                        <!-- excluded large files -->
+                        <div id="excluded-files-section" class="hidden mt-3 pt-3 border-t border-spire-border">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-xs text-spire-muted" data-i18n="settings.excludedLargeFiles">已排除的大文件</span>
+                                <span id="excluded-files-count" class="text-[10px] text-spire-muted/70"></span>
+                            </div>
+                            <p class="mt-0 mb-2 text-[10px] text-spire-muted leading-relaxed" data-i18n="settings.excludedLargeFilesDesc">
+                                这些文件已被加入本机的排除列表，不会上传到云端。点击删除按钮可恢复其参与下次同步。
+                            </p>
+                            <ul id="excluded-files-list" class="max-h-32 overflow-y-auto space-y-1"></ul>
+                        </div>
                         <!-- clean branches (only relevant once configured) -->
                         <div class="mt-3 pt-3 border-t border-spire-border">
                         <button id="btn-clean-branches" type="button"

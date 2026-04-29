@@ -266,7 +266,13 @@
     "fileSizeLimitRelaxTitle": "Raise size limit?",
     "fileSizeLimitRelaxMessage": "You're raising or removing the file size limit. If it exceeds your platform's actual limit, pushes will fail. Continue?",
     "cleanBranches": "Clean Branch History",
-    "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history."
+    "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history.",
+    "excludedLargeFiles": "Excluded Large Files",
+    "excludedLargeFilesDesc": "These files are on the local exclude list and will not be uploaded to the cloud. Click the remove button to let them participate in the next sync.",
+    "removeExcluded": "Restore to Sync",
+    "removeExcludedConfirmTitle": "Restore to Sync?",
+    "removeExcludedConfirm": "\"{path}\" will be included in large-file checks on the next push. If it still exceeds the platform limit, the exclusion prompt will appear again. Continue?",
+    "excludedLargeFilesRemoved": "Removed from exclusion list"
   },
   "modals": {
     "welcome": {
@@ -372,7 +378,8 @@
     "gamePathFound": "Game install path auto-detected",
     "savePathFound": "Save path auto-detected",
     "resetUnpushedDone": "Unpushed commits undone.",
-    "resetUnpushedFailed": "Failed to undo unpushed commits."
+    "resetUnpushedFailed": "Failed to undo unpushed commits.",
+    "removeExcludedFailed": "Failed to remove from exclusion list"
   },
   "quotes": {
     "sts2": [

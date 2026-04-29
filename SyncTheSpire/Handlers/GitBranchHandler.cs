@@ -493,6 +493,42 @@ public class GitBranchHandler : HandlerBase
         Send(IpcResponse.Success("PREFLIGHT_EXCLUDE_LARGE_FILES", new { message = "已保存并上传！" }));
     }
 
+    public void HandleGetExcludedLargeFiles()
+    {
+        var ws = _configService.Workspace;
+        var files = ws.ExcludedLargeFiles
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        Send(IpcResponse.Success("GET_EXCLUDED_LARGE_FILES", new { files }));
+    }
+
+    public void HandleRemoveExcludedLargeFile(JsonElement? payload)
+    {
+        if (payload is null || !payload.Value.TryGetProperty("path", out var pEl))
+        {
+            Send(IpcResponse.Error("REMOVE_EXCLUDED_LARGE_FILE", "Missing path"));
+            return;
+        }
+        var path = pEl.GetString();
+        if (string.IsNullOrEmpty(path))
+        {
+            Send(IpcResponse.Error("REMOVE_EXCLUDED_LARGE_FILE", "Missing path"));
+            return;
+        }
+
+        _gitService.RemoveExcludeRules([path]);
+
+        var ws = _configService.Workspace;
+        ws.ExcludedLargeFiles.RemoveAll(p =>
+            string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        _configService.SaveWorkspace();
+
+        var files = ws.ExcludedLargeFiles
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        Send(IpcResponse.Success("REMOVE_EXCLUDED_LARGE_FILE", new { path, files }));
+    }
+
     public void HandleResetUnpushedCommits()
     {
         if (_gitService.IsOnInitBranch)

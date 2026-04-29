@@ -64,6 +64,51 @@ function prefillConfigForm(cfg) {
 
 }
 
+// ── excluded large files list ────────────────────────────────────────────────
+
+function renderExcludedLargeFiles(files) {
+    const section = document.getElementById('excluded-files-section');
+    const list = document.getElementById('excluded-files-list');
+    const count = document.getElementById('excluded-files-count');
+    if (!section || !list) return;
+
+    if (!files || files.length === 0) {
+        section.classList.add('hidden');
+        list.innerHTML = '';
+        if (count) count.textContent = '';
+        return;
+    }
+
+    section.classList.remove('hidden');
+    if (count) count.textContent = files.length;
+
+    list.innerHTML = files.map(p => `
+        <li class="flex items-center gap-2 bg-spire-bg rounded px-2 py-1">
+            <span class="flex-1 text-xs font-mono text-spire-text truncate" title="${escAttr(p)}">${esc(p)}</span>
+            <button type="button" class="excluded-file-remove text-spire-muted hover:text-red-400 transition-colors shrink-0"
+                data-path="${escAttr(p)}" title="${esc(I18n.t('settings.removeExcluded'))}">
+                <i data-lucide="x" style="width:14px;height:14px"></i>
+            </button>
+        </li>
+    `).join('');
+
+    // re-bind icons for dynamically inserted lucide nodes
+    if (window.lucide?.createIcons) window.lucide.createIcons();
+
+    list.querySelectorAll('.excluded-file-remove').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const path = btn.getAttribute('data-path') || '';
+            if (!path) return;
+            const ok = await showConfirm(
+                I18n.t('settings.removeExcludedConfirm', { path }),
+                I18n.t('settings.removeExcludedConfirmTitle')
+            );
+            if (!ok) return;
+            sendMessage('REMOVE_EXCLUDED_LARGE_FILE', { path });
+        });
+    });
+}
+
 // ── steam account picker — returns Promise<string|null> (full save path) ────
 
 function pickSteamAccount(payload) {

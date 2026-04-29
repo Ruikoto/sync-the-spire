@@ -54,6 +54,7 @@ public class MessageRouter
         "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH", "CLEAN_DUPLICATE_MANIFESTS",
         "PREFLIGHT_EXCLUDE_LARGE_FILES", "PREFLIGHT_CANCEL", "REBUILD_BRANCHES_ORPHAN",
         "RESET_UNPUSHED_COMMITS",
+        "GET_EXCLUDED_LARGE_FILES", "REMOVE_EXCLUDED_LARGE_FILE",
     ];
 
     // current workspace context (null if no workspace active yet)
@@ -233,6 +234,8 @@ public class MessageRouter
             _gated["PREFLIGHT_CANCEL"] = _ => Send(IpcResponse.Success("PREFLIGHT_CANCEL", new { }));
             _gated["REBUILD_BRANCHES_ORPHAN"] = req => gb.HandleRebuildBranchesOrphan(req.Payload);
             _gated["RESET_UNPUSHED_COMMITS"] = _ => gb.HandleResetUnpushedCommits();
+            _gated["GET_EXCLUDED_LARGE_FILES"] = _ => gb.HandleGetExcludedLargeFiles();
+            _gated["REMOVE_EXCLUDED_LARGE_FILE"] = req => gb.HandleRemoveExcludedLargeFile(req.Payload);
         }
 
         if (_saveHandler is { } sh)

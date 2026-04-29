@@ -1129,6 +1129,29 @@ public class GitService
             writer.WriteLine(p);
     }
 
+    /// <summary>
+    /// remove specified patterns from git's info/exclude, exact-match per line, case-insensitive.
+    /// removes ALL lines matching any pattern (including duplicates from default rules).
+    /// caller is responsible for keeping WorkspaceConfig.ExcludedLargeFiles in sync.
+    /// </summary>
+    public void RemoveExcludeRules(IEnumerable<string> patterns)
+    {
+        var infoDir = Path.Combine(GitDirPath, "info");
+        var excludePath = Path.Combine(infoDir, "exclude");
+        if (!File.Exists(excludePath)) return;
+
+        var toRemove = new HashSet<string>(patterns, StringComparer.OrdinalIgnoreCase);
+        if (toRemove.Count == 0) return;
+
+        var kept = File.ReadAllLines(excludePath)
+            .Where(line => !toRemove.Contains(line))
+            .ToList();
+
+        var tmp = excludePath + ".tmp";
+        File.WriteAllLines(tmp, kept);
+        File.Move(tmp, excludePath, overwrite: true);
+    }
+
     // detect LFS filter rules in .gitattributes and install git-lfs hooks if found.
     // when materialize is true, also runs `lfs checkout` so the working tree ends up with
     // real content instead of pointer text — required after reset / branch checkout, but

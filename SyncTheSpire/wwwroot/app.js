@@ -127,6 +127,8 @@ on('GET_CONFIG', data => {
             getWsState().isEditMode = true;
             $('#setup-subtitle').textContent = I18n.t('setup.editSubtitle');
         }
+        // refresh excluded files list whenever settings page is opened
+        sendMessage('GET_EXCLUDED_LARGE_FILES');
     }
 });
 
@@ -1001,11 +1003,26 @@ initFileSizeSettingsUI();
 
 // ── preflight / rebuild IPC handlers ─────────────────────────────────────────
 
+on('GET_EXCLUDED_LARGE_FILES', data => {
+    if (data.status === 'success') renderExcludedLargeFiles(data.payload?.files || []);
+});
+
+on('REMOVE_EXCLUDED_LARGE_FILE', data => {
+    if (data.status === 'success') {
+        renderExcludedLargeFiles(data.payload?.files || []);
+        toast(I18n.t('settings.excludedLargeFilesRemoved'), 'success');
+    } else if (data.status === 'error') {
+        toast(data.message || I18n.t('toast.removeExcludedFailed'), 'error');
+    }
+});
+
 on('PREFLIGHT_EXCLUDE_LARGE_FILES', async data => {
     if (data.status === 'success') {
         getWsState().lastSyncStatus = null;
         toast(data.payload?.message || 'Pushed!', 'success');
         sendMessage('GET_STATUS');
+        // refresh excluded list so next settings open shows newly excluded files
+        sendMessage('GET_EXCLUDED_LARGE_FILES');
     }
     if (data.status === 'conflict') {
         const choice = await showConflictDialog(
