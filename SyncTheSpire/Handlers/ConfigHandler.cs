@@ -78,6 +78,7 @@ public class ConfigHandler : HandlerBase
                 isJunctionActive = false,
                 hasLocalChanges = false,
                 customExePath = ws.CustomExePath,
+                credentialsLost = ws.CredentialsLost,
                 capabilities
             };
         }
@@ -96,6 +97,7 @@ public class ConfigHandler : HandlerBase
                 hasLocalChanges = isInit ? false : _gitService.HasLocalChanges(),
                 needsBranchSelection = isInit,
                 customExePath = ws.CustomExePath,
+                credentialsLost = ws.CredentialsLost,
                 capabilities
             };
         }
@@ -256,6 +258,8 @@ public class ConfigHandler : HandlerBase
         ws.GameInstallPath = cfg.GameInstallPath;
         ws.GameModPathLegacy = cfg.GameModPathLegacy;
         ws.SaveFolderPath = cfg.SaveFolderPath;
+        // user re-entered credentials; clear the "decrypt failed" flag
+        ws.CredentialsLost = false;
         _configService.SaveWorkspace();
 
         // resolve the actual target path — adapter decides if it's {install}\Mods or install itself
