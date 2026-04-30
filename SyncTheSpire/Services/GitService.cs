@@ -1229,7 +1229,10 @@ public class GitService
                 RunGitCli($"commit -m \"Sync cleanup: rebuilt history\"");
                 RunGitCli($"branch -D \"{branch}\"");
                 RunGitCli($"branch -m \"{branch}\"");
-                RunGitCli($"push --force-with-lease origin \"{branch}\"", timeout: 300_000);
+                ClearRemoteTrackingRefs();
+                RunGitCli($"push --force origin \"{branch}\"", timeout: 300_000);
+                // repopulate remote-tracking refs from the now-rewritten remote
+                try { RunGitCli("fetch --prune", timeout: 300_000); } catch { }
 
                 // verify push
                 var localSha = RunGitCli("rev-parse HEAD").Trim();
@@ -1256,8 +1259,10 @@ public class GitService
             }
         }
 
-        // one gc pass at the end to reclaim local space
-        try { RunGitCli("gc --prune=now --aggressive", timeout: 600_000); } catch { }
+        // one gc pass at the end to reclaim local space — only run if every branch succeeded;
+        // running gc on a partial-failure state can purge objects still needed for recovery
+        if (results.Count > 0 && results.All(r => r.Success))
+            try { RunGitCli("gc --prune=now --aggressive", timeout: 600_000); } catch { }
 
         // restore original branch
         if (savedBranch != null && savedBranch != InitBranch)
@@ -1415,6 +1420,30 @@ public class GitService
         }
     }
 
+    /// <summary>
+    /// delete all refs/remotes/origin/* entries. used before destructive force-push
+    /// on repos that may have broken parent links (shallow-clone leftovers): clearing
+    /// the remote-tracking refs prevents push's negotiation walk from hitting a missing
+    /// commit. caller is expected to re-fetch right after the push to repopulate them.
+    /// </summary>
+    private void ClearRemoteTrackingRefs()
+    {
+        string raw;
+        try { raw = RunGitCli("for-each-ref --format=%(refname) refs/remotes/origin"); }
+        catch { return; }
+
+        foreach (var line in raw.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var refName = line.Trim();
+            if (string.IsNullOrEmpty(refName)) continue;
+            // refs/remotes/origin/HEAD is symbolic; delete via symbolic-ref -d not update-ref -d
+            if (refName.EndsWith("/HEAD"))
+                try { RunGitCli($"symbolic-ref -d \"{refName}\""); } catch { }
+            else
+                try { RunGitCli($"update-ref -d \"{refName}\""); } catch { }
+        }
+    }
+
     private static string FormatBytes(long bytes)
     {
         return bytes switch
@@ -1519,9 +1548,9 @@ public class GitService
         var localTip = repo.Head.Tip?.Sha
             ?? throw new InvalidOperationException("当前分支没有任何提交，无法推送");
         var branchName = repo.Head.FriendlyName;
-        LogService.Info($"Force pushing branch {branchName} (--force-with-lease)");
+        LogService.Info($"Force pushing branch {branchName} (--force)");
 
-        RunGitCli("push --force-with-lease -u origin HEAD");
+        RunGitCli("push --force -u origin HEAD");
         VerifyPushResult(branchName, localTip);
     }
 
