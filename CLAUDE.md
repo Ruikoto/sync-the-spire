@@ -1,21 +1,21 @@
 # Repo guidelines for Claude
 
-## 在 GitHub 评论 / PR 描述中的行文规范
+## Conventions for GitHub comments / PR descriptions
 
-**避免 `#数字` 格式**：在 GitHub 平台（issue 评论、PR 描述、commit message body 等会被渲染的位置）中，`#1`、`#2` 之类的写法会被自动解析为 issue 或 PR 引用，污染目标 issue/PR 的引用列表，并产生误导性的反向链接。
+**Avoid `#<number>` notation:** in places that GitHub renders (issue comments, PR descriptions, commit message bodies, etc.), forms like `#1`, `#2` are auto-resolved as issue/PR references. They pollute the reference list of the target issue/PR and produce misleading backlinks.
 
-**改用以下任一形式**：
+**Use one of these instead:**
 
-- 用字母前缀的临时编号代替序号：`V-1`、`V-2`、`N-1`、`P-1` 等。例如把审查问题列表里的 `#1`、`#2` 改成 `V-1`、`V-2`（V = vulnerability/verdict，N = note，P = problem，自选即可，保持上下文一致）。
-- 如果是真的要引用本仓库的 issue/PR，直接保留 `#数字` 是可以的；这条规则只针对"作为列表序号或内部编号"的场景。
-- 行内序号优先用纯数字 + 半角顿号（`1.`、`2.`）或 markdown 列表，不要写 `#1.`、`#2.`。
+- Replace ordinals with letter-prefixed temporary IDs: `V-1`, `V-2`, `N-1`, `P-1`, etc. For example, change `#1`, `#2` in a review-finding list to `V-1`, `V-2` (V = vulnerability/verdict, N = note, P = problem — pick whatever fits, keep it consistent in context).
+- If you really do mean to reference an issue/PR in this repo, `#<number>` is fine; this rule only applies when `#N` is being used as a list ordinal or internal index.
+- For inline ordinals, prefer plain numbers with a period (`1.`, `2.`) or a markdown list. Don't write `#1.`, `#2.`.
 
-**反例 → 正例**：
+**Bad → good:**
 
-| 反例 | 正例 |
+| Bad | Good |
 |---|---|
-| `#1 SaveConfig 字段丢失` | `V-1 SaveConfig 字段丢失` |
-| `回应 #5 和 #7` | `回应 V-5 和 V-7` |
-| `修复了 #2、#3、#4` | `修复了 V-2、V-3、V-4` |
+| `#1 SaveConfig field missing` | `V-1 SaveConfig field missing` |
+| `re #5 and #7` | `re V-5 and V-7` |
+| `fixed #2, #3, #4` | `fixed V-2, V-3, V-4` |
 
-**适用范围**：所有会被 GitHub 渲染的位置 —— issue 评论、PR 评论、PR 描述、commit message。本地代码注释、日志输出不受此限制。
+**Scope:** anywhere GitHub renders Markdown — issue comments, PR comments, PR descriptions, commit messages. Local code comments and log output are not subject to this rule.
