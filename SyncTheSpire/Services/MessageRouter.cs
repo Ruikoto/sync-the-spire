@@ -581,9 +581,8 @@ public class MessageRouter
             var ws = ctx.ConfigService.Workspace;
             if (ws.IsConfigured && ctx.GitService is { IsRepoValid: true, IsOnInitBranch: false })
             {
-                // compact progress for refresh — just show percent, detail in tooltip
                 ctx.GitService.OnTransferProgress = p =>
-                    Send(IpcResponse.Progress("REFRESH_SYNC", $"{p.Percent}%", p.Percent, p.Detail));
+                    Send(IpcResponse.Progress("REFRESH_SYNC", "正在获取云端最新内容...", p.Percent, p.Detail));
                 try
                 {
                     ctx.GitService.Fetch();

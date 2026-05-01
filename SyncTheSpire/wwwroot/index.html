@@ -59,13 +59,17 @@
 
     <!-- loading overlay -->
     <div id="loading-overlay" class="hidden fixed inset-0 z-40 bg-black/60 flex items-center justify-center">
-        <div class="bg-spire-card rounded-xl p-6 flex flex-col items-center gap-3 border border-spire-border">
+        <div class="bg-spire-card rounded-xl px-6 py-5 flex flex-col items-center gap-3 border border-spire-border min-w-[300px] max-w-sm">
             <div class="spinner"></div>
-            <p id="loading-text" class="text-spire-muted text-sm">Loading...</p>
-            <!-- download progress bar (hidden by default, shown when percent data is present) -->
-            <div id="loading-progress" class="hidden w-48">
-                <div class="h-1 bg-white/10 rounded-full overflow-hidden">
+            <p id="loading-text" class="text-spire-text text-sm font-medium text-center leading-snug">Loading...</p>
+            <!-- progress block (hidden when no percent) -->
+            <div id="loading-progress" class="hidden w-full flex flex-col gap-1.5 mt-0.5">
+                <div class="h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <div id="loading-bar-fill" class="h-full bg-spire-accent rounded-full progress-bar-fill"></div>
+                </div>
+                <div class="flex items-center justify-between gap-2 text-xs text-spire-muted">
+                    <span id="loading-detail" class="truncate flex-1 min-w-0"></span>
+                    <span id="loading-percent" class="shrink-0 tabular-nums">0%</span>
                 </div>
             </div>
         </div>

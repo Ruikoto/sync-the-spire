@@ -172,12 +172,15 @@ public class GitBranchHandler : HandlerBase
             return;
         }
 
-        Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}..."));
+        Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", "正在保存本地改动..."));
 
-        // wire up fetch progress + LFS warnings (LFS checkout may fail or git-lfs may be missing —
-        // user must see it since otherwise the working tree silently contains pointer text files)
+        // wire up fetch progress + stage messages + LFS warnings.
+        // stage messages keep the modal informative during non-network phases (checkout/clean/lfs)
+        // that emit no transfer progress; otherwise the user stares at a static modal for seconds.
         _gitService.OnTransferProgress = p =>
-            Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", $"正在同步 {branchName}... {p.Percent}%", p.Percent, p.Detail));
+            Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", "正在下载远端数据...", p.Percent, p.Detail));
+        _gitService.OnStage = stage =>
+            Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", PullStageMessage(stage, branchName)));
         _gitService.OnLfsMessage = msg =>
             Send(IpcResponse.Progress("SYNC_OTHER_BRANCH", msg));
 
@@ -188,6 +191,7 @@ public class GitBranchHandler : HandlerBase
         finally
         {
             _gitService.OnTransferProgress = null;
+            _gitService.OnStage = null;
             _gitService.OnLfsMessage = null;
         }
 
@@ -255,7 +259,7 @@ public class GitBranchHandler : HandlerBase
 
         Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
         _gitService.OnTransferProgress = p =>
-            Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", $"正在上传... {p.Percent}%", p.Percent, p.Detail));
+            Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在上传到云端...", p.Percent, p.Detail));
 
         bool pushed;
         try
@@ -412,7 +416,7 @@ public class GitBranchHandler : HandlerBase
 
         Send(IpcResponse.Progress("FORCE_PUSH", "正在覆盖云端..."));
         _gitService.OnTransferProgress = p =>
-            Send(IpcResponse.Progress("FORCE_PUSH", $"正在覆盖云端... {p.Percent}%", p.Percent, p.Detail));
+            Send(IpcResponse.Progress("FORCE_PUSH", "正在上传到云端...", p.Percent, p.Detail));
         _gitService.ForcePush();
         _gitService.OnTransferProgress = null;
         Send(IpcResponse.Success("FORCE_PUSH", new { message = "已覆盖云端配置！" }));
@@ -427,15 +431,19 @@ public class GitBranchHandler : HandlerBase
             return;
         }
 
-        Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在同步云端配置..."));
+        var resetBranch = _gitService.GetCurrentBranch();
+        Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在准备同步云端配置..."));
         _gitService.OnTransferProgress = p =>
-            Send(IpcResponse.Progress("RESET_TO_REMOTE", $"正在同步云端配置... {p.Percent}%", p.Percent, p.Detail));
+            Send(IpcResponse.Progress("RESET_TO_REMOTE", "正在下载远端数据...", p.Percent, p.Detail));
+        _gitService.OnStage = stage =>
+            Send(IpcResponse.Progress("RESET_TO_REMOTE", PullStageMessage(stage, resetBranch)));
         _gitService.OnLfsMessage = msg =>
             Send(IpcResponse.Progress("RESET_TO_REMOTE", msg));
         try { _gitService.ResetToRemote(); }
         finally
         {
             _gitService.OnTransferProgress = null;
+            _gitService.OnStage = null;
             _gitService.OnLfsMessage = null;
         }
 
@@ -476,7 +484,7 @@ public class GitBranchHandler : HandlerBase
         Send(IpcResponse.Progress("PREFLIGHT_EXCLUDE_LARGE_FILES", "正在保存并上传..."));
 
         _gitService.OnTransferProgress = p2 =>
-            Send(IpcResponse.Progress("PREFLIGHT_EXCLUDE_LARGE_FILES", $"正在上传... {p2.Percent}%", p2.Percent, p2.Detail));
+            Send(IpcResponse.Progress("PREFLIGHT_EXCLUDE_LARGE_FILES", "正在上传到云端...", p2.Percent, p2.Detail));
 
         var pushed = _gitService.CommitAndPush();
         _gitService.OnTransferProgress = null;
@@ -593,4 +601,16 @@ public class GitBranchHandler : HandlerBase
             failCount
         }));
     }
+
+    // map GitService stage keys to user-facing pull/sync messages
+    private static string PullStageMessage(string stage, string branchName) => stage switch
+    {
+        "fetching"        => "正在获取云端最新内容...",
+        "checking-out"    => $"正在切换到 {branchName}...",
+        "resetting"       => "正在应用远端版本...",
+        "cleaning"        => "正在清理工作区...",
+        "lfs-install"     => "正在准备大文件支持...",
+        "lfs-downloading" => "正在下载大文件，可能耗时较长...",
+        _ => stage
+    };
 }

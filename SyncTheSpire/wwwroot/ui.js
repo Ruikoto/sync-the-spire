@@ -62,12 +62,16 @@ function updateTabBarActive(tabId) {
 }
 
 function showLoading(text, percent, detail) {
-    $('#loading-text').textContent = text;
+    $('#loading-text').textContent = text || '';
     const bar = $('#loading-progress');
     const fill = $('#loading-bar-fill');
+    const pctLabel = $('#loading-percent');
+    const detailLabel = $('#loading-detail');
     if (percent != null && bar && fill) {
-        fill.style.width = percent + '%';
-        fill.title = detail || '';
+        const clamped = Math.max(0, Math.min(100, percent));
+        fill.style.width = clamped + '%';
+        if (pctLabel) pctLabel.textContent = `${clamped}%`;
+        if (detailLabel) detailLabel.textContent = detail || '';
         bar.classList.remove('hidden');
     } else if (bar) {
         bar.classList.add('hidden');
@@ -139,11 +143,15 @@ function guardClick(btn, fn) {
 const _origHideLoading = hideLoading;
 hideLoading = function () {
     _origHideLoading();
-    // reset progress bar for next use
+    // reset progress bar / labels for next use
     const bar = $('#loading-progress');
     if (bar) bar.classList.add('hidden');
     const fill = $('#loading-bar-fill');
     if (fill) fill.style.width = '0';
+    const pctLabel = $('#loading-percent');
+    if (pctLabel) pctLabel.textContent = '0%';
+    const detailLabel = $('#loading-detail');
+    if (detailLabel) detailLabel.textContent = '';
     _guardedBtns.forEach(btn => btn.disabled = false);
     _guardedBtns.clear();
 };

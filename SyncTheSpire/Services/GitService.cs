@@ -51,6 +51,13 @@ public class GitService
     public Action<string>? OnLfsMessage { get; set; }
 
     /// <summary>
+    /// fires at internal phase boundaries inside long methods (fetch/checkout/clean/lfs).
+    /// payload is a stable stage key (e.g. "fetching"); handler maps to localized text.
+    /// keeps the loading overlay informative during non-network phases that emit no transfer progress.
+    /// </summary>
+    public Action<string>? OnStage { get; set; }
+
+    /// <summary>
     /// non-null after DetectAndInstallLfsIfNeeded if LFS hooks install or checkout failed.
     /// caller (handler) reads this in the success response so frontend toasts a warning
     /// instead of "synced!" while the working tree may still hold pointer text files.
@@ -484,11 +491,14 @@ public class GitService
 
         using var repo = OpenRepo();
 
+        OnStage?.Invoke("fetching");
         FetchAll(repo);
 
         var remoteBranch = repo.Branches[$"origin/{branchName}"];
         if (remoteBranch is null)
             throw new InvalidOperationException($"Remote branch not found: origin/{branchName}");
+
+        OnStage?.Invoke("checking-out");
 
         // get or create local tracking branch
         var localBranch = repo.Branches[branchName];
@@ -508,6 +518,7 @@ public class GitService
         // reset --hard to remote tip
         repo.Reset(ResetMode.Hard, remoteBranch.Tip);
 
+        OnStage?.Invoke("cleaning");
         // clean untracked files (git clean -fd)
         CleanUntracked(repo);
 
@@ -707,13 +718,17 @@ public class GitService
 
         var branchName = repo.Head.FriendlyName;
         LogService.Info($"Resetting to remote: origin/{branchName}");
+        OnStage?.Invoke("fetching");
         FetchAll(repo);
 
         var remoteBranch = repo.Branches[$"origin/{branchName}"];
         if (remoteBranch is null)
             throw new InvalidOperationException($"远端分支 {branchName} 不存在");
 
+        OnStage?.Invoke("resetting");
         repo.Reset(ResetMode.Hard, remoteBranch.Tip);
+
+        OnStage?.Invoke("cleaning");
         CleanUntracked(repo);
         DetectAndInstallLfsIfNeeded();
     }
@@ -1169,10 +1184,12 @@ public class GitService
 
         try
         {
+            OnStage?.Invoke("lfs-install");
             RunGitLfsCli("install --local");
 
             if (materialize)
             {
+                OnStage?.Invoke("lfs-downloading");
                 try { RunGitLfsCli("checkout", timeout: 600_000); }
                 catch (Exception chEx)
                 {

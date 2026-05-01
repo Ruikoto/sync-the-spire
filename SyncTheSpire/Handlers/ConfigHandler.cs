@@ -279,7 +279,7 @@ public class ConfigHandler : HandlerBase
 
             // wire up real-time progress from git transfer + LFS warnings during post-clone auto-detect
             gitService.OnTransferProgress = p =>
-                Send(IpcResponse.Progress("INIT_CONFIG", $"正在从远程仓库拉取文件... {p.Percent}%", p.Percent, p.Detail));
+                Send(IpcResponse.Progress("INIT_CONFIG", "正在从远程仓库拉取文件...", p.Percent, p.Detail));
             gitService.OnLfsMessage = msg =>
                 Send(IpcResponse.Progress("INIT_CONFIG", msg));
 
