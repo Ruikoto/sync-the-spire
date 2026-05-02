@@ -241,52 +241,138 @@ public class GitBranchHandler : HandlerBase
 
         var ws = _configService.Workspace;
 
-        // pre-push preflight — covers both working tree and unpushed commits.
-        // unlimited mode: skip preflight entirely; rely on post-push fallback below.
-        if (ws.MaxFileSizeMode != "unlimited")
-        {
-            var limit = _gitService.GetEffectiveSizeLimitBytes();
-            var workTreeLarge = _gitService.ScanLargeFiles(limit);
-            var unpushedLarge = _gitService.ScanLargeFilesInUnpushedCommits(limit);
+        // pre-push preflight — always runs. unlimited mode uses host default as advisory.
+        var limit = ws.MaxFileSizeMode == "unlimited"
+            ? GetHostDefaultLimitBytes(ws.RepoUrl)
+            : _gitService.GetEffectiveSizeLimitBytes();
 
-            if (workTreeLarge.Count > 0 || unpushedLarge.Count > 0)
+        var workTreeLarge = _gitService.ScanLargeFiles(limit);
+        var unpushedLarge = _gitService.ScanLargeFilesInUnpushedCommits(limit);
+
+        LogService.Info(
+            $"[Preflight] mode={ws.MaxFileSizeMode} limit={limit / (1024 * 1024)}MiB " +
+            $"workTree={workTreeLarge.Count} unpushed={unpushedLarge.Count}");
+
+        if (workTreeLarge.Count > 0 || unpushedLarge.Count > 0)
+        {
+            Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH",
+                BuildPreflightConflictPayload(workTreeLarge, unpushedLarge, limit, ws)));
+            return;
+        }
+
+        DoCommitAndPush("SAVE_AND_PUSH_MY_BRANCH");
+    }
+
+    /// <summary>
+    /// bypass preflight and push as-is. user has acknowledged the upload may fail.
+    /// </summary>
+    public void HandlePreflightForcePush()
+    {
+        if (_gitService.IsOnInitBranch)
+        {
+            Send(IpcResponse.Error("PREFLIGHT_FORCE_PUSH", "请先选择或创建一个分支"));
+            return;
+        }
+        LogService.Info("[Preflight] user chose force-try upload, bypassing preflight");
+        DoCommitAndPush("PREFLIGHT_FORCE_PUSH");
+    }
+
+    /// <summary>
+    /// delete the listed large files (working tree + unpushed-commits paths combined),
+    /// then commit + push the deletion. for unpushed-commits paths we first soft-reset
+    /// to the unpushed boundary so the deletion goes into a fresh commit on top of the
+    /// remote tip rather than the bad commits being retained in history.
+    /// </summary>
+    public void HandlePreflightDeleteLargeFiles(JsonElement? payload)
+    {
+        if (payload is null)
+        {
+            Send(IpcResponse.Error("PREFLIGHT_DELETE_LARGE_FILES", "Missing payload"));
+            return;
+        }
+
+        var workTreePaths = payload.Value.TryGetProperty("files", out var fEl) && fEl.ValueKind == JsonValueKind.Array
+            ? fEl.EnumerateArray().Select(e => e.GetString() ?? "").Where(p => p.Length > 0).ToList()
+            : new List<string>();
+
+        var unpushedPaths = payload.Value.TryGetProperty("unpushedFiles", out var uEl) && uEl.ValueKind == JsonValueKind.Array
+            ? uEl.EnumerateArray().Select(e => e.GetString() ?? "").Where(p => p.Length > 0).ToList()
+            : new List<string>();
+
+        var allPaths = workTreePaths.Concat(unpushedPaths)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (allPaths.Count == 0)
+        {
+            Send(IpcResponse.Error("PREFLIGHT_DELETE_LARGE_FILES", "未指定要删除的文件"));
+            return;
+        }
+
+        Send(IpcResponse.Progress("PREFLIGHT_DELETE_LARGE_FILES", "正在准备删除..."));
+
+        // step 1: if there were unpushed-commit large files, soft-reset to the unpushed
+        // boundary so deletions go into a clean new commit. for working-tree-only case,
+        // skip this — soft reset is destructive of commit granularity.
+        if (unpushedPaths.Count > 0)
+        {
+            try
             {
-                Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH",
-                    BuildPreflightConflictPayload(workTreeLarge, unpushedLarge, limit, ws)));
+                var rs = _gitService.SoftResetToUnpushedBoundary();
+                LogService.Info($"[Preflight Delete] soft-reset {rs.RevertedCommitCount} unpushed commits");
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("[PREFLIGHT_DELETE_LARGE_FILES] soft reset failed", ex);
+                Send(IpcResponse.Error("PREFLIGHT_DELETE_LARGE_FILES",
+                    $"撤销未推送提交失败：{ex.Message}"));
                 return;
             }
         }
 
-        Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在保存并上传..."));
+        // step 2: physically delete the files from working tree.
+        int deleted = 0;
+        foreach (var rel in allPaths)
+        {
+            var fullPath = Path.Combine(_configService.WorkTreePath,
+                rel.Replace('/', Path.DirectorySeparatorChar));
+            try
+            {
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                    deleted++;
+                    LogService.Info($"[Preflight Delete] removed {rel}");
+                }
+                else
+                {
+                    LogService.Warn($"[Preflight Delete] file not found: {rel}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogService.Warn($"[Preflight Delete] failed to remove {rel}: {ex.Message}");
+            }
+        }
+
+        Send(IpcResponse.Progress("PREFLIGHT_DELETE_LARGE_FILES",
+            $"已删除 {deleted} 个文件，正在提交..."));
+
+        // step 3: commit + push (StageAll picks up deletions naturally).
+        DoCommitAndPush("PREFLIGHT_DELETE_LARGE_FILES");
+    }
+
+    // shared helper used by SaveAndPush, PreflightForcePush, PreflightDeleteLargeFiles
+    private void DoCommitAndPush(string action)
+    {
+        Send(IpcResponse.Progress(action, "正在保存并上传..."));
         _gitService.OnTransferProgress = p =>
-            Send(IpcResponse.Progress("SAVE_AND_PUSH_MY_BRANCH", "正在上传到云端...", p.Percent, p.Detail));
+            Send(IpcResponse.Progress(action, "正在上传到云端...", p.Percent, p.Detail));
 
         bool pushed;
         try
         {
             pushed = _gitService.CommitAndPush();
-        }
-        catch (InvalidOperationException ex) when (
-            ws.MaxFileSizeMode == "unlimited" && IsSizeRelatedFailure(ex.Message))
-        {
-            // unlimited fallback: push failed for size reasons — re-scan with host default
-            // limit so the user sees what actually triggered the rejection. CommitAndPush
-            // already soft-reset the just-created commit, so working tree shows the files.
-            _gitService.OnTransferProgress = null;
-
-            var fallbackLimit = GetHostDefaultLimitBytes(ws.RepoUrl);
-            var workTreeLarge = _gitService.ScanLargeFiles(fallbackLimit);
-            var unpushedLarge = _gitService.ScanLargeFilesInUnpushedCommits(fallbackLimit);
-
-            if (workTreeLarge.Count > 0 || unpushedLarge.Count > 0)
-            {
-                Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH",
-                    BuildPreflightConflictPayload(workTreeLarge, unpushedLarge, fallbackLimit, ws)));
-                return;
-            }
-
-            // re-scan didn't find anything — surface the original error
-            throw;
         }
         finally
         {
@@ -295,14 +381,14 @@ public class GitBranchHandler : HandlerBase
 
         if (!pushed)
         {
-            Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH", new
+            Send(IpcResponse.Conflict(action, new
             {
                 message = "云端存在更新的配置，与本地改动冲突。"
             }));
             return;
         }
 
-        Send(IpcResponse.Success("SAVE_AND_PUSH_MY_BRANCH", new { message = "已保存并上传！" }));
+        Send(IpcResponse.Success(action, new { message = "已保存并上传！" }));
     }
 
     private object BuildPreflightConflictPayload(
@@ -314,19 +400,19 @@ public class GitBranchHandler : HandlerBase
         var limitMib = limit == long.MaxValue ? 0 : (int)(limit / (1024 * 1024));
         var autoReason = ws.MaxFileSizeMode == "auto"
             ? GetAutoLimitReason(ws.RepoUrl, limitMib) : null;
+        var advisory = ws.MaxFileSizeMode == "unlimited";  // unlimited = advisory only
 
         string kind;
         if (workTree.Count > 0 && unpushed.Count > 0) kind = "largeFilesMixed";
         else if (workTree.Count > 0)                   kind = "largeFiles";
         else                                           kind = "largeFilesInUnpushed";
 
-        var resetTarget = ResolveResetTargetKind();
-
         return new
         {
             kind,
             limitMib,
             autoReason,
+            advisory,    // frontend can show "advisory only" hint when unlimited
             files = workTree.Select(f => new
             {
                 path = f.RelativePath,
@@ -339,31 +425,11 @@ public class GitBranchHandler : HandlerBase
                 commitSha = f.CommitSha[..7],
                 commitSubject = f.CommitSubject
             }).ToArray(),
-            unpushedCommitCount = unpushed.Select(f => f.CommitSha).Distinct().Count(),
-            resetTarget
+            unpushedCommitCount = unpushed.Select(f => f.CommitSha).Distinct().Count()
         };
     }
 
-    // inspect repo state cheaply to decide whether reset CTA is offerable.
-    // "origin" → origin/<branch> exists; "init" → fall back to _init; "none" → neither.
-    private string ResolveResetTargetKind()
-    {
-        try
-        {
-            using var repo = _gitService.OpenRepository();
-            var branch = repo.Head.FriendlyName;
-            if (repo.Branches[$"origin/{branch}"] != null) return "origin";
-            if (repo.Branches[GitService.InitBranch] != null) return "init";
-            return "none";
-        }
-        catch
-        {
-            return "none";
-        }
-    }
-
-    // fallback limit when in unlimited mode and the push fails — give the user
-    // a sensible host-default to scan against (so the modal makes sense).
+    // host-default limit for unlimited mode (advisory scan) and fallback display.
     private long GetHostDefaultLimitBytes(string repoUrl)
     {
         // mirror GetEffectiveSizeLimitBytes' auto-mode logic without honoring user override.
@@ -382,21 +448,6 @@ public class GitBranchHandler : HandlerBase
             if (host.Contains(h, StringComparison.OrdinalIgnoreCase))
                 return (long)mib * 1024 * 1024;
         return 49L * 1024 * 1024;
-    }
-
-    // shared with FriendlyGitError for cross-call detection. keep in sync.
-    private static bool IsSizeRelatedFailure(string msg)
-    {
-        if (string.IsNullOrEmpty(msg)) return false;
-        return msg.Contains("File size exceeds", StringComparison.OrdinalIgnoreCase)
-            || msg.Contains("exceeds the maximum", StringComparison.OrdinalIgnoreCase)
-            || msg.Contains("larger than", StringComparison.OrdinalIgnoreCase)
-            || msg.Contains("HTTP 413", StringComparison.OrdinalIgnoreCase)
-            || msg.Contains("repository size limit", StringComparison.OrdinalIgnoreCase)
-            || msg.Contains("over quota", StringComparison.OrdinalIgnoreCase)
-            || msg.Contains("data quota", StringComparison.OrdinalIgnoreCase)
-            || (msg.Contains("pre-receive hook declined", StringComparison.OrdinalIgnoreCase)
-                && msg.Contains("size", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string GetAutoLimitReason(string repoUrl, int limitMib)
@@ -455,86 +506,6 @@ public class GitBranchHandler : HandlerBase
             message = "已同步为云端配置！",
             lfsWarning = _gitService.LastLfsWarning
         }));
-    }
-
-    public void HandlePreflightExcludeLargeFiles(JsonElement? payload)
-    {
-        if (payload is null)
-        {
-            Send(IpcResponse.Error("PREFLIGHT_EXCLUDE_LARGE_FILES", "Missing payload"));
-            return;
-        }
-
-        var paths = payload.Value.GetProperty("files")
-            .EnumerateArray()
-            .Select(f => f.GetString() ?? "")
-            .Where(p => !string.IsNullOrEmpty(p))
-            .ToList();
-
-        // append each path as an exclude rule; also save to workspace config for reference
-        _gitService.AppendExcludeRules(paths);
-
-        var ws = _configService.Workspace;
-        foreach (var p in paths)
-            if (!ws.ExcludedLargeFiles.Contains(p))
-                ws.ExcludedLargeFiles.Add(p);
-        _configService.SaveWorkspace();
-
-        // now proceed with the actual commit+push
-        Send(IpcResponse.Progress("PREFLIGHT_EXCLUDE_LARGE_FILES", "正在保存并上传..."));
-
-        _gitService.OnTransferProgress = p2 =>
-            Send(IpcResponse.Progress("PREFLIGHT_EXCLUDE_LARGE_FILES", "正在上传到云端...", p2.Percent, p2.Detail));
-
-        var pushed = _gitService.CommitAndPush();
-        _gitService.OnTransferProgress = null;
-
-        if (!pushed)
-        {
-            Send(IpcResponse.Conflict("PREFLIGHT_EXCLUDE_LARGE_FILES", new
-            {
-                message = "云端存在更新的配置，与本地改动冲突。"
-            }));
-            return;
-        }
-
-        Send(IpcResponse.Success("PREFLIGHT_EXCLUDE_LARGE_FILES", new { message = "已保存并上传！" }));
-    }
-
-    public void HandleGetExcludedLargeFiles()
-    {
-        var ws = _configService.Workspace;
-        var files = ws.ExcludedLargeFiles
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        Send(IpcResponse.Success("GET_EXCLUDED_LARGE_FILES", new { files }));
-    }
-
-    public void HandleRemoveExcludedLargeFile(JsonElement? payload)
-    {
-        if (payload is null || !payload.Value.TryGetProperty("path", out var pEl))
-        {
-            Send(IpcResponse.Error("REMOVE_EXCLUDED_LARGE_FILE", "Missing path"));
-            return;
-        }
-        var path = pEl.GetString();
-        if (string.IsNullOrEmpty(path))
-        {
-            Send(IpcResponse.Error("REMOVE_EXCLUDED_LARGE_FILE", "Missing path"));
-            return;
-        }
-
-        _gitService.RemoveExcludeRules([path]);
-
-        var ws = _configService.Workspace;
-        ws.ExcludedLargeFiles.RemoveAll(p =>
-            string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
-        _configService.SaveWorkspace();
-
-        var files = ws.ExcludedLargeFiles
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        Send(IpcResponse.Success("REMOVE_EXCLUDED_LARGE_FILE", new { path, files }));
     }
 
     public void HandleResetUnpushedCommits()

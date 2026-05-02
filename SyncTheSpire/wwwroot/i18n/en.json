@@ -266,13 +266,7 @@
     "fileSizeLimitRelaxTitle": "Raise size limit?",
     "fileSizeLimitRelaxMessage": "You're raising or removing the file size limit. If it exceeds your platform's actual limit, pushes will fail. Continue?",
     "cleanBranches": "Clean Branch History",
-    "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history.",
-    "excludedLargeFiles": "Excluded Large Files",
-    "excludedLargeFilesDesc": "These files are on the local exclude list and will not be uploaded to the cloud. Click the remove button to let them participate in the next sync.",
-    "removeExcluded": "Restore to Sync",
-    "removeExcludedConfirmTitle": "Restore to Sync?",
-    "removeExcludedConfirm": "\"{path}\" will be included in large-file checks on the next push. If it still exceeds the platform limit, the exclusion prompt will appear again. Continue?",
-    "excludedLargeFilesRemoved": "Removed from exclusion list"
+    "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history."
   },
   "modals": {
     "welcome": {
@@ -315,11 +309,15 @@
       "autoReason": " ({reason})",
       "workTreeHeader": "New / modified files in working tree:",
       "unpushedHeader": "Files in unpushed commits:",
-      "excludeAndPush": "Exclude working-tree files and continue",
-      "resetUnpushedAndRetry": "Undo unpushed commits and reselect",
-      "resetUnpushedConfirm": "{count} unpushed commits will be reverted to pending changes. No content will be lost, but you'll need to decide how to handle them. Continue?",
-      "resetUnpushedConfirmTitle": "Undo unpushed commits",
-      "noResetHint": "Cannot automatically undo unpushed commits (no remote tracking and no _init branch). Please use \"Clean branch history\" to rebuild.",
+      "advisoryHint": "Unlimited mode is on; this push may still be rejected by the server.",
+      "forceTryUpload": "Try anyway",
+      "forceTryUploadConfirmTitle": "Try anyway?",
+      "forceTryUploadConfirm": "The server is likely to reject this push due to oversized files. Continue?",
+      "deleteFiles": "Delete these files",
+      "deleteFilesConfirmTitle": "Delete files?",
+      "deleteFilesConfirm": "{count} files will be physically deleted from the working tree. This affects actual files loaded by the game. Continue?",
+      "deleteFilesSuccess": "Large files deleted and pushed.",
+      "deleteFilesFailed": "Failed to delete large files.",
       "cancel": "Cancel"
     },
     "cleanBranches": {
@@ -379,7 +377,8 @@
     "savePathFound": "Save path auto-detected",
     "resetUnpushedDone": "Unpushed commits undone.",
     "resetUnpushedFailed": "Failed to undo unpushed commits.",
-    "removeExcludedFailed": "Failed to remove from exclusion list"
+    "removeExcludedFailed": "Failed to remove from exclusion list",
+    "pushed": "Pushed!"
   },
   "quotes": {
     "sts2": [

@@ -68,9 +68,6 @@ public class WorkspaceConfig
             ? GameType == "generic" ? GameInstallPath : Path.Combine(GameInstallPath, "Mods")
             : GameModPathLegacy; // fallback for old configs
 
-    [JsonPropertyName("excludedLargeFiles")]
-    public List<string> ExcludedLargeFiles { get; set; } = [];
-
     // auto-maintained by DetectAndInstallLfsIfNeeded; not a user-facing toggle.
     [JsonPropertyName("lfsEnabled")]
     public bool LfsEnabled { get; set; }

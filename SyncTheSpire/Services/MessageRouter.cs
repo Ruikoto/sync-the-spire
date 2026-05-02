@@ -52,9 +52,9 @@ public class MessageRouter
         "LAUNCH_GAME", "SET_CUSTOM_EXE",
         "GET_LOCAL_MODS_DETAILED", "DELETE_MOD", "INSTALL_MOD_FILES", "INSTALL_MOD_DROPPED",
         "GET_BRANCH_MODS_FOR_COPY", "COPY_MOD_FROM_BRANCH", "CLEAN_DUPLICATE_MANIFESTS",
-        "PREFLIGHT_EXCLUDE_LARGE_FILES", "PREFLIGHT_CANCEL", "REBUILD_BRANCHES_ORPHAN",
+        "PREFLIGHT_CANCEL", "REBUILD_BRANCHES_ORPHAN",
         "RESET_UNPUSHED_COMMITS",
-        "GET_EXCLUDED_LARGE_FILES", "REMOVE_EXCLUDED_LARGE_FILE",
+        "PREFLIGHT_FORCE_PUSH", "PREFLIGHT_DELETE_LARGE_FILES",
     ];
 
     // current workspace context (null if no workspace active yet)
@@ -230,12 +230,11 @@ public class MessageRouter
             _gated["SAVE_AND_PUSH_MY_BRANCH"] = _ => gb.HandleSaveAndPush();
             _gated["FORCE_PUSH"] = _ => gb.HandleForcePush();
             _gated["RESET_TO_REMOTE"] = _ => gb.HandleResetToRemote();
-            _gated["PREFLIGHT_EXCLUDE_LARGE_FILES"] = req => gb.HandlePreflightExcludeLargeFiles(req.Payload);
             _gated["PREFLIGHT_CANCEL"] = _ => Send(IpcResponse.Success("PREFLIGHT_CANCEL", new { }));
             _gated["REBUILD_BRANCHES_ORPHAN"] = req => gb.HandleRebuildBranchesOrphan(req.Payload);
             _gated["RESET_UNPUSHED_COMMITS"] = _ => gb.HandleResetUnpushedCommits();
-            _gated["GET_EXCLUDED_LARGE_FILES"] = _ => gb.HandleGetExcludedLargeFiles();
-            _gated["REMOVE_EXCLUDED_LARGE_FILE"] = req => gb.HandleRemoveExcludedLargeFile(req.Payload);
+            _gated["PREFLIGHT_FORCE_PUSH"] = _ => gb.HandlePreflightForcePush();
+            _gated["PREFLIGHT_DELETE_LARGE_FILES"] = req => gb.HandlePreflightDeleteLargeFiles(req.Payload);
         }
 
         if (_saveHandler is { } sh)

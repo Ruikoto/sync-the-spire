@@ -1161,50 +1161,6 @@ public class GitService
         return new ResetResult(targetKind, count);
     }
 
-    /// <summary>
-    /// append exclude patterns to git's info/exclude, deduplicating existing entries
-    /// </summary>
-    public void AppendExcludeRules(IEnumerable<string> patterns)
-    {
-        var infoDir = Path.Combine(GitDirPath, "info");
-        Directory.CreateDirectory(infoDir);
-        var excludePath = Path.Combine(infoDir, "exclude");
-
-        var existing = File.Exists(excludePath)
-            ? new HashSet<string>(File.ReadAllLines(excludePath), StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var toAdd = patterns.Where(p => !existing.Contains(p)).ToList();
-        if (toAdd.Count == 0) return;
-
-        using var writer = File.AppendText(excludePath);
-        foreach (var p in toAdd)
-            writer.WriteLine(p);
-    }
-
-    /// <summary>
-    /// remove specified patterns from git's info/exclude, exact-match per line, case-insensitive.
-    /// removes ALL lines matching any pattern (including duplicates from default rules).
-    /// caller is responsible for keeping WorkspaceConfig.ExcludedLargeFiles in sync.
-    /// </summary>
-    public void RemoveExcludeRules(IEnumerable<string> patterns)
-    {
-        var infoDir = Path.Combine(GitDirPath, "info");
-        var excludePath = Path.Combine(infoDir, "exclude");
-        if (!File.Exists(excludePath)) return;
-
-        var toRemove = new HashSet<string>(patterns, StringComparer.OrdinalIgnoreCase);
-        if (toRemove.Count == 0) return;
-
-        var kept = File.ReadAllLines(excludePath)
-            .Where(line => !toRemove.Contains(line))
-            .ToList();
-
-        var tmp = excludePath + ".tmp";
-        File.WriteAllLines(tmp, kept);
-        File.Move(tmp, excludePath, overwrite: true);
-    }
-
     // detect LFS filter rules in .gitattributes and install git-lfs hooks if found.
     // when materialize is true, also runs `lfs checkout` so the working tree ends up with
     // real content instead of pointer text — required after reset / branch checkout, but
@@ -1697,8 +1653,8 @@ public class GitService
         Directory.CreateDirectory(infoDir);
         var excludePath = Path.Combine(infoDir, "exclude");
 
-        // merge-style write — preserve anything already in the file (user-added exclusion rules
-        // from AppendExcludeRules must not be wiped). only append default lines that aren't present.
+        // merge-style write — preserve anything already in the file (any user-added exclude rules
+        // must not be wiped). only append default lines that aren't present.
         var existing = new HashSet<string>(
             File.Exists(excludePath) ? File.ReadAllLines(excludePath) : [],
             StringComparer.OrdinalIgnoreCase);

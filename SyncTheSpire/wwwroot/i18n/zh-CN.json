@@ -266,13 +266,7 @@
     "fileSizeLimitRelaxTitle": "调高大小限制？",
     "fileSizeLimitRelaxMessage": "你正在调高或取消文件大小限制。如果超过云端平台实际限制，推送会失败。是否继续？",
     "cleanBranches": "清理分支历史",
-    "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。",
-    "excludedLargeFiles": "已排除的大文件",
-    "excludedLargeFilesDesc": "这些文件已被加入本机的排除列表，不会上传到云端。点击删除按钮可恢复其参与下次同步。",
-    "removeExcluded": "恢复同步",
-    "removeExcludedConfirmTitle": "恢复同步？",
-    "removeExcludedConfirm": "「{path}」将重新参与下次推送的大文件检测。如果它仍然超过云端限制，下次推送会再次弹出排除选项。继续吗？",
-    "excludedLargeFilesRemoved": "已从排除列表移除"
+    "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。"
   },
   "modals": {
     "welcome": {
@@ -315,12 +309,16 @@
       "autoReason": "（{reason}）",
       "workTreeHeader": "工作区中的新增/修改文件：",
       "unpushedHeader": "已提交但未推送的大文件：",
-      "excludeAndPush": "排除工作区文件并继续",
-      "resetUnpushedAndRetry": "撤销未推送的提交并重新选择",
-      "resetUnpushedConfirm": "将把 {count} 个未推送的提交还原为待提交状态。这些更改不会丢失，但需要你重新决定如何处理它们。继续吗？",
-      "resetUnpushedConfirmTitle": "撤销未推送的提交",
-      "noResetHint": "无法自动撤销未推送的提交（缺少远端跟踪和 _init 分支）。请使用「清理分支历史」彻底重建。",
-      "cancel": "取消"
+      "advisoryHint": "当前为不限制大小模式，仍提示此次推送可能被服务端拒绝。",
+      "forceTryUpload": "仍然尝试上传",
+      "forceTryUploadConfirmTitle": "确认尝试上传",
+      "forceTryUploadConfirm": "服务端可能因文件超限而拒绝本次推送。是否继续？",
+      "deleteFiles": "从工作区删除这些文件",
+      "deleteFilesConfirmTitle": "确认删除",
+      "deleteFilesConfirm": "将从工作区物理删除 {count} 个文件，这会影响游戏中实际加载的文件。继续吗？",
+      "deleteFilesSuccess": "已删除大文件并完成推送。",
+      "deleteFilesFailed": "删除大文件失败。",
+      "cancel": "取消上传"
     },
     "cleanBranches": {
       "title": "清理分支历史",
@@ -379,7 +377,8 @@
     "savePathFound": "已自动检测到存档路径",
     "resetUnpushedDone": "已撤销未推送的提交。",
     "resetUnpushedFailed": "撤销未推送的提交失败。",
-    "removeExcludedFailed": "从排除列表移除失败"
+    "removeExcludedFailed": "从排除列表移除失败",
+    "pushed": "已上传！"
   },
   "quotes": {
     "sts2": [

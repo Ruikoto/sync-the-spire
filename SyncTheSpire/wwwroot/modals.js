@@ -991,7 +991,7 @@ function modDiffSection(label, count, type, cardsHtml) {
 
 // ── preflight modal (large file check) ───────────────────────────────────────
 
-let _preflightPayload = null; // { kind, files?, unpushedFiles?, unpushedCommitCount?, limitMib, autoReason, resetTarget }
+let _preflightPayload = null;
 
 function showPreflightModal(payload) {
     _preflightPayload = payload;
@@ -1002,18 +1002,22 @@ function showPreflightModal(payload) {
         ? I18n.t('modals.preflight.autoReason', { reason: payload.autoReason })
         : '';
 
-    // title
+    // title / description by kind
     const titleKey = kind === 'largeFilesMixed'      ? 'modals.preflight.titleMixed'
                    : kind === 'largeFilesInUnpushed' ? 'modals.preflight.titleUnpushed'
                                                     : 'modals.preflight.title';
     $('#preflight-title').textContent = I18n.t(titleKey);
 
-    // description
     let descKey;
     if (kind === 'largeFilesMixed')      descKey = 'modals.preflight.descMixed';
     else if (kind === 'largeFilesInUnpushed') descKey = 'modals.preflight.descUnpushed';
     else descKey = 'modals.preflight.desc';
     $('#preflight-desc').textContent = I18n.t(descKey, { limitMib, reason: reasonText });
+
+    // advisory hint for unlimited mode
+    const advisoryHint = $('#preflight-advisory-hint');
+    if (payload.advisory) advisoryHint.classList.remove('hidden');
+    else advisoryHint.classList.add('hidden');
 
     // working-tree list
     const wtFiles = payload.files || [];
@@ -1026,9 +1030,7 @@ function showPreflightModal(payload) {
                 <span class="shrink-0 text-spire-warn">${f.sizeMib.toFixed(1)} MiB</span>
             </li>`
         ).join('');
-    } else {
-        wtSection.classList.add('hidden');
-    }
+    } else wtSection.classList.add('hidden');
 
     // unpushed-commits list
     const upFiles = payload.unpushedFiles || [];
@@ -1046,30 +1048,7 @@ function showPreflightModal(payload) {
                 </div>
             </li>`
         ).join('');
-    } else {
-        upSection.classList.add('hidden');
-    }
-
-    // buttons
-    const btnExclude = $('#preflight-btn-exclude');
-    const btnReset = $('#preflight-btn-reset-unpushed');
-    const noResetHint = $('#preflight-no-reset-hint');
-
-    if (wtFiles.length > 0) btnExclude.classList.remove('hidden');
-    else                    btnExclude.classList.add('hidden');
-
-    if (upFiles.length > 0) {
-        if (payload.resetTarget && payload.resetTarget !== 'none') {
-            btnReset.classList.remove('hidden');
-            noResetHint.classList.add('hidden');
-        } else {
-            btnReset.classList.add('hidden');
-            noResetHint.classList.remove('hidden');
-        }
-    } else {
-        btnReset.classList.add('hidden');
-        noResetHint.classList.add('hidden');
-    }
+    } else upSection.classList.add('hidden');
 
     $('#preflight-modal').classList.remove('hidden');
 }
@@ -1079,24 +1058,28 @@ function closePreflightModal() {
     _preflightPayload = null;
 }
 
-$('#preflight-btn-exclude').addEventListener('click', () => {
+$('#preflight-btn-delete').addEventListener('click', async () => {
     if (!_preflightPayload) return;
-    const files = (_preflightPayload.files || []).map(f => f.path);
-    if (files.length === 0) { closePreflightModal(); return; }
-    closePreflightModal();
-    sendMessage('PREFLIGHT_EXCLUDE_LARGE_FILES', { files });
-});
-
-$('#preflight-btn-reset-unpushed').addEventListener('click', async () => {
-    if (!_preflightPayload) return;
-    const count = _preflightPayload.unpushedCommitCount || 0;
+    const wt = (_preflightPayload.files || []).map(f => f.path);
+    const up = (_preflightPayload.unpushedFiles || []).map(f => f.path);
+    const total = new Set([...wt, ...up]).size;
     const ok = await showConfirm(
-        I18n.t('modals.preflight.resetUnpushedConfirm', { count }),
-        I18n.t('modals.preflight.resetUnpushedConfirmTitle')
+        I18n.t('modals.preflight.deleteFilesConfirm', { count: total }),
+        I18n.t('modals.preflight.deleteFilesConfirmTitle')
     );
     if (!ok) return;
     closePreflightModal();
-    sendMessage('RESET_UNPUSHED_COMMITS', {});
+    sendMessage('PREFLIGHT_DELETE_LARGE_FILES', { files: wt, unpushedFiles: up });
+});
+
+$('#preflight-btn-try').addEventListener('click', async () => {
+    const ok = await showConfirm(
+        I18n.t('modals.preflight.forceTryUploadConfirm'),
+        I18n.t('modals.preflight.forceTryUploadConfirmTitle')
+    );
+    if (!ok) return;
+    closePreflightModal();
+    sendMessage('PREFLIGHT_FORCE_PUSH', {});
 });
 
 $('#preflight-btn-cancel').addEventListener('click', () => {
