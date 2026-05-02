@@ -154,6 +154,13 @@ public class GitService
             configIdx++;
         }
 
+        // never sign internal commits — the user's global gpg/ssh-sign program may
+        // hang or fail when invoked from a background context (e.g. 1Password's
+        // op-ssh-sign with no UI approval). this flag covers `git commit`.
+        psi.Environment[$"GIT_CONFIG_KEY_{configIdx}"] = "commit.gpgsign";
+        psi.Environment[$"GIT_CONFIG_VALUE_{configIdx}"] = "false";
+        configIdx++;
+
         psi.Environment["GIT_CONFIG_COUNT"] = configIdx.ToString();
 
         // never prompt for credentials interactively
@@ -165,7 +172,8 @@ public class GitService
     /// when LibGit2Sharp can't handle a platform's auth challenge.
     /// L3 fix: parse args more carefully — split respects quoted segments
     /// </summary>
-    private string RunGitCli(string args, string? workDir = null, int timeout = 120_000)
+    private string RunGitCli(string args, string? workDir = null, int timeout = 120_000,
+        IReadOnlyDictionary<string, string>? extraEnv = null)
     {
         LogService.Info($"git.exe {args}");
         var psi = new ProcessStartInfo
@@ -183,6 +191,10 @@ public class GitService
             psi.ArgumentList.Add(arg);
 
         ConfigureGitEnv(psi);
+
+        if (extraEnv != null)
+            foreach (var kv in extraEnv)
+                psi.Environment[kv.Key] = kv.Value;
 
         using var proc = Process.Start(psi)!;
         // read both streams async — sync read on either stream would deadlock when pipe
@@ -1256,6 +1268,17 @@ public class GitService
         string? savedBranch = null;
         try { savedBranch = GetCurrentBranch(); } catch { }
 
+        // derive identity once — orphan commit is internal plumbing and must not depend on
+        // the user's global git identity (which may be missing on a fresh install)
+        var sig = MakeSignature(_config.Workspace, ReadGitGlobalConfig("user.email"));
+        var commitEnv = new Dictionary<string, string>
+        {
+            ["GIT_AUTHOR_NAME"] = sig.Name,
+            ["GIT_AUTHOR_EMAIL"] = sig.Email,
+            ["GIT_COMMITTER_NAME"] = sig.Name,
+            ["GIT_COMMITTER_EMAIL"] = sig.Email,
+        };
+
         // try to unshallow first; silently ignore if already full clone
         try { RunGitCli("fetch --unshallow", timeout: 300_000); } catch { }
 
@@ -1263,13 +1286,18 @@ public class GitService
         {
             var branch = filtered[i];
             onProgress?.Invoke(branch, i, filtered.Count);
+
+            // capture the original tip before any destructive operation so we can restore on failure
+            string? originalSha = null;
+            try { originalSha = RunGitCli($"rev-parse \"refs/heads/{branch}\"").Trim(); } catch { }
+
             try
             {
                 RunGitCli($"checkout \"{branch}\"");
                 RunGitCli("checkout --orphan __orphan_tmp");
                 RunGitCli("reset");
                 RunGitCli("add -A");
-                RunGitCli($"commit -m \"Sync cleanup: rebuilt history\"");
+                RunGitCli($"commit -m \"Sync cleanup: rebuilt history\"", extraEnv: commitEnv);
                 RunGitCli($"branch -D \"{branch}\"");
                 RunGitCli($"branch -m \"{branch}\"");
                 ClearRemoteTrackingRefs();
@@ -1288,13 +1316,34 @@ public class GitService
             {
                 LogService.Warn($"Orphan rebuild failed for {branch}: {ex.Message}");
                 results.Add(new OrphanResult(branch, false, ex.Message));
-                // best-effort cleanup: HEAD may still point at __orphan_tmp, so `branch -D` would
-                // refuse. step away from it first — prefer the target branch (it still exists if
-                // the failure was before `branch -D <target>`), fall back to savedBranch, fall
-                // back to any other branch we can find.
-                try { RunGitCli($"checkout --force \"{branch}\""); }
-                catch
+
+                // restore the destination branch ref to its pre-rebuild tip so the working tree,
+                // branch ref, and remote-tracking refs all line up with what we found. otherwise a
+                // failed rebuild leaves <branch> pointing at the orphan and every future push diverges.
+                if (originalSha != null)
                 {
+                    try
+                    {
+                        // step away from any branch we might be holding (orphan tmp or the
+                        // now-broken target) so we can rewrite refs/heads/<branch> freely
+                        RunGitCli("checkout --detach");
+                        RunGitCli($"update-ref \"refs/heads/{branch}\" {originalSha}");
+                        RunGitCli($"checkout \"{branch}\"");
+                        // re-fetch remote-tracking refs we cleared earlier so divergence checks
+                        // see the real upstream
+                        try { RunGitCli("fetch --prune", timeout: 300_000); } catch { }
+                    }
+                    catch (Exception restoreEx)
+                    {
+                        LogService.Warn($"[Orphan rebuild] restore failed for {branch}: {restoreEx.Message}");
+                        // last-resort: at least try to land on savedBranch so HEAD is valid
+                        if (!string.IsNullOrEmpty(savedBranch))
+                            try { RunGitCli($"checkout --force \"{savedBranch}\""); } catch { }
+                    }
+                }
+                else
+                {
+                    // originalSha unavailable — fall back to the old best-effort checkout
                     if (!string.IsNullOrEmpty(savedBranch))
                         try { RunGitCli($"checkout --force \"{savedBranch}\""); } catch { }
                 }

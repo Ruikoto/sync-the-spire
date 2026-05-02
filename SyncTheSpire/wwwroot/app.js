@@ -1050,6 +1050,13 @@ on('REBUILD_BRANCHES_ORPHAN', data => {
         const { successCount, failCount } = data.payload || {};
         const msg = I18n.t('modals.cleanBranches.done', { success: successCount ?? 0, fail: failCount ?? 0 });
         toast(msg, failCount > 0 ? 'warn' : 'success');
+        // surface the per-branch friendly error so the user knows why it failed without opening the log
+        if (failCount > 0) {
+            const firstFail = (data.payload?.results || []).find(r => !r.success);
+            if (firstFail?.error) {
+                toast(`${firstFail.branch}: ${firstFail.error}`, 'error');
+            }
+        }
     }
 });
 

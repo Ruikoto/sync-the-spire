@@ -634,7 +634,7 @@ public class MessageRouter
     /// translate raw git error messages into user-friendly Chinese text.
     /// special-cases GitHub connectivity issues with domestic platform suggestions.
     /// </summary>
-    private static string FriendlyGitError(string rawMessage)
+    internal static string FriendlyGitError(string rawMessage)
     {
         var msg = rawMessage;
 
@@ -690,6 +690,16 @@ public class MessageRouter
         // shallow update error — usually from force-pushing orphan to a shallow clone
         if (msg.Contains("shallow update not allowed"))
             return "推送失败：远端不接受此次历史重写操作，可能是仓库为浅克隆状态。请尝试先重新初始化仓库。";
+
+        // generic remote rejection / pre-receive hook: the server said something we don't have a
+        // more specific case for. quote a short tail of the actual stderr so the user can see what
+        // the hook complained about without having to open the log file.
+        if (msg.Contains("pre-receive") || msg.Contains("remote rejected") ||
+            (msg.Contains("remote: ") && msg.Contains("rejected")))
+        {
+            var tail = msg.Length > 300 ? "…" + msg[^300..] : msg;
+            return $"远端仓库拒绝了此次推送。请检查远端仓库的策略设置（如单文件大小限制、分支保护规则等）。\n\n远端返回：\n{tail.Trim()}";
+        }
 
         // fallback: strip the internal prefix like "git clone failed: " and show a cleaner message
         var colonIdx = msg.IndexOf("failed:");

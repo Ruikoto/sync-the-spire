@@ -596,7 +596,13 @@ public class GitBranchHandler : HandlerBase
 
         Send(IpcResponse.Success("REBUILD_BRANCHES_ORPHAN", new
         {
-            results = results.Select(r => new { branch = r.Branch, success = r.Success, error = r.Error }).ToArray(),
+            results = results.Select(r => new
+            {
+                branch = r.Branch,
+                success = r.Success,
+                // localise the raw git error so the frontend can toast it directly without classification
+                error = r.Success ? null : MessageRouter.FriendlyGitError(r.Error ?? ""),
+            }).ToArray(),
             successCount,
             failCount
         }));
