@@ -57,7 +57,9 @@ class Program
         // repo lives in AppData which may trigger ownership check (CVE-2022-24765)
         GlobalSettings.SetOwnerValidation(false);
 
-        LogService.Info("App starting");
+        var version = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        LogService.Info($"App starting v{version}");
         LogService.CleanupOldLogs();
 
         // catch everything that escapes normal error handling
