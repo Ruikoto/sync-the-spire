@@ -125,15 +125,18 @@ function toast(message, type = 'info') {
 }
 
 // debounce guard: disable button during IPC round-trip, re-enable on hideLoading
-const _guardedBtns = new Set();
+let _guardedBtns = new Set();
+// buttons whose await fn() is still in flight — hideLoading must not re-enable these
+const _activeGuardBtns = new Set();
 function guardClick(btn, fn) {
     btn.addEventListener('click', async () => {
-        if (btn.disabled) return;
+        if (btn.disabled || _activeGuardBtns.has(btn)) return;
         btn.disabled = true;
+        _activeGuardBtns.add(btn);
         _guardedBtns.add(btn);
         try { await fn(); } catch { /* handled elsewhere */ }
-        // if no IPC loading was triggered, re-enable immediately
-        if (_guardedBtns.has(btn)) {
+        finally {
+            _activeGuardBtns.delete(btn);
             btn.disabled = false;
             _guardedBtns.delete(btn);
         }
@@ -152,8 +155,12 @@ hideLoading = function () {
     if (pctLabel) pctLabel.textContent = '0%';
     const detailLabel = $('#loading-detail');
     if (detailLabel) detailLabel.textContent = '';
-    _guardedBtns.forEach(btn => btn.disabled = false);
-    _guardedBtns.clear();
+    // skip buttons that are still held by an in-flight guardClick await
+    _guardedBtns.forEach(btn => {
+        if (_activeGuardBtns.has(btn)) return;
+        btn.disabled = false;
+    });
+    _guardedBtns = new Set([..._guardedBtns].filter(b => _activeGuardBtns.has(b)));
 };
 
 // ── modal focus trap ─────────────────────────────────────────────────────────
@@ -228,8 +235,13 @@ function showConfirm(message, title) {
 // conflict resolution dialog — returns 'force' | 'reset' | null
 function showConflictDialog(message) {
     return new Promise(resolve => {
-        $('#conflict-message').textContent = message;
         const modal = $('#conflict-modal');
+        // re-entry guard: if a previous call's promise is still pending, don't stack listeners
+        if (!modal.classList.contains('hidden')) {
+            resolve(null);
+            return;
+        }
+        $('#conflict-message').textContent = message;
         modal.classList.remove('hidden');
 
         function cleanup() {

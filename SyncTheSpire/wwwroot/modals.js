@@ -807,6 +807,12 @@ async function checkAnnouncements() {
 function showModDiffModal(direction) {
     return new Promise(async (resolve) => {
         const modal = $('#mod-diff-modal');
+        // re-entry guard: if a previous call's promise is still pending, don't stack listeners
+        if (!modal.classList.contains('hidden')) {
+            resolve(false);
+            return;
+        }
+
         const body = $('#mod-diff-body');
         const icon = $('#mod-diff-icon');
         const title = $('#mod-diff-title');
