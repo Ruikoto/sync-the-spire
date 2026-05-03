@@ -224,9 +224,12 @@ public class GitService
     /// <summary>
     /// run git.exe while streaming stderr for progress updates.
     /// fires OnTransferProgress callback (throttled to 200ms) as git reports progress.
+    /// when idleTimeoutMs is set, kills the process if no stderr activity is seen for that
+    /// long instead of using a total-runtime cap — needed for push, where total runtime can
+    /// legitimately span many minutes on slow uplinks but a stall means the connection is dead.
     /// </summary>
     private void RunGitCliWithProgress(string args, string? workDir = null,
-        int timeout = 120_000, bool setGitDir = true)
+        int timeout = 120_000, bool setGitDir = true, int? idleTimeoutMs = null)
     {
         LogService.Info($"git.exe {args} (with progress)");
         var psi = new ProcessStartInfo
@@ -248,6 +251,8 @@ public class GitService
         var stderrBuilder = new StringBuilder();
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
 
+        long lastActivity = Stopwatch.GetTimestamp();
+
         // run the char-by-char stderr read on a worker thread so the timeout watchdog
         // actually fires when git stalls and never emits a byte
         var readTask = Task.Run(() =>
@@ -262,6 +267,9 @@ public class GitService
                 var ch = (char)stderrStream.Read();
                 if (ch == '\r' || ch == '\n')
                 {
+                    // bump idle watchdog on every flushed line — covers steady "Writing objects: ..."
+                    Interlocked.Exchange(ref lastActivity, Stopwatch.GetTimestamp());
+
                     var line = lineBuffer.ToString();
                     lineBuffer.Clear();
                     stderrBuilder.AppendLine(line);
@@ -302,7 +310,22 @@ public class GitService
             }
         });
 
-        if (!readTask.Wait(timeout))
+        if (idleTimeoutMs.HasValue)
+        {
+            // poll: if read worker exits, we're done; if no stderr activity for the
+            // configured idle window, the connection is dead — kill and report stall.
+            while (!readTask.Wait(1000))
+            {
+                var idle = Stopwatch.GetElapsedTime(Interlocked.Read(ref lastActivity));
+                if (idle.TotalMilliseconds > idleTimeoutMs.Value)
+                {
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    throw new InvalidOperationException(
+                        $"git {psi.ArgumentList.FirstOrDefault()} 长时间无响应，已中止（连续 {idleTimeoutMs.Value / 1000}s 未收到任何输出）。请检查网络连接后重试。");
+                }
+            }
+        }
+        else if (!readTask.Wait(timeout))
         {
             try { proc.Kill(entireProcessTree: true); } catch { }
             throw new InvalidOperationException(
@@ -933,16 +956,43 @@ public class GitService
     }
 
     /// <summary>
-    /// scan working tree for files about to be pushed that exceed the size limit;
-    /// only includes new/modified files (respects .gitignore). already-tracked unchanged
-    /// files are skipped — their blobs aren't going over the wire on this push.
+    /// scan working tree for files about to be pushed that exceed the size limit. covers
+    /// three buckets that all produce new blobs on the next push:
+    ///   - untracked       (--others --exclude-standard)
+    ///   - modified        (--modified) — tracked file changed in worktree
+    ///   - staged vs HEAD  (diff --cached) — added via earlier `git add` or spilled by
+    ///                     SoftResetToUnpushedBoundary; previously missed entirely so the
+    ///                     auto-retry after RESET_UNPUSHED_COMMITS sailed through preflight
+    ///                     and pushed a giant blob until the upload timed out.
+    /// already-tracked unchanged files are still skipped — their blobs don't go over the wire.
     /// </summary>
     public List<LargeFile> ScanLargeFiles(long limitBytes)
     {
-        var output = RunGitCli("ls-files --others --exclude-standard --modified -z");
-        var result = new List<LargeFile>();
+        if (limitBytes == long.MaxValue) return [];
 
-        foreach (var rel in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+
+        // untracked + modified-in-worktree
+        var unmod = RunGitCli("ls-files --others --exclude-standard --modified -z");
+        foreach (var p in unmod.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            paths.Add(p);
+
+        // staged differences from HEAD — defensive: --cached against an empty repo /
+        // unborn HEAD will fail, in which case there are no commits to diff against and
+        // anything to push is already in --others above
+        try
+        {
+            var staged = RunGitCli("diff --cached --name-only -z");
+            foreach (var p in staged.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+                paths.Add(p);
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"[ScanLargeFiles] diff --cached failed: {ex.Message}");
+        }
+
+        var result = new List<LargeFile>();
+        foreach (var rel in paths)
         {
             var fullPath = Path.Combine(WorkTreePath, rel.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(fullPath)) continue;
@@ -1537,7 +1587,9 @@ public class GitService
         {
             if (IsSshMode)
             {
-                RunGitCli("push -u origin HEAD");
+                // SSH always uses git.exe — stream progress with idle watchdog so big files
+                // and slow uplinks don't trigger the 120s total-timeout we used to use here.
+                RunGitCliPush("push -u origin HEAD --progress");
             }
             else
             {
@@ -1548,6 +1600,21 @@ public class GitService
                     var creds = MakeCredHandler();
                     if (creds != null)
                         pushOpts.CredentialsProvider = creds;
+
+                    // wire push transfer progress so user sees byte/object counts live —
+                    // throttled to 200ms to avoid drowning the IPC channel
+                    long lastReport = Stopwatch.GetTimestamp();
+                    pushOpts.OnPushTransferProgress = (current, total, bytes) =>
+                    {
+                        if (OnTransferProgress is null || total <= 0) return true;
+                        var elapsed = Stopwatch.GetElapsedTime(lastReport);
+                        if (elapsed.TotalMilliseconds < 200 && current < total) return true;
+                        lastReport = Stopwatch.GetTimestamp();
+                        var pct = (int)((double)current / total * 100);
+                        OnTransferProgress(new GitTransferProgress(pct,
+                            $"{pct}% ({current}/{total} 个对象, {bytes / (1024.0 * 1024.0):F1} MiB)"));
+                        return true;
+                    };
 
                     // catch per-ref push rejection that LibGit2Sharp silently swallows
                     string? pushError = null;
@@ -1564,8 +1631,9 @@ public class GitService
                 catch (LibGit2SharpException ex)
                 {
                     // fallback to git.exe for platforms with incompatible auth (e.g. Gitee)
+                    // or branches without upstream tracking configured yet
                     LogService.Warn($"LibGit2Sharp push failed, falling back to git.exe: {ex.Message}");
-                    RunGitCli("push -u origin HEAD");
+                    RunGitCliPush("push -u origin HEAD --progress");
                 }
             }
 
@@ -1576,6 +1644,17 @@ public class GitService
         {
             _netGate.Release();
         }
+    }
+
+    /// <summary>
+    /// run git.exe push with idle-timeout watchdog and progress streaming. push has no
+    /// useful total-runtime cap — a 99 MiB file on a 200 KiB/s uplink legitimately takes
+    /// 8+ minutes — so we kill only when stderr has been silent for 90s, treating that
+    /// as a dead connection rather than a slow-but-progressing upload.
+    /// </summary>
+    private void RunGitCliPush(string args)
+    {
+        RunGitCliWithProgress(args, idleTimeoutMs: 90_000);
     }
 
     /// <summary>
@@ -1617,7 +1696,9 @@ public class GitService
         _netGate.Wait();
         try
         {
-            RunGitCli("push --force -u origin HEAD");
+            // same idle-timeout reasoning as PushCurrentBranch — force push goes through
+            // the same wire path and gets the same long-upload treatment
+            RunGitCliPush("push --force -u origin HEAD --progress");
             VerifyPushResult(branchName, localTip);
         }
         finally
