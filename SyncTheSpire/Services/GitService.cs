@@ -184,6 +184,12 @@ public class GitService
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // git emits paths as raw UTF-8 bytes (especially under -z). without this, .NET
+            // decodes stdout with the system ANSI codepage (CP936 on zh-CN) and produces
+            // mojibake — File.Exists then misses every path with non-ASCII characters,
+            // which silently broke ScanLargeFiles for files like "风转车牌.3mf".
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
 
         // split aware of double-quoted segments so paths with spaces work
@@ -240,6 +246,9 @@ public class GitService
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // see RunGitCli — UTF-8 to match what git actually emits
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
 
         foreach (var arg in SplitArgs(args))
@@ -357,6 +366,9 @@ public class GitService
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // see RunGitCli — UTF-8 to match what git emits
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (var arg in SplitArgs(args))
             psi.ArgumentList.Add(arg);
