@@ -260,7 +260,55 @@ public class GitBranchHandler : HandlerBase
             return;
         }
 
-        DoCommitAndPush("SAVE_AND_PUSH_MY_BRANCH");
+        try
+        {
+            DoCommitAndPush("SAVE_AND_PUSH_MY_BRANCH");
+        }
+        catch (Exception ex) when (IsServerSizeRejection(ex.Message))
+        {
+            // server rejected for size — our local limit was too lenient (host's actual cap
+            // is lower than what's hardcoded, e.g. gitcode at 99 MiB but the user's account
+            // tier rejects at 50). CommitAndPush already soft-reset the just-created commit
+            // so the file is back in the index as staged; re-scan with a strict 49 MiB cap
+            // (the smallest known host limit) to pinpoint the culprit, then surface the
+            // preflight modal with cancel / try-anyway / delete options.
+            const long strictLimit = 49L * 1024 * 1024;
+            var rescanWorkTree = _gitService.ScanLargeFiles(strictLimit);
+            var rescanUnpushed = _gitService.ScanLargeFilesInUnpushedCommits(strictLimit);
+
+            LogService.Warn($"[Preflight] post-rejection rescan at {strictLimit / 1024 / 1024} MiB: " +
+                            $"workTree={rescanWorkTree.Count} unpushed={rescanUnpushed.Count}");
+
+            if (rescanWorkTree.Count > 0 || rescanUnpushed.Count > 0)
+            {
+                Send(IpcResponse.Conflict("SAVE_AND_PUSH_MY_BRANCH",
+                    BuildPreflightConflictPayload(rescanWorkTree, rescanUnpushed, strictLimit, ws)));
+                return;
+            }
+
+            // rescan came up empty — let the original error bubble up to the toast path;
+            // user will at least see what the server said
+            throw;
+        }
+    }
+
+    // shared with FriendlyGitError for cross-call detection. covers single-file size
+    // rejections from common hosts (github / gitcode / gitee / gitlab / bitbucket).
+    private static bool IsServerSizeRejection(string msg)
+    {
+        if (string.IsNullOrEmpty(msg)) return false;
+        return msg.Contains("File size exceeds", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("exceeds the maximum", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("larger than", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("HTTP 413", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("repository size limit", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("over quota", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("data quota", StringComparison.OrdinalIgnoreCase)
+            || (msg.Contains("pre-receive hook declined", StringComparison.OrdinalIgnoreCase)
+                && msg.Contains("size", StringComparison.OrdinalIgnoreCase))
+            // gitcode-style: server returns "exceeded limited size" in stderr
+            || msg.Contains("exceeded limited size", StringComparison.OrdinalIgnoreCase)
+            || (msg.Contains("超过") && msg.Contains("大小"));
     }
 
     /// <summary>
