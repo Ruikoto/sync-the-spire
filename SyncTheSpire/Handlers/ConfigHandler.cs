@@ -256,6 +256,8 @@ public class ConfigHandler : HandlerBase
         ws.GameInstallPath = cfg.GameInstallPath;
         ws.GameModPathLegacy = cfg.GameModPathLegacy;
         ws.SaveFolderPath = cfg.SaveFolderPath;
+        ws.MaxFileSizeMode = cfg.MaxFileSizeMode;
+        ws.MaxFileSizeManualMib = cfg.MaxFileSizeManualMib;
         // user re-entered credentials; clear the "decrypt failed" flag
         ws.CredentialsLost = false;
         _configService.SaveWorkspace();
