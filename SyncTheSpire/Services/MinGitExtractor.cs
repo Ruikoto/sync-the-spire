@@ -13,7 +13,10 @@ public static class MinGitExtractor
 {
     private const string ResourceName = "MinGitBundle.zip";
     private const string SentinelName = ".bundle-hash";
-    private const string MutexName    = @"Global\SyncTheSpire.MinGitExtract";
+    // Local\ = per-session scope. ExtractDir is per-user (LocalApplicationData), so cross-user
+    // serialization (Global\) would be overly broad. Per-session is enough since Program.Main's
+    // single-instance mutex already prevents same-user same-session concurrency from reaching here.
+    private const string MutexName    = @"Local\SyncTheSpire.MinGitExtract";
 
     private static readonly string ExtractDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
