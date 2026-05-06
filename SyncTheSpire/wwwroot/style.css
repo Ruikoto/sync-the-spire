@@ -1,89 +1,161 @@
+/* ── typography: Inter as the Geist stand-in ──────────────────────────
+ * Inter is a humanist sibling of Geist that's reliably hosted on Bunny Fonts.
+ * On network failure the stack falls back to Segoe UI Variable / system-ui,
+ * which already render the negative-tracking + ligature treatment well.
+ */
+@import url('https://fonts.bunny.net/css?family=inter:400,500,600|jetbrains-mono:400,500&display=swap');
+
 /* ── theme tokens ───────────────────────────────────────────────────
- * Light is the default; .dark on <html> swaps to the original palette.
- * Channel-based -rgb tokens let us mix alphas via rgba(var(--x), .08).
- * Existing Tailwind tokens (bg-spire-bg etc.) read these via tailwind.config.js.
+ * Vercel-inspired: white canvas + near-black text, depth from layered
+ * shadows rather than borders. Dark mode mirrors the philosophy with
+ * a deep neutral surface and ring-borders instead of hard outlines.
+ *
+ * Channel-based -rgb tokens stay so Tailwind alpha utilities still work.
  */
 :root {
-    /* Light theme — "macOS Settings" feel:
-       a neutral grey page with WHITE cards that float on it via shadow.
-       Borders are nearly invisible (depth comes from shadow, not lines).
-       The accent is a deliberate, slightly muted indigo — present enough to feel
-       intentional, restrained enough not to read as a deep-blue swatch slapped on. */
-    --spire-bg:            #E9EBEF;
-    --spire-bg-subtle:     #DEE1E6;
-    --spire-card:          #FFFFFF;
-    --spire-border:        #E1E3E8;
-    --spire-border-strong: #C5C8D0;
-    --spire-text:          #14161D;
-    --spire-muted:         #5E626E;
+    --spire-bg:            #f6f7f8;        /* page canvas — a hairline cooler than card so the cards float */
+    --spire-bg-subtle:     #fafafa;        /* inset highlight, used for soft tinted surfaces */
+    --spire-card:          #ffffff;        /* card surface — pure white */
+    --spire-border:        #ebebeb;        /* Vercel Gray 100 — visible but quiet */
+    --spire-border-strong: #d4d4d4;        /* hover/strong edge */
+    --spire-text:          #171717;        /* Vercel Gray 1000 — micro-warm near-black */
+    --spire-muted:         #666666;        /* Vercel Gray 500 — secondary copy */
 
-    --spire-accent:        #5754C8;
-    --spire-accent-hover:  #4441AB;
-    --spire-accent-soft:   rgba(87, 84, 200, 0.10);
-    --spire-accent-rgb:    87, 84, 200;
+    --spire-accent:        #0072f5;        /* link blue — the one chromatic note in the chrome */
+    --spire-accent-hover:  #005bd3;
+    --spire-accent-soft:   rgba(0, 114, 245, 0.08);
+    --spire-accent-rgb:    0, 114, 245;
 
-    --spire-danger:        #C0392B;
-    --spire-danger-hover:  #9C2A1F;
-    --spire-danger-rgb:    192, 57, 43;
+    --spire-danger:        #e5484d;        /* refined coral, not fire-engine */
+    --spire-danger-hover:  #cd3640;
+    --spire-danger-rgb:    229, 72, 77;
 
-    --spire-success:       #16803D;
-    --spire-warn:          #9A6207;
+    --spire-success:       #18794e;        /* deep, considered green */
+    --spire-warn:          #946800;        /* honey amber, deliberately desaturated */
 
-    --spire-overlay-soft:  rgba(15, 17, 24, 0.04);
+    --spire-overlay-soft:  rgba(15, 17, 24, 0.035);
     --spire-overlay:       rgba(15, 17, 24, 0.06);
-    --spire-overlay-hover: rgba(15, 17, 24, 0.09);
-    --spire-scrim:         rgba(15, 17, 24, 0.42);
+    --spire-overlay-hover: rgba(15, 17, 24, 0.085);
+    --spire-scrim:         rgba(15, 17, 24, 0.36);
 
-    --spire-shadow-modal:   0 20px 50px rgba(15, 17, 24, 0.16), 0 4px 12px rgba(15, 17, 24, 0.05);
+    /* shadow-as-border + ambient depth — the Vercel signature
+     * Layer 1: 1px hairline ring (replaces a CSS border)
+     * Layer 2: tight 2px lift for the resting state
+     * Layer 3: long-throw 16px diffuse for ambient depth
+     * Layer 4: inset highlight to mimic the inner #fafafa glow
+     */
+    --spire-shadow-ring:    0 0 0 1px rgba(15, 17, 24, 0.06);
+    --spire-shadow-card:
+        0 0 0 1px rgba(15, 17, 24, 0.05),
+        0 1px 2px rgba(15, 17, 24, 0.04),
+        0 8px 16px -8px rgba(15, 17, 24, 0.06);
+    --spire-shadow-card-hover:
+        0 0 0 1px rgba(15, 17, 24, 0.07),
+        0 2px 4px rgba(15, 17, 24, 0.05),
+        0 12px 24px -8px rgba(15, 17, 24, 0.08);
+    --spire-shadow-modal:
+        0 0 0 1px rgba(15, 17, 24, 0.05),
+        0 16px 32px -8px rgba(15, 17, 24, 0.16),
+        0 4px 12px rgba(15, 17, 24, 0.06);
     --spire-shadow-tooltip: 0 6px 18px rgba(15, 17, 24, 0.12);
-    --spire-shadow-card:    0 1px 2px rgba(15, 17, 24, 0.04), 0 6px 16px rgba(15, 17, 24, 0.04);
+    --spire-shadow-dropdown:
+        0 0 0 1px rgba(15, 17, 24, 0.06),
+        0 8px 24px -4px rgba(15, 17, 24, 0.10);
+
+    --spire-focus-ring:     0 0 0 3px rgba(0, 114, 245, 0.18);
 }
 
 html.dark {
-    /* original dark palette — preserved exactly */
-    --spire-bg:            #0F1117;
-    --spire-bg-subtle:     #1A1D2E;
-    --spire-card:          #1A1D27;
-    --spire-border:        #2A2D3A;
-    --spire-border-strong: #3A3D4A;
-    --spire-text:          #E2E8F0;
-    --spire-muted:         #94A3B8;
+    --spire-bg:            #0a0a0a;        /* Vercel-dark near-black canvas */
+    --spire-bg-subtle:     #111113;
+    --spire-card:          #131316;        /* lifted card surface */
+    --spire-border:        rgba(255, 255, 255, 0.10);
+    --spire-border-strong: rgba(255, 255, 255, 0.18);
+    --spire-text:          #ededed;
+    --spire-muted:         #8b8b8b;
 
-    --spire-accent:        #6366F1;
-    --spire-accent-hover:  #818CF8;
-    --spire-accent-soft:   rgba(99, 102, 241, 0.08);
-    --spire-accent-rgb:    99, 102, 241;
+    --spire-accent:        #3b82f6;        /* tuned-up blue for dark contrast */
+    --spire-accent-hover:  #60a5fa;
+    --spire-accent-soft:   rgba(59, 130, 246, 0.10);
+    --spire-accent-rgb:    59, 130, 246;
 
-    --spire-danger:        #EF4444;
-    --spire-danger-hover:  #F87171;
+    --spire-danger:        #ef4444;
+    --spire-danger-hover:  #f87171;
     --spire-danger-rgb:    239, 68, 68;
 
-    --spire-success:       #22C55E;
-    --spire-warn:          #F59E0B;
+    --spire-success:       #4ade80;
+    --spire-warn:          #f5b342;
 
-    --spire-overlay-soft:  rgba(255, 255, 255, 0.04);
+    --spire-overlay-soft:  rgba(255, 255, 255, 0.03);
     --spire-overlay:       rgba(255, 255, 255, 0.06);
     --spire-overlay-hover: rgba(255, 255, 255, 0.10);
-    --spire-scrim:         rgba(0, 0, 0, 0.60);
+    --spire-scrim:         rgba(0, 0, 0, 0.66);
 
-    --spire-shadow-modal:  0 4px 16px rgba(0, 0, 0, 0.4);
-    --spire-shadow-tooltip: 0 4px 16px rgba(0, 0, 0, 0.4);
-    --spire-shadow-card:    none;          /* dark mode relies on visible borders, not shadow */
+    --spire-shadow-ring:    0 0 0 1px rgba(255, 255, 255, 0.06);
+    --spire-shadow-card:
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 1px 0 0 rgba(255, 255, 255, 0.03);
+    --spire-shadow-card-hover:
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 1px 0 0 rgba(255, 255, 255, 0.04);
+    --spire-shadow-modal:
+        0 0 0 1px rgba(255, 255, 255, 0.06),
+        0 24px 48px -12px rgba(0, 0, 0, 0.55);
+    --spire-shadow-tooltip: 0 8px 20px rgba(0, 0, 0, 0.5);
+    --spire-shadow-dropdown:
+        0 0 0 1px rgba(255, 255, 255, 0.07),
+        0 12px 28px -6px rgba(0, 0, 0, 0.55);
+
+    --spire-focus-ring:     0 0 0 3px rgba(59, 130, 246, 0.25);
 }
 
-/* smooth surface color transitions when switching themes — but only after first paint
-   to avoid the page fading on initial load */
+/* ── base typography ────────────────────────────────────────────────
+ * Inter (or fallback) with ligatures + tnum on by default.
+ * Negative tracking on display headings — borrowed from Geist.
+ */
+html, body {
+    font-family: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-feature-settings: "cv11", "ss01", "ss03", "liga", "calt";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+code, pre, .font-mono, [class*="font-mono"] {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-feature-settings: "liga", "calt";
+}
+h1, .text-xl, .text-lg {
+    letter-spacing: -0.022em;
+}
+h2, .text-base, .text-sm {
+    letter-spacing: -0.01em;
+}
+.text-xs, .text-\[10px\], .text-\[11px\] {
+    letter-spacing: 0;
+}
+
+/* numerics line up cleanly in version strings, percentages, etc. */
+.tabular-nums, .font-mono {
+    font-variant-numeric: tabular-nums;
+}
+
+/* smooth surface color transitions — only after first paint */
 html.theme-ready,
 html.theme-ready body,
 html.theme-ready * {
-    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    transition:
+        background-color 0.18s ease,
+        border-color 0.18s ease,
+        color 0.18s ease,
+        box-shadow 0.18s ease;
 }
 
-/* spinner for loading overlay */
+/* ── feedback primitives ────────────────────────────────────────────── */
+
 .spinner {
     width: 32px;
     height: 32px;
-    border: 3px solid rgba(var(--spire-accent-rgb), 0.2);
+    border: 2.5px solid rgba(var(--spire-accent-rgb), 0.18);
     border-top-color: var(--spire-accent);
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
@@ -93,161 +165,164 @@ html.theme-ready * {
     to { transform: rotate(360deg); }
 }
 
-/* toast slide in */
 .toast {
-    animation: slideIn 0.25s ease-out;
+    animation: toastIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateX(40px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(28px) scale(0.98); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 
-/* smooth page transitions */
+/* page transitions — slightly longer for a premium feel */
 #page-home, #page-setup, #page-main {
-    transition: opacity 0.2s ease;
+    transition: opacity 0.22s ease;
 }
 
-/* scrollbar */
+/* ── scrollbar ──────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
+    height: 8px;
 }
 ::-webkit-scrollbar-track {
-    background: var(--spire-bg);
+    background: transparent;
 }
 ::-webkit-scrollbar-thumb {
     background: var(--spire-border);
-    border-radius: 3px;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--spire-border-strong);
+    background-clip: content-box;
 }
 
-/* prevent text selection on buttons */
-button, select {
-    user-select: none;
+button, select { user-select: none; }
+
+/* keyboard focus across interactive controls — restrained Vercel-blue ring */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+.auth-tab:focus-visible,
+.config-io-tab:focus-visible {
+    outline: none;
+    box-shadow: var(--spire-focus-ring);
 }
 
-/* segmented auth toggle */
-.auth-tab {
+/* inputs honour the accent on focus, with a soft inner ring */
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+}
+
+/* ── segmented tabs (auth + import/export) ──────────────────────────── */
+.auth-tab, .config-io-tab {
     color: var(--spire-muted);
+    transition: background-color 0.18s ease, color 0.18s ease;
+    position: relative;
 }
-.auth-tab.active {
-    background: var(--spire-accent);
-    color: #fff;
+.auth-tab.active, .config-io-tab.active {
+    background: var(--spire-card);
+    color: var(--spire-text);
     font-weight: 500;
+    box-shadow:
+        0 0 0 1px rgba(15, 17, 24, 0.06),
+        0 1px 2px rgba(15, 17, 24, 0.05);
+}
+html.dark .auth-tab.active,
+html.dark .config-io-tab.active {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-/* segmented import/export tab — same look as auth-tab */
-.config-io-tab {
-    color: var(--spire-muted);
-}
-.config-io-tab.active {
-    background: var(--spire-accent);
-    color: #fff;
-    font-weight: 500;
-}
+/* ── title bar ──────────────────────────────────────────────────────── */
+#titlebar-drag { -webkit-app-region: drag; }
+.titlebar-btn, .no-drag { -webkit-app-region: no-drag; }
 
-/* title bar */
-#titlebar-drag {
-    -webkit-app-region: drag;
-}
-.titlebar-btn, .no-drag {
-    -webkit-app-region: no-drag;
-}
-
-/* tab bar */
+/* ── workspace tab bar ──────────────────────────────────────────────── */
 .tab-item {
     position: relative;
     white-space: nowrap;
     min-width: 48px;
-    transition: background 0.15s, color 0.15s;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
-.tab-item.active {
-    color: var(--spire-text);
-}
+.tab-item.active { color: var(--spire-text); }
 .tab-item.active::after {
     content: '';
     position: absolute;
     bottom: 0;
-    left: 0;
-    right: 0;
+    left: 8px;
+    right: 8px;
     height: 2px;
     background: var(--spire-accent);
-    border-radius: 1px 1px 0 0;
+    border-radius: 2px 2px 0 0;
 }
-.tab-item:hover {
-    background: var(--spire-overlay-soft);
-}
+.tab-item:hover { background: var(--spire-overlay-soft); }
 .tab-close {
     opacity: 0;
-    transition: opacity 0.15s, color 0.15s;
+    transition: opacity 0.15s ease, color 0.15s ease;
 }
-.tab-item:hover .tab-close {
-    opacity: 1;
-}
-.tab-close:hover {
-    color: var(--spire-danger);
-}
-.tab-bar-scroll::-webkit-scrollbar {
-    height: 0;
-}
+.tab-item:hover .tab-close { opacity: 1; }
+.tab-close:hover { color: var(--spire-danger); }
+.tab-bar-scroll::-webkit-scrollbar { height: 0; }
 
-/* workspace card */
+/* ── workspace cards (home) ─────────────────────────────────────────── */
 .workspace-card {
     cursor: pointer;
-    transition: border-color 0.15s, transform 0.15s;
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                border-color 0.18s ease;
 }
 .workspace-card:hover {
-    border-color: var(--spire-border-strong);
-    transform: translateY(-1px);
+    border-color: transparent;
+    transform: translateY(-2px);
+    box-shadow: var(--spire-shadow-card-hover);
 }
 
-/* game type badges */
+/* ── game-type badges ───────────────────────────────────────────────── */
 .game-badge {
     display: inline-flex;
     align-items: center;
     font-size: 10px;
     font-weight: 500;
-    padding: 1px 6px;
+    padding: 2px 7px;
     border-radius: 999px;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
+    line-height: 1.4;
 }
-/* icon color tint (no background — png icons are already full-color) */
-.game-badge-sts2    { color: #6366F1; }
-.game-badge-generic { color: var(--spire-muted); }
-.game-badge-stardew { color: #16A34A; }
-.game-badge-minecraft { color: #A16235; }
-html.dark .game-badge-sts2    { color: #818cf8; }
-html.dark .game-badge-stardew { color: #4ade80; }
+.game-badge-sts2     { color: #4f46e5; }
+.game-badge-generic  { color: var(--spire-muted); }
+.game-badge-stardew  { color: #15803d; }
+.game-badge-minecraft { color: #8a5a2b; }
+html.dark .game-badge-sts2      { color: #818cf8; }
+html.dark .game-badge-stardew   { color: #4ade80; }
 html.dark .game-badge-minecraft { color: #c4956a; }
 
-/* text pill badges get the tinted background */
-.game-badge.game-badge-sts2     { background: rgba(99, 102, 241, 0.12); }
-.game-badge.game-badge-generic  { background: rgba(148, 163, 184, 0.18); }
-.game-badge.game-badge-stardew  { background: rgba(34, 197, 94, 0.14); }
-.game-badge.game-badge-minecraft { background: rgba(139, 92, 46, 0.14); }
-html.dark .game-badge.game-badge-sts2     { background: rgba(99, 102, 241, 0.15); }
-html.dark .game-badge.game-badge-generic  { background: rgba(148, 163, 184, 0.12); }
-html.dark .game-badge.game-badge-stardew  { background: rgba(34, 197, 94, 0.15); }
-html.dark .game-badge.game-badge-minecraft { background: rgba(139, 92, 46, 0.15); }
+.game-badge.game-badge-sts2      { background: rgba(79, 70, 229, 0.10); }
+.game-badge.game-badge-generic   { background: rgba(102, 102, 102, 0.10); }
+.game-badge.game-badge-stardew   { background: rgba(21, 128, 61, 0.10); }
+.game-badge.game-badge-minecraft { background: rgba(138, 90, 43, 0.10); }
+html.dark .game-badge.game-badge-sts2      { background: rgba(99, 102, 241, 0.16); }
+html.dark .game-badge.game-badge-generic   { background: rgba(148, 163, 184, 0.12); }
+html.dark .game-badge.game-badge-stardew   { background: rgba(34, 197, 94, 0.16); }
+html.dark .game-badge.game-badge-minecraft { background: rgba(196, 149, 106, 0.14); }
 
-/* game type selector cards in create modal */
+/* ── game type cards (compact, in create modal) ────────────────────── */
 .game-type-card {
     cursor: pointer;
     border: 1px solid var(--spire-border);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 10px;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 .game-type-card:hover {
     border-color: var(--spire-border-strong);
+    transform: translateY(-1px);
 }
 .game-type-card.selected {
     border-color: var(--spire-accent);
@@ -255,35 +330,30 @@ html.dark .game-badge.game-badge-minecraft { background: rgba(139, 92, 46, 0.15)
 }
 
 /* ── wizard create modal ────────────────────────────────────────────── */
+.wizard-step { display: flex; flex-direction: column; }
+.wizard-step.hidden { display: none; }
 
-/* wizard step — only one visible at a time, toggled via hidden class */
-.wizard-step {
-    display: flex;
-    flex-direction: column;
-}
-.wizard-step.hidden {
-    display: none;
-}
-
-/* wizard game cards — larger than regular game-type-card */
 .wizard-game-card {
     cursor: pointer;
     border: 1px solid var(--spire-border);
     border-radius: 12px;
     padding: 16px;
-    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+    transition: border-color 0.18s ease,
+                background-color 0.18s ease,
+                box-shadow 0.18s ease,
+                transform 0.18s ease;
 }
 .wizard-game-card:hover:not(.disabled) {
-    border-color: var(--spire-border-strong);
-    background: var(--spire-overlay-soft);
-    transform: translateY(-1px);
+    border-color: transparent;
+    background: var(--spire-card);
+    transform: translateY(-2px);
+    box-shadow: var(--spire-shadow-card-hover);
 }
 .wizard-game-card.disabled {
-    opacity: 0.4;
+    opacity: 0.45;
     cursor: not-allowed;
 }
 
-/* coming-soon badge */
 .coming-soon-badge {
     display: inline-flex;
     align-items: center;
@@ -291,29 +361,29 @@ html.dark .game-badge.game-badge-minecraft { background: rgba(139, 92, 46, 0.15)
     font-weight: 600;
     padding: 2px 6px;
     border-radius: 999px;
-    background: rgba(217, 119, 6, 0.14);
-    color: #B45309;
-    letter-spacing: 0.3px;
+    background: rgba(148, 104, 0, 0.10);
+    color: #946800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
 }
 html.dark .coming-soon-badge {
-    background: rgba(250, 204, 21, 0.12);
-    color: #facc15;
+    background: rgba(245, 179, 66, 0.12);
+    color: #f5b342;
 }
 
-/* wizard progress dots */
 .wizard-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: var(--spire-border-strong);
-    transition: background 0.25s, transform 0.25s;
+    transition: background 0.25s ease, transform 0.25s ease, width 0.25s ease;
 }
 .wizard-dot.active {
     background: var(--spire-accent);
-    transform: scale(1.3);
+    width: 18px;
+    border-radius: 999px;
 }
 
-/* wizard slide animations */
 @keyframes wizardSlideOutLeft {
     from { transform: translateX(0); opacity: 1; }
     to   { transform: translateX(-30px); opacity: 0; }
@@ -331,28 +401,24 @@ html.dark .coming-soon-badge {
     to   { transform: translateX(0); opacity: 1; }
 }
 
-.wizard-forward-out { animation: wizardSlideOutLeft 0.25s ease forwards; }
-.wizard-forward-in  { animation: wizardSlideInRight 0.25s ease forwards; }
-.wizard-back-out    { animation: wizardSlideOutRight 0.25s ease forwards; }
-.wizard-back-in     { animation: wizardSlideInLeft 0.25s ease forwards; }
+.wizard-forward-out { animation: wizardSlideOutLeft 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.wizard-forward-in  { animation: wizardSlideInRight 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.wizard-back-out    { animation: wizardSlideOutRight 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.wizard-back-in     { animation: wizardSlideInLeft 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
-/* branch table */
-.branch-sort-th.active-sort {
-    color: var(--spire-text);
-}
-.branch-row:hover {
-    background: var(--spire-accent-soft);
-}
+/* ── branch table ───────────────────────────────────────────────────── */
+.branch-sort-th.active-sort { color: var(--spire-text); }
+.branch-row { transition: background-color 0.12s ease; }
+.branch-row:hover { background: var(--spire-accent-soft); }
 
-/* mod preview card */
+/* ── mod cards (preview + manager) ─────────────────────────────────── */
 .mod-card {
-    transition: border-color 0.15s;
+    transition: border-color 0.15s ease, box-shadow 0.18s ease;
 }
 .mod-card:hover {
     border-color: var(--spire-border-strong);
 }
 
-/* NSFW badge */
 .nsfw-badge {
     display: inline-block;
     background: var(--spire-danger);
@@ -372,36 +438,47 @@ html.dark .coming-soon-badge {
 .mod-search-toggle {
     min-width: 28px;
     text-align: center;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-weight: 500;
 }
 .mod-search-active {
-    background: rgba(var(--spire-accent-rgb), 0.18);
+    background: rgba(var(--spire-accent-rgb), 0.10);
     border-color: var(--spire-accent);
-    color: var(--spire-text);
+    color: var(--spire-accent);
 }
+html.dark .mod-search-active {
+    color: var(--spire-text);
+    background: rgba(var(--spire-accent-rgb), 0.18);
+}
+
 .mod-highlight {
-    background: rgba(217, 119, 6, 0.28);
+    background: rgba(245, 179, 66, 0.30);
     color: inherit;
     border-radius: 2px;
     padding: 0 1px;
 }
 html.dark .mod-highlight {
-    background: rgba(250, 204, 21, 0.3);
+    background: rgba(250, 204, 21, 0.32);
 }
 
 /* mod diff preview cards */
 .mod-diff-card {
-    background: var(--spire-bg);
-    border-radius: 6px;
+    background: var(--spire-bg-subtle);
+    border-radius: 8px;
     border: 1px solid var(--spire-border);
-    border-left-width: 2px;
+    border-left-width: 3px;
     padding: 8px 10px;
+    transition: border-color 0.15s ease;
 }
-.mod-diff-added  { border-left-color: var(--spire-success); }
+html.dark .mod-diff-card {
+    background: rgba(255, 255, 255, 0.02);
+}
+.mod-diff-added   { border-left-color: var(--spire-success); }
 .mod-diff-updated { border-left-color: var(--spire-warn); }
 .mod-diff-removed { border-left-color: var(--spire-danger); }
 
-/* help tooltip bubble */
+/* ── help-tip bubble ────────────────────────────────────────────────── */
 .help-tip {
     display: inline-flex;
     align-items: center;
@@ -415,40 +492,40 @@ html.dark .mod-highlight {
     cursor: help;
     position: relative;
     flex-shrink: 0;
-    transition: border-color 0.15s, color 0.15s;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    background: var(--spire-card);
+    line-height: 1;
 }
 .help-tip:hover {
     border-color: var(--spire-accent);
-    color: var(--spire-text);
+    color: var(--spire-accent);
 }
 .help-tip-bubble {
     position: fixed;
     background: var(--spire-card);
-    border: 1px solid var(--spire-border);
     color: var(--spire-text);
     font-size: 11px;
-    line-height: 1.5;
-    padding: 8px 12px;
+    line-height: 1.55;
+    padding: 9px 12px;
     border-radius: 8px;
     width: 260px;
     pointer-events: none;
     z-index: 60;
-    box-shadow: var(--spire-shadow-tooltip);
+    box-shadow: var(--spire-shadow-tooltip),
+                0 0 0 1px var(--spire-border);
     white-space: pre-line;
     font-weight: 400;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s ease;
+    border: 1px solid transparent; /* shadow handles the edge */
 }
-.help-tip-bubble.visible {
-    opacity: 1;
-}
+.help-tip-bubble.visible { opacity: 1; }
 
-/* backup row hover */
-.backup-row:hover {
-    background: var(--spire-accent-soft);
-}
+/* ── backup row hover ───────────────────────────────────────────────── */
+.backup-row { transition: background-color 0.12s ease; }
+.backup-row:hover { background: var(--spire-accent-soft); }
 
-/* toggle switch */
+/* ── toggle switch ──────────────────────────────────────────────────── */
 .toggle-switch {
     position: relative;
     display: inline-block;
@@ -465,9 +542,9 @@ html.dark .mod-highlight {
 .toggle-slider {
     position: absolute;
     inset: 0;
-    background: var(--spire-border-strong);
+    background: #d4d4d4;
     border-radius: 999px;
-    transition: background 0.2s;
+    transition: background 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .toggle-slider::before {
     content: '';
@@ -476,50 +553,48 @@ html.dark .mod-highlight {
     height: 14px;
     left: 3px;
     bottom: 3px;
-    background: var(--spire-card);
+    background: #ffffff;
     border-radius: 50%;
-    transition: transform 0.2s, background 0.2s;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.20),
+        0 0 0 1px rgba(0, 0, 0, 0.04);
 }
-html.dark .toggle-slider {
-    background: #3f3f46;
-}
+html.dark .toggle-slider { background: rgba(255, 255, 255, 0.16); }
 html.dark .toggle-slider::before {
-    background: #a1a1aa;
-    box-shadow: none;
+    background: #d4d4d4;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 .toggle-switch input:checked + .toggle-slider {
     background: var(--spire-accent);
 }
 .toggle-switch input:checked + .toggle-slider::before {
     transform: translateX(16px);
-    background: #fff;
+    background: #ffffff;
 }
 .toggle-switch input:disabled + .toggle-slider {
-    opacity: 0.4;
+    opacity: 0.45;
     cursor: not-allowed;
 }
-.toggle-switch:has(input:disabled) {
-    cursor: not-allowed;
-}
+.toggle-switch:has(input:disabled) { cursor: not-allowed; }
 
-/* confirm message line breaks */
-#confirm-message {
-    white-space: pre-line;
-}
+/* ── confirm-message line breaks ────────────────────────────────────── */
+#confirm-message { white-space: pre-line; }
 
-/* update modal changelog area */
+/* ── update modal changelog ─────────────────────────────────────────── */
 .update-changelog {
     border: 1px solid var(--spire-border);
     border-radius: 8px;
     padding: 10px 12px;
-    background: var(--spire-bg);
+    background: var(--spire-bg-subtle);
 }
+html.dark .update-changelog { background: rgba(255, 255, 255, 0.02); }
 .update-changelog h1,
 .update-changelog h2,
 .update-changelog h3 {
     font-weight: 600;
     margin: 0.6em 0 0.3em;
+    letter-spacing: -0.012em;
 }
 .update-changelog h1 { font-size: 1em; }
 .update-changelog h2 { font-size: 0.95em; }
@@ -532,43 +607,39 @@ html.dark .toggle-slider::before {
 }
 .update-changelog ul { list-style: disc; }
 .update-changelog ol { list-style: decimal; }
-.update-changelog li { margin: 0.15em 0; }
+.update-changelog li { margin: 0.18em 0; }
 .update-changelog code {
-    background: var(--spire-bg-subtle);
-    padding: 0.1em 0.35em;
-    border-radius: 3px;
+    background: var(--spire-overlay-soft);
+    padding: 0.12em 0.4em;
+    border-radius: 4px;
     font-size: 0.9em;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 .update-changelog a {
-    color: var(--spire-accent-hover);
+    color: var(--spire-accent);
     text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-thickness: 1px;
+    transition: color 0.15s ease;
 }
-html.dark .update-changelog a { color: #7c8aff; }
+.update-changelog a:hover { color: var(--spire-accent-hover); }
 
-/* update modal above toasts */
-#update-modal {
-    z-index: 55;
-}
+#update-modal { z-index: 55; }
+#confirm-modal { z-index: 55; }
 
-/* confirm modal above toasts */
-#confirm-modal {
-    z-index: 55;
-}
-
-/* announcement banner fade in */
+/* ── announcement banner ────────────────────────────────────────────── */
 .announcement-banner {
-    animation: fadeIn 0.2s ease-out;
-}
-.announcement-body {
-    /* no white-space: pre-line — markdown handles line breaks via <br>/<p> */
+    animation: fadeSlideIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .announcement-body p { margin: 0.2em 0; }
 .announcement-body p:last-child { margin-bottom: 0; }
 .announcement-body a {
-    color: var(--spire-accent-hover);
+    color: var(--spire-accent);
     text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s ease;
 }
-html.dark .announcement-body a { color: #7c8aff; }
+.announcement-body a:hover { color: var(--spire-accent-hover); }
 .announcement-body ul,
 .announcement-body ol {
     padding-left: 1.4em;
@@ -577,100 +648,107 @@ html.dark .announcement-body a { color: #7c8aff; }
 .announcement-body ul { list-style: disc; }
 .announcement-body ol { list-style: decimal; }
 .announcement-body code {
-    background: var(--spire-bg-subtle);
-    padding: 0.1em 0.3em;
-    border-radius: 3px;
+    background: var(--spire-overlay-soft);
+    padding: 0.12em 0.35em;
+    border-radius: 4px;
     font-size: 0.9em;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-@keyframes fadeIn {
+@keyframes fadeSlideIn {
     from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-/* welcome modal card entrance */
+/* ── welcome modal entrance ─────────────────────────────────────────── */
 #welcome-modal > div {
-    animation: fadeIn 0.25s ease-out;
+    animation: modalIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* update badge red dot pulse */
+@keyframes modalIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── update badge dot pulse ─────────────────────────────────────────── */
 .update-badge-dot {
     animation: badge-pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 0 0 rgba(var(--spire-danger-rgb), 0.6);
 }
 @keyframes badge-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(var(--spire-danger-rgb), 0.45);
+    }
+    50% {
+        opacity: 0.65;
+        box-shadow: 0 0 0 4px rgba(var(--spire-danger-rgb), 0);
+    }
 }
 
-/* download progress bar smooth fill */
+/* ── progress bar ───────────────────────────────────────────────────── */
 .progress-bar-fill {
     width: 0;
-    transition: width 0.2s ease;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* settings modal select — chevron color follows --spire-muted via CSS var trick (background-image can't use CSS vars directly,
-   so we provide both light/dark variants and swap in dark) */
+/* ── settings modal select ──────────────────────────────────────────── */
 .settings-select {
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23706C64' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 6px center;
-    padding-right: 22px;
+    background-position: right 7px center;
+    padding-right: 24px;
+    cursor: pointer;
 }
 html.dark .settings-select {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b8b8b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
-.settings-select:disabled {
-    opacity: 0.6;
-}
+.settings-select:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* ── mod manager ───────────────────────────────────────────────────── */
+/* ── mod manager ────────────────────────────────────────────────────── */
 
-/* ghost card: subtle pulsing red border */
 .mm-ghost-card {
     animation: ghostPulse 2s ease-in-out infinite;
     border-style: dashed;
 }
 @keyframes ghostPulse {
-    0%, 100% { border-color: rgba(var(--spire-danger-rgb), 0.3); }
-    50%      { border-color: rgba(var(--spire-danger-rgb), 0.6); }
+    0%, 100% { border-color: rgba(var(--spire-danger-rgb), 0.30); }
+    50%      { border-color: rgba(var(--spire-danger-rgb), 0.60); }
 }
 
-/* detail modal dep row: clickable feel */
-.mm-dep-row.clickable { cursor: pointer; }
+.mm-dep-row.clickable { cursor: pointer; transition: background-color 0.12s ease; }
 .mm-dep-row.clickable:hover { background: var(--spire-accent-soft); }
 
-/* drop zone */
 .mm-dropzone {
-    border: 2px dashed rgba(var(--spire-accent-rgb), 0.25);
-    transition: all 0.2s;
+    border: 1.5px dashed rgba(var(--spire-accent-rgb), 0.30);
+    transition: all 0.2s ease;
     cursor: pointer;
+    background: rgba(var(--spire-accent-rgb), 0.025);
 }
 .mm-dropzone:hover, .mm-dropzone.drag-over {
-    border-color: rgba(var(--spire-accent-rgb), 0.6);
-    background: rgba(var(--spire-accent-rgb), 0.05);
+    border-color: rgba(var(--spire-accent-rgb), 0.65);
+    background: rgba(var(--spire-accent-rgb), 0.06);
 }
 
-/* mod manager card hover */
 .mm-mod-card {
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
 }
 .mm-mod-card:hover {
     background: var(--spire-accent-soft);
+    border-color: rgba(var(--spire-accent-rgb), 0.30);
 }
 
-/* branch picker dropdown */
 .mm-branch-option {
     border-bottom: 1px solid var(--spire-border);
+    transition: background-color 0.12s ease;
 }
-.mm-branch-option:last-child {
-    border-bottom: none;
-}
+.mm-branch-option:last-child { border-bottom: none; }
 
-/* ── light-mode overrides for inline Tailwind opacity utilities ─────────
- * The HTML uses bg-white/X and hover:bg-white/X for subtle hover/icon tints;
- * those are invisible on a white card, so flip them to dark overlays in light mode.
- * Modal scrim (bg-black/X) is also softened — pure black at 60% reads heavy on a light page.
+/* ── light-mode overrides for inline Tailwind opacity utilities ──────
+ * The HTML uses bg-white/X / hover:bg-white/X for tints designed against
+ * the dark surface; on a white card those go invisible, so flip them to
+ * dark overlays in light mode. Modal scrim is also softened.
  */
 html:not(.dark) .bg-white\/5         { background-color: var(--spire-overlay-soft); }
 html:not(.dark) .bg-white\/10        { background-color: var(--spire-overlay); }
@@ -680,7 +758,15 @@ html:not(.dark) .hover\:bg-white\/10:hover { background-color: var(--spire-overl
 html:not(.dark) .bg-black\/50,
 html:not(.dark) .bg-black\/60 { background-color: var(--spire-scrim); }
 
-/* modal cards get a soft drop shadow in light mode for depth against the warm bg */
+/* dark scrim — soften the heavy 60% black for a more refined modal feel */
+html.dark .bg-black\/50,
+html.dark .bg-black\/60 { background-color: var(--spire-scrim); }
+
+/* ── modal cards: wrap inline borders with the layered shadow stack ──
+ * The HTML still has `border border-spire-border` on these cards; we
+ * keep the line for clarity, but drop a soft drop-shadow stack on top
+ * so they read as floating sheets rather than flat panels.
+ */
 html:not(.dark) #welcome-modal > div,
 html:not(.dark) #settings-modal > div,
 html:not(.dark) #confirm-modal > div,
@@ -696,42 +782,158 @@ html:not(.dark) #mod-manager-modal > div,
 html:not(.dark) #mm-detail-modal > div,
 html:not(.dark) #mm-branch-copy-modal > div,
 html:not(.dark) #save-unlink-modal > div,
+html:not(.dark) #config-io-modal > div,
 html:not(.dark) #mod-diff-modal > div,
 html:not(.dark) #loading-overlay > div {
     box-shadow: var(--spire-shadow-modal);
+    animation: modalIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+html.dark #welcome-modal > div,
+html.dark #settings-modal > div,
+html.dark #confirm-modal > div,
+html.dark #conflict-modal > div,
+html.dark #update-modal > div,
+html.dark #create-workspace-modal > div,
+html.dark #branch-modal > div,
+html.dark #backup-list-modal > div,
+html.dark #steam-account-modal > div,
+html.dark #preflight-modal > div,
+html.dark #clean-branches-modal > div,
+html.dark #mod-manager-modal > div,
+html.dark #mm-detail-modal > div,
+html.dark #mm-branch-copy-modal > div,
+html.dark #save-unlink-modal > div,
+html.dark #config-io-modal > div,
+html.dark #mod-diff-modal > div,
+html.dark #loading-overlay > div {
+    box-shadow: var(--spire-shadow-modal);
+    animation: modalIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Light-mode card depth: dashboard / settings cards (.rounded-xl) get a soft shadow
-   so they read as "paper sheets floating on a desk", not flat panels.
-   Scoped to .rounded-xl so inputs, titlebar, dropdowns aren't accidentally lifted.
-   Modal selectors above set --spire-shadow-modal (heavier) and win on specificity. */
+/* ── card depth: scoped to the dashboard / settings cards ────────────
+ * `.rounded-xl` is the marker for "lifted card surface" in the markup.
+ * Modal selectors above set --spire-shadow-modal (heavier) and win on
+ * specificity, so this only catches the in-page cards.
+ */
 html:not(.dark) .bg-spire-card.rounded-xl,
 html:not(.dark) .workspace-card,
 html:not(.dark) .wizard-game-card {
     box-shadow: var(--spire-shadow-card);
 }
+html.dark .bg-spire-card.rounded-xl {
+    box-shadow: var(--spire-shadow-card);
+}
 
-/* Dashboard action buttons (上传/拉取/打开/启动游戏) — keep the colour-coding but pull
-   the saturation way down so the row reads as four refined chips, not a sticker pack.
-   Each one gets a thin coloured underline so identity comes from a hint, not a fill. */
+/* dropdown menus get the shadow-as-border treatment */
+html:not(.dark) #folder-dropdown,
+html:not(.dark) #launch-dropdown,
+html:not(.dark) #mm-branch-picker-dropdown {
+    box-shadow: var(--spire-shadow-dropdown);
+    border-color: transparent;
+}
+html.dark #folder-dropdown,
+html.dark #launch-dropdown,
+html.dark #mm-branch-picker-dropdown {
+    box-shadow: var(--spire-shadow-dropdown);
+}
+
+/* ── action button colour-coding (light mode) ───────────────────────
+ * Pull saturation way down so the four chips read as a coordinated row,
+ * not a sticker pack. Each one gets a quiet tinted surface that lifts
+ * subtly on hover.
+ */
 html:not(.dark) .bg-spire-accent\/10  { background-color: rgba(var(--spire-accent-rgb), 0.07); }
-html:not(.dark) .bg-spire-accent\/15  { background-color: rgba(var(--spire-accent-rgb), 0.09); }
+html:not(.dark) .bg-spire-accent\/15  { background-color: rgba(var(--spire-accent-rgb), 0.08); }
 html:not(.dark) .bg-spire-accent\/20  { background-color: rgba(var(--spire-accent-rgb), 0.13); }
-html:not(.dark) .hover\:bg-spire-accent\/10:hover { background-color: rgba(var(--spire-accent-rgb), 0.11); }
-html:not(.dark) .hover\:bg-spire-accent\/25:hover { background-color: rgba(var(--spire-accent-rgb), 0.18); }
+html:not(.dark) .hover\:bg-spire-accent\/10:hover { background-color: rgba(var(--spire-accent-rgb), 0.10); }
+html:not(.dark) .hover\:bg-spire-accent\/25:hover { background-color: rgba(var(--spire-accent-rgb), 0.16); }
 
-html:not(.dark) .bg-spire-success\/10        { background-color: rgba(22, 128, 61, 0.07); }
-html:not(.dark) .hover\:bg-spire-success\/20:hover { background-color: rgba(22, 128, 61, 0.13); }
+html:not(.dark) .bg-spire-success\/10        { background-color: rgba(24, 121, 78, 0.07); }
+html:not(.dark) .hover\:bg-spire-success\/20:hover { background-color: rgba(24, 121, 78, 0.13); }
 
-html:not(.dark) .bg-spire-warn\/10           { background-color: rgba(154, 98, 7, 0.08); }
-html:not(.dark) .bg-spire-warn\/20           { background-color: rgba(154, 98, 7, 0.14); }
+html:not(.dark) .bg-spire-warn\/10           { background-color: rgba(148, 104, 0, 0.07); }
+html:not(.dark) .bg-spire-warn\/20           { background-color: rgba(148, 104, 0, 0.13); }
 
-html:not(.dark) .bg-spire-danger\/20         { background-color: rgba(var(--spire-danger-rgb), 0.12); }
+html:not(.dark) .bg-spire-danger\/20         { background-color: rgba(var(--spire-danger-rgb), 0.10); }
 
-/* Titlebar separator: the page-bg-vs-card-bg contrast is now noticeable, so the
-   header doesn't visually merge into the workspace area. Add a hairline shadow
-   under the titlebar instead of a hard border for a more polished separation. */
+/* warm action-button accents (open / launch) — calm them down in light mode
+ * so amber + emerald don't fight the rest of the chrome.
+ */
+html:not(.dark) .bg-amber-500\/\[\.07\]  { background-color: rgba(148, 104, 0, 0.06); }
+html:not(.dark) .bg-amber-500\/\[\.12\]  { background-color: rgba(148, 104, 0, 0.10); }
+html:not(.dark) .hover\:bg-amber-500\/\[\.12\]:hover { background-color: rgba(148, 104, 0, 0.10); }
+html:not(.dark) .text-amber-500\/80   { color: rgba(148, 104, 0, 0.85); }
+html:not(.dark) .text-amber-500       { color: #946800; }
+html:not(.dark) .hover\:text-amber-500:hover { color: #946800; }
+
+html:not(.dark) .bg-emerald-500\/\[\.10\] { background-color: rgba(24, 121, 78, 0.07); }
+html:not(.dark) .bg-emerald-500\/\[\.18\] { background-color: rgba(24, 121, 78, 0.12); }
+html:not(.dark) .hover\:bg-emerald-500\/\[\.18\]:hover { background-color: rgba(24, 121, 78, 0.12); }
+html:not(.dark) .text-emerald-400\/90  { color: rgba(24, 121, 78, 0.92); }
+html:not(.dark) .text-emerald-400      { color: #18794e; }
+html:not(.dark) .hover\:text-emerald-400:hover { color: #18794e; }
+html:not(.dark) .border-emerald-500\/20 { border-color: rgba(24, 121, 78, 0.22); }
+
+html:not(.dark) .bg-red-500\/10 { background-color: rgba(var(--spire-danger-rgb), 0.07); }
+html:not(.dark) .bg-red-500\/20 { background-color: rgba(var(--spire-danger-rgb), 0.10); }
+html:not(.dark) .hover\:bg-red-500\/30:hover { background-color: rgba(var(--spire-danger-rgb), 0.14); }
+html:not(.dark) .border-red-500\/30 { border-color: rgba(var(--spire-danger-rgb), 0.25); }
+html:not(.dark) .hover\:border-red-400\/50:hover { border-color: rgba(var(--spire-danger-rgb), 0.40); }
+html:not(.dark) .text-red-300 { color: #b8332f; }
+html:not(.dark) .text-red-400 { color: #c63d3a; }
+html:not(.dark) .hover\:text-red-300:hover { color: #a02e2a; }
+
+html:not(.dark) .bg-amber-500\/10 { background-color: rgba(148, 104, 0, 0.07); }
+html:not(.dark) .bg-amber-500\/20 { background-color: rgba(148, 104, 0, 0.10); }
+html:not(.dark) .hover\:bg-amber-500\/30:hover { background-color: rgba(148, 104, 0, 0.14); }
+html:not(.dark) .border-amber-500\/40 { border-color: rgba(148, 104, 0, 0.25); }
+html:not(.dark) .text-amber-200 { color: #7a5500; }
+html:not(.dark) .text-amber-300 { color: #8a6010; }
+html:not(.dark) .text-amber-400 { color: #946800; }
+
+/* ── titlebar separator ─────────────────────────────────────────────
+ * Hairline shadow under the titlebar instead of a hard border — it
+ * dissolves into the canvas instead of cutting it.
+ */
 html:not(.dark) #titlebar {
     box-shadow: 0 1px 0 rgba(15, 17, 24, 0.06);
     border-bottom-color: transparent;
+}
+html.dark #titlebar {
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+    border-bottom-color: transparent;
+}
+
+/* ── inputs: hairline ring instead of a heavy border on focus ───────
+ * The HTML has `border border-spire-border focus:border-spire-accent`
+ * already; we just sweeten it with a soft outer halo.
+ */
+input:focus, textarea:focus, select:focus {
+    box-shadow: 0 0 0 3px rgba(var(--spire-accent-rgb), 0.14);
+}
+
+/* small-input variant — number / search inputs that would clip a 3px halo */
+.settings-select:focus,
+input[type="number"]:focus {
+    box-shadow: 0 0 0 2px rgba(var(--spire-accent-rgb), 0.18);
+}
+
+/* primary CTA buttons — a touch of polish for the accent-coloured ones */
+button.bg-spire-accent,
+a.bg-spire-accent {
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.06s ease;
+}
+button.bg-spire-accent:active,
+a.bg-spire-accent:active {
+    transform: translateY(0.5px);
+}
+
+/* ghost / outlined buttons — clean ring-on-hover */
+html:not(.dark) button.border-spire-border,
+html:not(.dark) a.border-spire-border {
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+html:not(.dark) button.border-spire-border:hover {
+    border-color: var(--spire-border-strong);
+    background-color: var(--spire-overlay-soft);
 }
