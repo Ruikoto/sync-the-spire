@@ -38,5 +38,6 @@ tmpClaude*
 node_modules/
 package-lock.json
 
-## bundled MinGit + git-lfs (CI downloads at build time; local dev populates manually)
-SyncTheSpire/tools/mingit/
+## bundled MinGit + git-lfs ship as tools/mingit-bundle.zip (tracked; refreshed via
+## tools/update-mingit-bundle.ps1 when bumping versions). The unpacked tree is no longer
+## used at any stage — extraction happens at runtime into %LocalAppData%\SyncTheSpire\MinGit\.

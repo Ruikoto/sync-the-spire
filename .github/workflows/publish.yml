@@ -80,11 +80,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Stage bundled MinGit + git-lfs
-        # delegated to fetch-mingit.ps1 so local dev and CI run identical logic.
-        # ARM64 ships the same x64 binaries (run via x64 emulation; MinGit/LFS have no ARM64 builds).
-        run: ./SyncTheSpire/tools/fetch-mingit.ps1
-
       - name: Publish
         run: |
           $r2r = "${{ matrix.self_contained }}"
@@ -105,17 +100,10 @@ jobs:
       - name: Prepare Package
         run: |
           New-Item -ItemType Directory -Force -Path ./package
+          # zip ships only the single exe + README. wwwroot lives inside the exe via
+          # IncludeAllContentForSelfExtract; mingit lives inside via embedded resource
+          # and self-extracts to %LocalAppData%\SyncTheSpire\MinGit\ on first run.
           Copy-Item -Path "./publish_output/${{ env.BINARY_NAME }}.exe" -Destination "./package/${{ env.BINARY_NAME }}.exe"
-          # wwwroot is embedded as content — SingleFile + IncludeAllContentForSelfExtract bundles it inside the exe,
-          # but we also ship it alongside for users who want to tinker with the frontend
-          if (Test-Path "./publish_output/wwwroot") {
-            Copy-Item -Recurse -Path "./publish_output/wwwroot" -Destination "./package/wwwroot"
-          }
-          # bundled git/git-lfs — ExcludeFromSingleFile keeps them beside the exe in publish_output;
-          # ship them alongside so the resolver can spawn git.exe by path
-          if (Test-Path "./publish_output/tools") {
-            Copy-Item -Recurse -Path "./publish_output/tools" -Destination "./package/tools"
-          }
           if (Test-Path "README.md") { Copy-Item -Path "README.md" -Destination "./package/README.md" }
 
       - name: Create ZIP Archive
@@ -182,11 +170,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Stage bundled MinGit + git-lfs
-        # delegated to fetch-mingit.ps1 so local dev and CI run identical logic.
-        # ARM64 ships the same x64 binaries (run via x64 emulation; MinGit/LFS have no ARM64 builds).
-        run: ./SyncTheSpire/tools/fetch-mingit.ps1
-
       - name: Publish (non-SingleFile for MSIX)
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} `
@@ -206,7 +189,9 @@ jobs:
           $layout = "./msix_layout"
           New-Item -ItemType Directory -Force -Path $layout
 
-          # app binaries (publish output already includes tools/mingit via csproj Content)
+          # app binaries — mingit is now an embedded resource inside the exe (extracted to
+          # %LocalAppData%\Packages\<id>\LocalCache\Local\SyncTheSpire\MinGit\ on first run),
+          # so publish_output is just the managed assemblies + wwwroot + assets.
           Copy-Item -Recurse -Path "./publish_output/*" -Destination "$layout/"
 
           # inject version and architecture into manifest

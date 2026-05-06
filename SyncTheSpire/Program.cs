@@ -62,6 +62,11 @@ class Program
         LogService.Info($"App starting v{version}");
         LogService.CleanupOldLogs();
 
+        // kick off MinGit extraction in the background so the UI shows immediately.
+        // GitResolver._toolsDir blocks on this Task if a git op lands before extraction finishes —
+        // safe because the Task runs on the thread pool, not the UI sync context.
+        _ = MinGitExtractor.EnsureExtractedAsync();
+
         // catch everything that escapes normal error handling
         Application.ThreadException += (_, e) =>
             LogService.Error("Unhandled UI thread exception", e.Exception);

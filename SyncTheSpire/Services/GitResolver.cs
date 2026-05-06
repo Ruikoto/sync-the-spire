@@ -1,36 +1,35 @@
 namespace SyncTheSpire.Services;
 
 /// <summary>
-/// resolves paths to bundled git.exe and git-lfs.exe shipped under tools/mingit/.
-/// no system-PATH lookup, no fallback, no download — both binaries must exist next to the app.
-/// CI populates them during publish; local dev runs `pwsh ./SyncTheSpire/tools/fetch-mingit.ps1`.
+/// resolves paths to bundled git.exe and git-lfs.exe. delegates extraction to MinGitExtractor;
+/// the binaries always live under %LocalAppData%\SyncTheSpire\MinGit\ (auto-redirected into
+/// the MSIX package container when running packaged).
 /// </summary>
 public class GitResolver
 {
-    private static readonly string ToolsDir =
-        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "mingit");
-
-    private static readonly string GitExePath =
-        Path.Combine(ToolsDir, "mingw64", "bin", "git.exe");
-
-    private static readonly string GitLfsExePath =
-        Path.Combine(ToolsDir, "mingw64", "bin", "git-lfs.exe");
+    // resolved once per process. blocks the calling (background) thread if extraction
+    // is still in flight — UI thread should never reach here directly because all git
+    // ops are dispatched from async handlers.
+    private static readonly Lazy<string> _toolsDir = new(() =>
+        MinGitExtractor.EnsureExtractedAsync().GetAwaiter().GetResult());
 
     public string GetGitPath()
     {
-        if (!File.Exists(GitExePath))
+        var path = Path.Combine(_toolsDir.Value, "mingw64", "bin", "git.exe");
+        if (!File.Exists(path))
             throw new FileNotFoundException(
-                $"未找到内置 git.exe（期望路径：{GitExePath}）。安装包可能损坏，请重新安装。",
-                GitExePath);
-        return GitExePath;
+                $"未找到内置 git.exe（期望路径：{path}）。安装包可能损坏，请重新安装。",
+                path);
+        return path;
     }
 
     public string GetGitLfsPath()
     {
-        if (!File.Exists(GitLfsExePath))
+        var path = Path.Combine(_toolsDir.Value, "mingw64", "bin", "git-lfs.exe");
+        if (!File.Exists(path))
             throw new FileNotFoundException(
-                $"未找到内置 git-lfs.exe（期望路径：{GitLfsExePath}）。安装包可能损坏，请重新安装。",
-                GitLfsExePath);
-        return GitLfsExePath;
+                $"未找到内置 git-lfs.exe（期望路径：{path}）。安装包可能损坏，请重新安装。",
+                path);
+        return path;
     }
 }

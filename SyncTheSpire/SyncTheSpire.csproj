@@ -43,26 +43,19 @@
     <Content Include="assets\sts2.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\sv.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="assets\mc.png" CopyToOutputDirectory="PreserveNewest" />
-    <!--
-      bundled MinGit + git-lfs. CI populates tools/mingit/ before publish; for local dev, drop
-      MinGit-2.49.0-64-bit.zip and git-lfs-windows-amd64-v3.6.1.zip contents into tools/mingit/
-      manually. ExcludeFromSingleFile keeps the binaries beside the exe instead of bundling
-      them into the single-file payload (otherwise we couldn't spawn git.exe by path).
-    -->
-    <Content Include="tools\mingit\**"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             ExcludeFromSingleFile="true" />
+    <!-- mingit + git-lfs ship as a single embedded zip resource. MinGitExtractor unpacks
+         it on first run to %LocalAppData%\SyncTheSpire\MinGit\, with SHA256-sentinel skip
+         on subsequent launches. one path for both zip + MSIX builds. The bundle.zip is
+         tracked in git; refresh it via tools\update-mingit-bundle.ps1 (maintainer-only). -->
+    <EmbeddedResource Include="tools\mingit-bundle.zip" LogicalName="MinGitBundle.zip" />
   </ItemGroup>
 
-  <!-- fail fast if the bundle is missing — the Content glob above silently matches zero files
-       when tools/mingit/ is empty, which would produce a broken exe that only crashes at runtime.
-       Skipped during design-time builds so IntelliSense in a fresh clone doesn't get red-squiggled. -->
+  <!-- fail fast if the bundle is missing — pointing the maintainer at the regen tool is the
+       right answer. Skipped during design-time builds so IntelliSense in a fresh clone
+       doesn't get red-squiggled. -->
   <Target Name="EnsureMinGitBundled" BeforeTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Error Condition="!Exists('$(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git.exe')"
-           Text="Bundled git.exe not found at $(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git.exe. Run 'pwsh $(MSBuildThisFileDirectory)tools\fetch-mingit.ps1' to populate it (CI does this automatically)." />
-    <Error Condition="!Exists('$(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git-lfs.exe')"
-           Text="Bundled git-lfs.exe not found at $(MSBuildThisFileDirectory)tools\mingit\mingw64\bin\git-lfs.exe. Run 'pwsh $(MSBuildThisFileDirectory)tools\fetch-mingit.ps1' to populate it (CI does this automatically)." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)tools\mingit-bundle.zip')"
+           Text="mingit-bundle.zip 缺失。Maintainer 需运行 'pwsh $(MSBuildThisFileDirectory)tools\update-mingit-bundle.ps1' 重新生成并提交。" />
   </Target>
 
 </Project>
