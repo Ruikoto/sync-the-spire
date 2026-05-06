@@ -274,7 +274,7 @@
       "gitSyncTitle": "基于 Git 实现同步",
       "gitSyncDesc": "本应用不内置提供任何云存储，因此你需要拥有一个远程仓库。你可以自己创建一个，或者使用你联机队友创建的仓库。",
       "createRepoTitle": "创建远程仓库",
-      "createRepoDesc": "你可以使用 <a href=\"#\" onclick=\"openExternal('https://sts.rkto.cc/guide/gitee');return false;\" class=\"text-spire-accent hover:text-spire-accentHover underline transition-colors\">Gitee</a>、<a href=\"#\" onclick=\"openExternal('https://sts.rkto.cc/guide/github');return false;\" class=\"text-spire-accent hover:text-spire-accentHover underline transition-colors\">GitHub</a> 等平台创建免费的远程仓库。<br>不会操作？我们为你准备了<a href=\"#\" onclick=\"openExternal('https://sts.rkto.cc/guide/getting-started');return false;\" class=\"text-spire-accent hover:text-spire-accentHover underline transition-colors\">使用教程</a>！",
+      "createRepoDesc": "你可以使用 <a href=\"#\" onclick=\"openExternal('https://sts.rkto.cc/guide/atomgit');return false;\" class=\"text-spire-accent hover:text-spire-accentHover underline transition-colors\">AtomGit</a>、<a href=\"#\" onclick=\"openExternal('https://sts.rkto.cc/guide/github');return false;\" class=\"text-spire-accent hover:text-spire-accentHover underline transition-colors\">GitHub</a> 等平台创建免费的远程仓库。<br>不会操作？我们为你准备了<a href=\"#\" onclick=\"openExternal('https://sts.rkto.cc/guide/getting-started');return false;\" class=\"text-spire-accent hover:text-spire-accentHover underline transition-colors\">使用教程</a>！",
       "followTitle": "跟随联机队友",
       "followDesc": "使用队友提供的远程仓库，来跟随使用队友的Mod文件，或创建自己的分支，分享自己的Mod配置。<br>不会操作？我们为你准备了<a href=\"#\" onclick=\"openExternal('https://sts.rkto.cc/guide/getting-started');return false;\" class=\"text-spire-accent hover:text-spire-accentHover underline transition-colors\">使用教程</a>！",
       "continue": "继续"
