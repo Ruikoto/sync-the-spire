@@ -30,8 +30,8 @@
     --spire-danger-hover:  #cd3640;
     --spire-danger-rgb:    229, 72, 77;
 
-    --spire-success:       #18794e;        /* deep, considered green */
-    --spire-warn:          #946800;        /* honey amber, deliberately desaturated */
+    --spire-success:       #15803d;        /* punchy green, reads on white */
+    --spire-warn:          #b45309;        /* warm amber — alert without being orange */
 
     --spire-overlay-soft:  rgba(15, 17, 24, 0.035);
     --spire-overlay:       rgba(15, 17, 24, 0.06);
@@ -838,58 +838,70 @@ html.dark #mm-branch-picker-dropdown {
 }
 
 /* ── action button colour-coding (light mode) ───────────────────────
- * Pull saturation way down so the four chips read as a coordinated row,
- * not a sticker pack. Each one gets a quiet tinted surface that lifts
- * subtly on hover.
+ * Saturated tinted surfaces so each chip reads as its own role —
+ * upload (blue) / pull (green) / open (amber) / launch (emerald) —
+ * without screaming. Tints sit around 10–14%, a hair below pure
+ * Tailwind defaults but vivid enough to feel intentional.
  */
-html:not(.dark) .bg-spire-accent\/10  { background-color: rgba(var(--spire-accent-rgb), 0.07); }
-html:not(.dark) .bg-spire-accent\/15  { background-color: rgba(var(--spire-accent-rgb), 0.08); }
-html:not(.dark) .bg-spire-accent\/20  { background-color: rgba(var(--spire-accent-rgb), 0.13); }
-html:not(.dark) .hover\:bg-spire-accent\/10:hover { background-color: rgba(var(--spire-accent-rgb), 0.10); }
-html:not(.dark) .hover\:bg-spire-accent\/25:hover { background-color: rgba(var(--spire-accent-rgb), 0.16); }
+html:not(.dark) .bg-spire-accent\/10  { background-color: rgba(var(--spire-accent-rgb), 0.10); }
+html:not(.dark) .bg-spire-accent\/15  { background-color: rgba(var(--spire-accent-rgb), 0.13); }
+html:not(.dark) .bg-spire-accent\/20  { background-color: rgba(var(--spire-accent-rgb), 0.18); }
+html:not(.dark) .hover\:bg-spire-accent\/10:hover { background-color: rgba(var(--spire-accent-rgb), 0.14); }
+html:not(.dark) .hover\:bg-spire-accent\/25:hover { background-color: rgba(var(--spire-accent-rgb), 0.22); }
 
-html:not(.dark) .bg-spire-success\/10        { background-color: rgba(24, 121, 78, 0.07); }
-html:not(.dark) .hover\:bg-spire-success\/20:hover { background-color: rgba(24, 121, 78, 0.13); }
+/* the upload/pull row uses .text-spire-accentHover for label color — give it
+ * a deep, saturated blue rather than the lighter accent so the chip pops. */
+html:not(.dark) .text-spire-accentHover { color: #0058c4; }
 
-html:not(.dark) .bg-spire-warn\/10           { background-color: rgba(148, 104, 0, 0.07); }
-html:not(.dark) .bg-spire-warn\/20           { background-color: rgba(148, 104, 0, 0.13); }
+/* success — leaf green, around 12% surface */
+html:not(.dark) .bg-spire-success\/10        { background-color: rgba(21, 128, 61, 0.12); }
+html:not(.dark) .hover\:bg-spire-success\/20:hover { background-color: rgba(21, 128, 61, 0.18); }
+html:not(.dark) .text-spire-success { color: #15803d; }
 
-html:not(.dark) .bg-spire-danger\/20         { background-color: rgba(var(--spire-danger-rgb), 0.10); }
+/* warn — punchy amber, around 12% surface; text uses a slightly darker shade
+ * for contrast on the page, but the accent feels alive instead of muddy. */
+html:not(.dark) .bg-spire-warn\/10           { background-color: rgba(217, 119, 6, 0.12); }
+html:not(.dark) .bg-spire-warn\/20           { background-color: rgba(217, 119, 6, 0.18); }
+html:not(.dark) .border-spire-warn\/30       { border-color: rgba(217, 119, 6, 0.30); }
+html:not(.dark) .text-spire-warn { color: #b45309; }
 
-/* warm action-button accents (open / launch) — calm them down in light mode
- * so amber + emerald don't fight the rest of the chrome.
+html:not(.dark) .bg-spire-danger\/20         { background-color: rgba(var(--spire-danger-rgb), 0.13); }
+
+/* warm action-button accents (open / launch) — keep them vivid in light
+ * mode but use the deeper amber/emerald shade for AA contrast on white.
  */
-html:not(.dark) .bg-amber-500\/\[\.07\]  { background-color: rgba(148, 104, 0, 0.06); }
-html:not(.dark) .bg-amber-500\/\[\.12\]  { background-color: rgba(148, 104, 0, 0.10); }
-html:not(.dark) .hover\:bg-amber-500\/\[\.12\]:hover { background-color: rgba(148, 104, 0, 0.10); }
-html:not(.dark) .text-amber-500\/80   { color: rgba(148, 104, 0, 0.85); }
-html:not(.dark) .text-amber-500       { color: #946800; }
-html:not(.dark) .hover\:text-amber-500:hover { color: #946800; }
+html:not(.dark) .bg-amber-500\/\[\.07\]  { background-color: rgba(217, 119, 6, 0.10); }
+html:not(.dark) .bg-amber-500\/\[\.12\]  { background-color: rgba(217, 119, 6, 0.16); }
+html:not(.dark) .hover\:bg-amber-500\/\[\.12\]:hover { background-color: rgba(217, 119, 6, 0.16); }
+html:not(.dark) .text-amber-500\/80   { color: #b45309; }
+html:not(.dark) .text-amber-500       { color: #92400e; }
+html:not(.dark) .hover\:text-amber-500:hover { color: #92400e; }
 
-html:not(.dark) .bg-emerald-500\/\[\.10\] { background-color: rgba(24, 121, 78, 0.07); }
-html:not(.dark) .bg-emerald-500\/\[\.18\] { background-color: rgba(24, 121, 78, 0.12); }
-html:not(.dark) .hover\:bg-emerald-500\/\[\.18\]:hover { background-color: rgba(24, 121, 78, 0.12); }
-html:not(.dark) .text-emerald-400\/90  { color: rgba(24, 121, 78, 0.92); }
-html:not(.dark) .text-emerald-400      { color: #18794e; }
-html:not(.dark) .hover\:text-emerald-400:hover { color: #18794e; }
-html:not(.dark) .border-emerald-500\/20 { border-color: rgba(24, 121, 78, 0.22); }
+html:not(.dark) .bg-emerald-500\/\[\.10\] { background-color: rgba(16, 185, 129, 0.13); }
+html:not(.dark) .bg-emerald-500\/\[\.18\] { background-color: rgba(16, 185, 129, 0.20); }
+html:not(.dark) .hover\:bg-emerald-500\/\[\.18\]:hover { background-color: rgba(16, 185, 129, 0.20); }
+html:not(.dark) .text-emerald-400\/90  { color: #047857; }
+html:not(.dark) .text-emerald-400      { color: #065f46; }
+html:not(.dark) .hover\:text-emerald-400:hover { color: #065f46; }
+html:not(.dark) .border-emerald-500\/20 { border-color: rgba(16, 185, 129, 0.30); }
 
-html:not(.dark) .bg-red-500\/10 { background-color: rgba(var(--spire-danger-rgb), 0.07); }
-html:not(.dark) .bg-red-500\/20 { background-color: rgba(var(--spire-danger-rgb), 0.10); }
-html:not(.dark) .hover\:bg-red-500\/30:hover { background-color: rgba(var(--spire-danger-rgb), 0.14); }
-html:not(.dark) .border-red-500\/30 { border-color: rgba(var(--spire-danger-rgb), 0.25); }
-html:not(.dark) .hover\:border-red-400\/50:hover { border-color: rgba(var(--spire-danger-rgb), 0.40); }
+/* danger — coral with enough punch to register as alarm */
+html:not(.dark) .bg-red-500\/10 { background-color: rgba(var(--spire-danger-rgb), 0.10); }
+html:not(.dark) .bg-red-500\/20 { background-color: rgba(var(--spire-danger-rgb), 0.14); }
+html:not(.dark) .hover\:bg-red-500\/30:hover { background-color: rgba(var(--spire-danger-rgb), 0.20); }
+html:not(.dark) .border-red-500\/30 { border-color: rgba(var(--spire-danger-rgb), 0.32); }
+html:not(.dark) .hover\:border-red-400\/50:hover { border-color: rgba(var(--spire-danger-rgb), 0.50); }
 html:not(.dark) .text-red-300 { color: #b8332f; }
-html:not(.dark) .text-red-400 { color: #c63d3a; }
-html:not(.dark) .hover\:text-red-300:hover { color: #a02e2a; }
+html:not(.dark) .text-red-400 { color: #b42318; }
+html:not(.dark) .hover\:text-red-300:hover { color: #912018; }
 
-html:not(.dark) .bg-amber-500\/10 { background-color: rgba(148, 104, 0, 0.07); }
-html:not(.dark) .bg-amber-500\/20 { background-color: rgba(148, 104, 0, 0.10); }
-html:not(.dark) .hover\:bg-amber-500\/30:hover { background-color: rgba(148, 104, 0, 0.14); }
-html:not(.dark) .border-amber-500\/40 { border-color: rgba(148, 104, 0, 0.25); }
-html:not(.dark) .text-amber-200 { color: #7a5500; }
-html:not(.dark) .text-amber-300 { color: #8a6010; }
-html:not(.dark) .text-amber-400 { color: #946800; }
+html:not(.dark) .bg-amber-500\/10 { background-color: rgba(217, 119, 6, 0.10); }
+html:not(.dark) .bg-amber-500\/20 { background-color: rgba(217, 119, 6, 0.16); }
+html:not(.dark) .hover\:bg-amber-500\/30:hover { background-color: rgba(217, 119, 6, 0.22); }
+html:not(.dark) .border-amber-500\/40 { border-color: rgba(217, 119, 6, 0.34); }
+html:not(.dark) .text-amber-200 { color: #92400e; }
+html:not(.dark) .text-amber-300 { color: #a14d0a; }
+html:not(.dark) .text-amber-400 { color: #b45309; }
 
 /* ── titlebar separator ─────────────────────────────────────────────
  * Hairline shadow under the titlebar instead of a hard border — it
