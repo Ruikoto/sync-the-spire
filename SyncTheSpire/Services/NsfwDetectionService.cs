@@ -56,9 +56,19 @@ public class NsfwDetectionService
             if (kw != null)
                 reasons.Add($"分支名称包含「{kw}」");
 
-            var branch = repo.Branches[$"origin/{name}"];
-            if (branch != null)
-                ScanTreeForNsfw(branch.Tip.Tree, reasons);
+            // tip / sub-tree may live past a shallow-clone boundary in the local object DB;
+            // degrade to the name-based reasons we already collected instead of failing the
+            // whole listing — same posture as GetRemoteBranches.
+            try
+            {
+                var branch = repo.Branches[$"origin/{name}"];
+                if (branch != null)
+                    ScanTreeForNsfw(branch.Tip.Tree, reasons);
+            }
+            catch (LibGit2SharpException ex)
+            {
+                LogService.Warn($"[NsfwDetection] cannot scan tree for {name}: {ex.GetType().Name}: {ex.Message}");
+            }
 
             result[name] = new NsfwResult(reasons.Count > 0, reasons);
         }
@@ -78,32 +88,40 @@ public class NsfwDetectionService
     {
         foreach (var entry in tree)
         {
-            if (entry.TargetType == TreeEntryTargetType.Tree)
+            try
             {
-                var kw = MatchNsfwKeyword(entry.Name);
-                if (kw != null)
-                    reasons.Add($"文件夹「{entry.Name}」包含「{kw}」");
-
-                ScanTreeForNsfw((Tree)entry.Target, reasons);
-            }
-            else if (entry.TargetType == TreeEntryTargetType.Blob &&
-                     entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                try
+                if (entry.TargetType == TreeEntryTargetType.Tree)
                 {
-                    var blob = (Blob)entry.Target;
-                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
-                    if (!string.IsNullOrEmpty(mod?.Id) && !string.IsNullOrEmpty(mod?.Name))
+                    var kw = MatchNsfwKeyword(entry.Name);
+                    if (kw != null)
+                        reasons.Add($"文件夹「{entry.Name}」包含「{kw}」");
+
+                    ScanTreeForNsfw((Tree)entry.Target, reasons);
+                }
+                else if (entry.TargetType == TreeEntryTargetType.Blob &&
+                         entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
                     {
-                        var kw = MatchNsfwKeyword(mod.Name);
-                        if (kw != null)
-                            reasons.Add($"Mod「{mod.Name}」名称包含「{kw}」");
+                        var blob = (Blob)entry.Target;
+                        var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
+                        if (!string.IsNullOrEmpty(mod?.Id) && !string.IsNullOrEmpty(mod?.Name))
+                        {
+                            var kw = MatchNsfwKeyword(mod.Name);
+                            if (kw != null)
+                                reasons.Add($"Mod「{mod.Name}」名称包含「{kw}」");
+                        }
+                    }
+                    catch
+                    {
+                        // skip non-mod or malformed json (also swallows missing-blob NotFound from shallow db)
                     }
                 }
-                catch
-                {
-                    // skip non-mod or malformed json
-                }
+            }
+            catch (LibGit2SharpException ex)
+            {
+                // missing sub-tree in shallow object DB — skip this entry, continue siblings
+                LogService.Warn($"[NsfwDetection] skipping tree entry {entry.Name}: {ex.Message}");
             }
         }
     }

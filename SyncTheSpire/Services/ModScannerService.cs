@@ -128,7 +128,18 @@ public class ModScannerService
         if (branch is null) return [];
 
         var candidates = new List<ModCandidate>();
-        ScanTreeForMods(branch.Tip.Tree, "", candidates);
+
+        // tip / sub-tree may live past a shallow-clone boundary; degrade to whatever we
+        // managed to scan rather than aborting the whole diff modal — consistent with the
+        // project's "partial result over hard failure" posture for read-only git ops.
+        try
+        {
+            ScanTreeForMods(branch.Tip.Tree, "", candidates);
+        }
+        catch (LibGit2SharpException ex)
+        {
+            LogService.Warn($"[GetBranchMods] cannot read tip of origin/{branchName}: {ex.GetType().Name}: {ex.Message}");
+        }
 
         var (kept, _) = DedupById(candidates);
         return kept;
@@ -139,25 +150,33 @@ public class ModScannerService
         foreach (var entry in tree)
         {
             var entryPath = string.IsNullOrEmpty(pathPrefix) ? entry.Name : $"{pathPrefix}/{entry.Name}";
-            if (entry.TargetType == TreeEntryTargetType.Tree)
+            try
             {
-                ScanTreeForMods((Tree)entry.Target, entryPath, candidates);
+                if (entry.TargetType == TreeEntryTargetType.Tree)
+                {
+                    ScanTreeForMods((Tree)entry.Target, entryPath, candidates);
+                }
+                else if (entry.TargetType == TreeEntryTargetType.Blob &&
+                         entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var blob = (Blob)entry.Target;
+                        var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
+                        if (string.IsNullOrEmpty(mod?.Id)) continue;
+                        // mtime null — git blobs don't carry one; tree path serves as stable tiebreaker
+                        candidates.Add(new ModCandidate(mod, entryPath, null));
+                    }
+                    catch
+                    {
+                        // not a mod definition or malformed json, skip (also swallows missing-blob NotFound)
+                    }
+                }
             }
-            else if (entry.TargetType == TreeEntryTargetType.Blob &&
-                     entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            catch (LibGit2SharpException ex)
             {
-                try
-                {
-                    var blob = (Blob)entry.Target;
-                    var mod = JsonSerializer.Deserialize<ModInfo>(blob.GetContentText(), ModJsonOpts);
-                    if (string.IsNullOrEmpty(mod?.Id)) continue;
-                    // mtime null — git blobs don't carry one; tree path serves as stable tiebreaker
-                    candidates.Add(new ModCandidate(mod, entryPath, null));
-                }
-                catch
-                {
-                    // not a mod definition or malformed json, skip
-                }
+                // missing sub-tree in shallow object DB — skip this entry, continue siblings
+                LogService.Warn($"[ScanTreeForMods] skipping {entryPath}: {ex.Message}");
             }
         }
     }
