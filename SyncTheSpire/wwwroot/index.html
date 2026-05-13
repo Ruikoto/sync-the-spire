@@ -8,12 +8,13 @@
     <script>
         (function () {
             try {
-                var saved = localStorage.getItem('sts-theme'); // "system" | "light" | "dark" | null
+                var saved = localStorage.getItem('sts-theme'); // "system" | "light" | "dark" | "island" | null
                 var mode = saved || 'system';
                 var resolved = mode === 'system'
                     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
                     : mode;
-                if (resolved === 'dark') document.documentElement.classList.add('dark');
+                if (resolved === 'dark')   document.documentElement.classList.add('dark');
+                if (resolved === 'island') document.documentElement.classList.add('island');
             } catch (e) {
                 // localStorage may be unavailable; default to dark to match prior behavior
                 document.documentElement.classList.add('dark');
@@ -753,7 +754,7 @@
                         打开
                     </button>
                     <!-- folder dropdown -->
-                    <div id="folder-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden">
+                    <div id="folder-dropdown" class="app-dropdown hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden">
                         <button class="folder-item w-full text-left text-xs px-3 py-2 text-spire-muted hover:text-spire-text hover:bg-white/5 transition-colors" data-folder="game" data-i18n="main.gameFolder">
                             游戏文件夹
                         </button>
@@ -785,7 +786,7 @@
                         <i data-lucide="chevron-down" style="width:12px;height:12px"></i>
                     </button>
                     <!-- launch dropdown -->
-                    <div id="launch-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden" style="min-width:200px">
+                    <div id="launch-dropdown" class="app-dropdown hidden absolute left-0 right-0 top-full mt-1 bg-spire-card border border-spire-border rounded-lg shadow-lg z-20 overflow-hidden" style="min-width:200px">
                         <div id="launch-mode-label" class="px-3 py-1.5 text-[10px] text-spire-muted/60 select-none">
                             当前：通过 Steam 启动
                         </div>
@@ -959,6 +960,7 @@
                     <option value="system" data-i18n="settings.themeSystem">跟随系统</option>
                     <option value="light" data-i18n="settings.themeLight">浅色</option>
                     <option value="dark" data-i18n="settings.themeDark">深色</option>
+                    <option value="island" data-i18n="settings.themeIsland">岛屿</option>
                 </select>
             </div>
 
@@ -1006,6 +1008,40 @@
                 data-i18n="settings.docs">
                 使用教程
             </button>
+            <button id="btn-credits"
+                class="mt-2 w-full text-xs text-spire-muted hover:text-spire-text border border-spire-border rounded-lg py-1.5 transition-colors"
+                data-i18n="settings.credits">
+                致谢
+            </button>
+        </div>
+    </div>
+
+    <!-- credits / acknowledgments modal -->
+    <div id="credits-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center" role="dialog" aria-modal="true">
+        <div class="bg-spire-card rounded-xl border border-spire-border w-full max-w-md mx-4 p-5 flex flex-col" style="max-height: 70vh;">
+            <div class="flex items-center justify-between mb-3 shrink-0">
+                <h3 class="text-sm font-medium" data-i18n="credits.title">致谢</h3>
+                <button id="credits-close" class="text-spire-muted hover:text-spire-text transition-colors p-1" aria-label="关闭">
+                    <i data-lucide="x" style="width:16px;height:16px"></i>
+                </button>
+            </div>
+            <p class="text-xs text-spire-muted mb-3 shrink-0 leading-relaxed" data-i18n="credits.intro">
+                本项目使用了以下开源项目的设计灵感或组件参考，向作者们表示感谢：
+            </p>
+            <div class="overflow-y-auto pr-1 space-y-2" style="flex:1; min-height:0;">
+                <div class="border border-spire-border rounded-lg p-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <strong class="text-sm text-spire-text">animal-island-ui</strong>
+                        <span class="text-[10px] text-spire-muted bg-spire-overlay rounded px-1.5 py-0.5 font-mono">MIT</span>
+                    </div>
+                    <p class="text-xs text-spire-muted mb-2 leading-relaxed" data-i18n="credits.acuDesc">
+                        Animal Crossing 风格的 React 组件库，"岛屿" 主题的视觉与交互参考来源。
+                    </p>
+                    <a id="credits-acu-link" href="https://github.com/guokaigdg/animal-island-ui" class="text-xs text-spire-accent hover:text-spire-accentHover font-mono break-all" target="_blank">
+                        github.com/guokaigdg/animal-island-ui
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1157,7 +1193,7 @@
                             <span id="mm-branch-picker-label" class="truncate">选择分支...</span>
                             <i data-lucide="chevron-down" style="width:12px;height:12px" class="shrink-0 text-spire-muted"></i>
                         </button>
-                        <div id="mm-branch-picker-dropdown" class="hidden absolute top-full left-0 mt-1 bg-spire-card border border-spire-border rounded-lg shadow-xl overflow-hidden" style="z-index:50;min-width:200px;max-height:280px;">
+                        <div id="mm-branch-picker-dropdown" class="app-dropdown hidden absolute top-full left-0 mt-1 bg-spire-card border border-spire-border rounded-lg shadow-xl overflow-hidden" style="z-index:50;min-width:200px;max-height:280px;">
                             <div id="mm-branch-picker-list" class="overflow-y-auto" style="max-height:280px;">
                                 <!-- populated by JS -->
                             </div>
@@ -1190,6 +1226,7 @@
     <script src="ipc.js"></script>
     <script src="i18n.js"></script>
     <script src="theme.js"></script>
+    <script src="custom-select.js"></script>
     <script src="ui.js"></script>
     <script src="state.js"></script>
     <script src="modals.js"></script>

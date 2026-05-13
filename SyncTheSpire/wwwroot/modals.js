@@ -728,6 +728,20 @@ $('#about-download').addEventListener('click', e => {
 $('#btn-check-update').addEventListener('click', () => checkForUpdates(false));
 $('#btn-open-docs').addEventListener('click', () => openExternal('https://sts.rkto.cc/guide/getting-started'));
 
+// ── credits modal ────────────────────────────────────────────────────────────
+function openCreditsModal()  { $('#credits-modal').classList.remove('hidden'); }
+function closeCreditsModal() { $('#credits-modal').classList.add('hidden'); }
+$('#btn-credits').addEventListener('click', openCreditsModal);
+$('#credits-close').addEventListener('click', closeCreditsModal);
+$('#credits-modal').addEventListener('click', e => {
+    if (e.target === $('#credits-modal')) closeCreditsModal();
+});
+// route inline links through openExternal so they open in the system browser
+$('#credits-acu-link').addEventListener('click', e => {
+    e.preventDefault();
+    openExternal('https://github.com/guokaigdg/animal-island-ui');
+});
+
 
 // ── announcements ────────────────────────────────────────────────────────────
 

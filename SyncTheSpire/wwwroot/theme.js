@@ -9,7 +9,7 @@
 
 const Theme = (() => {
     const STORAGE_KEY = 'sts-theme';
-    const VALID = new Set(['system', 'light', 'dark']);
+    const VALID = new Set(['system', 'light', 'dark', 'island']);
     const _listeners = [];
     const _mql = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -32,7 +32,10 @@ const Theme = (() => {
 
     function apply() {
         const r = resolved();
-        document.documentElement.classList.toggle('dark', r === 'dark');
+        const root = document.documentElement.classList;
+        // .dark and .island are mutually exclusive — Island is a light-only palette
+        root.toggle('dark',   r === 'dark');
+        root.toggle('island', r === 'island');
         _listeners.forEach(fn => { try { fn(r, _mode); } catch {} });
     }
 

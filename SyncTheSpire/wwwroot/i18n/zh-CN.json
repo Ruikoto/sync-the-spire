@@ -245,6 +245,7 @@
     "themeSystem": "跟随系统",
     "themeLight": "浅色",
     "themeDark": "深色",
+    "themeIsland": "岛屿",
     "about": "关于",
     "version": "版本",
     "latestVersion": "最新版本",
@@ -254,6 +255,7 @@
     "authorName": "Ruikoto（泡菜）",
     "checkUpdate": "检查更新",
     "docs": "使用教程",
+    "credits": "致谢",
     "upToDate": "（已是最新）",
     "advancedSettings": "高级设置",
     "fileSizeLimit": "文件大小限制",
@@ -267,6 +269,11 @@
     "fileSizeLimitRelaxMessage": "你正在调高或取消文件大小限制。如果超过云端平台实际限制，推送会失败。是否继续？",
     "cleanBranches": "清理分支历史",
     "cleanBranchesDesc": "重写所选分支的全部提交历史并强制推送，用于清除仓库中已存在的大文件。"
+  },
+  "credits": {
+    "title": "致谢",
+    "intro": "本项目使用了以下开源项目的设计灵感或组件参考，向作者们表示感谢：",
+    "acuDesc": "Animal Crossing 风格的 React 组件库，\"岛屿\" 主题的视觉与交互参考来源。"
   },
   "modals": {
     "welcome": {

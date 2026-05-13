@@ -245,6 +245,7 @@
     "themeSystem": "Follow system",
     "themeLight": "Light",
     "themeDark": "Dark",
+    "themeIsland": "Island",
     "about": "About",
     "version": "Version",
     "latestVersion": "Latest Version",
@@ -254,6 +255,7 @@
     "authorName": "Ruikoto",
     "checkUpdate": "Check for Updates",
     "docs": "User Guide",
+    "credits": "Acknowledgments",
     "upToDate": "(up to date)",
     "advancedSettings": "Advanced Settings",
     "fileSizeLimit": "File Size Limit",
@@ -267,6 +269,11 @@
     "fileSizeLimitRelaxMessage": "You're raising or removing the file size limit. If it exceeds your platform's actual limit, pushes will fail. Continue?",
     "cleanBranches": "Clean Branch History",
     "cleanBranchesDesc": "Rewrite all commits on selected branches and force-push, removing large files from history."
+  },
+  "credits": {
+    "title": "Acknowledgments",
+    "intro": "This project draws inspiration from the following open-source projects. Thanks to their authors:",
+    "acuDesc": "Animal Crossing-styled React component library. Visual and interaction reference for the \"Island\" theme."
   },
   "modals": {
     "welcome": {
