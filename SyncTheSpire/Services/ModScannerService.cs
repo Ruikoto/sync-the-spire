@@ -33,14 +33,14 @@ public class ModScannerService
     // and fall back to OrdinalIgnoreCase path order (first wins) — stable
     // across runs because git tree iteration is deterministic.
 
-    private readonly record struct ModCandidate(ModInfo Mod, string SourceKey, DateTime? Mtime);
+    internal readonly record struct ModCandidate(ModInfo Mod, string SourceKey, DateTime? Mtime);
 
     /// <summary>
     /// dedupe a candidate list by mod id (case-insensitive).
     /// within an id group: prefer newest mtime, then lowest sourceKey as tiebreaker.
     /// returns the kept mods and a per-id duplicate report (empty when no collisions).
     /// </summary>
-    private static (List<ModInfo> Kept, List<ModDuplicateInfo> Duplicates) DedupById(
+    internal static (List<ModInfo> Kept, List<ModDuplicateInfo> Duplicates) DedupById(
         IEnumerable<ModCandidate> candidates)
     {
         var kept = new List<ModInfo>();

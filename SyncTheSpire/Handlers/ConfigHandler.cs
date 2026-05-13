@@ -392,17 +392,17 @@ public class ConfigHandler : HandlerBase
         return null;
     }
 
-    private static string NormalizePath(string? path)
+    internal static string NormalizePath(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
         // normalize to full path with consistent casing handling (Windows is case-insensitive)
         return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
-    private static bool PathsEqual(string a, string b)
+    internal static bool PathsEqual(string a, string b)
         => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsNestedPath(string a, string b)
+    internal static bool IsNestedPath(string a, string b)
     {
         var sep = Path.DirectorySeparatorChar.ToString();
         var aWithSep = a.EndsWith(sep) ? a : a + sep;

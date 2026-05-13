@@ -35,6 +35,12 @@
     <PackageReference Include="SharpCompress" Version="0.38.0" />
   </ItemGroup>
 
+  <!-- expose internal members to the test project. Plain string overload keeps the
+       project file deterministic and avoids new AssemblyInfo.cs. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SyncTheSpire.Tests" />
+  </ItemGroup>
+
   <!-- embed wwwroot as content -->
   <ItemGroup>
     <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />

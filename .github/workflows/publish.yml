@@ -44,7 +44,23 @@ env:
   BINARY_NAME: "SyncTheSpire"
 
 jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test
+        run: dotnet test SyncTheSpire.Tests/SyncTheSpire.Tests.csproj -c Release --logger "console;verbosity=normal"
+
   build:
+    needs: [test]
     if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'zip'
     name: Build ${{ matrix.rid }} (${{ matrix.self_contained == true && 'Full' || 'Lite' }})
     runs-on: windows-latest
@@ -122,6 +138,7 @@ jobs:
           retention-days: 1
 
   build-msix:
+    needs: [test]
     # also triggered when store_action != 'none', regardless of build_target
     if: github.event_name == 'push' || inputs.build_target == 'all' || inputs.build_target == 'msix' || inputs.store_action != 'none'
     name: Build MSIX ${{ matrix.rid }}

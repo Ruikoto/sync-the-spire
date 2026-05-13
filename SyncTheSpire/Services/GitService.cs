@@ -865,7 +865,7 @@ public class GitService
         return parts.Count > 0 ? string.Join("; ", parts) : "Sync changes";
     }
 
-    private static string FormatNames(HashSet<string> names)
+    internal static string FormatNames(HashSet<string> names)
     {
         const int maxShow = 3;
         var sorted = names.OrderBy(n => n).ToList();
@@ -1414,7 +1414,7 @@ public class GitService
             Directory.Delete(d, true);
     }
 
-    private static Signature MakeSignature(WorkspaceConfig ws, string? gitEmail)
+    internal static Signature MakeSignature(WorkspaceConfig ws, string? gitEmail)
     {
         // for SSH/anonymous mode, nickname is the canonical identity
         var name = string.IsNullOrWhiteSpace(ws.Nickname) ? "player" : ws.Nickname;

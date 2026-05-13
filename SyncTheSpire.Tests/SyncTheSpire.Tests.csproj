@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- must match the production project's TFM: SyncTheSpire targets net10.0-windows10.0.19041
+         (WinForms + WinRT) and NU1201 rejects a pure net10.0 reference. Tests are inherently
+         windows-bound until the WinForms host is replaced. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- the production project's invariant globalization flag must propagate, otherwise
+         test runtime tries to load ICU data that's stripped from the runtime config. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SyncTheSpire\SyncTheSpire.csproj" />
+  </ItemGroup>
+
+</Project>

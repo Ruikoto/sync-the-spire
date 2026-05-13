@@ -76,7 +76,7 @@ public class NsfwDetectionService
         return result;
     }
 
-    private static string? MatchNsfwKeyword(string text)
+    internal static string? MatchNsfwKeyword(string text)
     {
         foreach (var keyword in NsfwKeywords)
             if (text.Contains(keyword, StringComparison.OrdinalIgnoreCase))
